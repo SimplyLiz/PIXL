@@ -110,10 +110,20 @@ mod tests {
         frames.insert(
             "wall_solid".to_string(),
             FrameEntry {
-                frame: Rect { x: 1, y: 1, w: 16, h: 16 },
+                frame: Rect {
+                    x: 1,
+                    y: 1,
+                    w: 16,
+                    h: 16,
+                },
                 rotated: false,
                 trimmed: false,
-                sprite_source_size: Rect { x: 0, y: 0, w: 16, h: 16 },
+                sprite_source_size: Rect {
+                    x: 0,
+                    y: 0,
+                    w: 16,
+                    h: 16,
+                },
                 source_size: Size { w: 16, h: 16 },
                 pivot: Pivot { x: 0.5, y: 0.5 },
                 border: None,
@@ -134,13 +144,28 @@ mod tests {
         frames.insert(
             "ui_panel".to_string(),
             FrameEntry {
-                frame: Rect { x: 0, y: 0, w: 24, h: 24 },
+                frame: Rect {
+                    x: 0,
+                    y: 0,
+                    w: 24,
+                    h: 24,
+                },
                 rotated: false,
                 trimmed: false,
-                sprite_source_size: Rect { x: 0, y: 0, w: 24, h: 24 },
+                sprite_source_size: Rect {
+                    x: 0,
+                    y: 0,
+                    w: 24,
+                    h: 24,
+                },
                 source_size: Size { w: 24, h: 24 },
                 pivot: Pivot { x: 0.5, y: 0.5 },
-                border: Some(Border { left: 8, right: 8, top: 8, bottom: 8 }),
+                border: Some(Border {
+                    left: 8,
+                    right: 8,
+                    top: 8,
+                    bottom: 8,
+                }),
             },
         );
 

@@ -3,7 +3,11 @@ use std::path::PathBuf;
 use std::process;
 
 #[derive(Parser)]
-#[command(name = "pixl", version, about = "PIXL — LLM-native pixel art toolchain")]
+#[command(
+    name = "pixl",
+    version,
+    about = "PIXL — LLM-native pixel art toolchain"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -228,7 +232,12 @@ fn cmd_validate(file: &PathBuf, check_edges: bool) {
     }
 }
 
-fn load_pax(file: &std::path::Path) -> (pixl_core::types::PaxFile, std::collections::HashMap<String, pixl_core::types::Palette>) {
+fn load_pax(
+    file: &std::path::Path,
+) -> (
+    pixl_core::types::PaxFile,
+    std::collections::HashMap<String, pixl_core::types::Palette>,
+) {
     let source = match std::fs::read_to_string(file) {
         Ok(s) => s,
         Err(e) => {
@@ -284,7 +293,10 @@ fn cmd_render(file: &PathBuf, tile_name: &str, scale: u32, out: &PathBuf) {
     let grid_str = match &tile_raw.grid {
         Some(g) => g,
         None => {
-            eprintln!("error: tile '{}' has no grid data (RLE/compose not yet supported in CLI render)", tile_name);
+            eprintln!(
+                "error: tile '{}' has no grid data (RLE/compose not yet supported in CLI render)",
+                tile_name
+            );
             process::exit(1);
         }
     };
@@ -328,7 +340,14 @@ fn cmd_render(file: &PathBuf, tile_name: &str, scale: u32, out: &PathBuf) {
         process::exit(1);
     }
 
-    println!("rendered '{}' ({}x{} @{}x) -> {}", tile_name, w, h, scale, out.display());
+    println!(
+        "rendered '{}' ({}x{} @{}x) -> {}",
+        tile_name,
+        w,
+        h,
+        scale,
+        out.display()
+    );
 }
 
 fn cmd_atlas(
@@ -356,7 +375,8 @@ fn cmd_atlas(
             Some(p) => p,
             None => continue,
         };
-        let grid = match pixl_core::grid::parse_grid(tile_raw.grid.as_ref().unwrap(), w, h, palette) {
+        let grid = match pixl_core::grid::parse_grid(tile_raw.grid.as_ref().unwrap(), w, h, palette)
+        {
             Ok(g) => g,
             Err(_) => continue,
         };
@@ -377,9 +397,14 @@ fn cmd_atlas(
     let first_palette_name = &pax_file.tile.values().next().unwrap().palette;
     let palette = &palettes[first_palette_name];
 
-    let out_name = out.file_name().unwrap_or_default().to_string_lossy().to_string();
+    let out_name = out
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
 
-    match pixl_render::atlas::pack_atlas(&atlas_tiles, palette, columns, padding, scale, &out_name) {
+    match pixl_render::atlas::pack_atlas(&atlas_tiles, palette, columns, padding, scale, &out_name)
+    {
         Ok((img, json)) => {
             if let Err(e) = img.save(out) {
                 eprintln!("error: cannot write atlas: {}", e);
@@ -447,8 +472,11 @@ fn cmd_preview(file: &PathBuf, tile_name: &str, out: &PathBuf, show_grid: bool) 
         process::exit(1);
     }
 
-    println!("preview '{}' ({}x{} @16x{}) -> {}",
-        tile_name, w, h,
+    println!(
+        "preview '{}' ({}x{} @16x{}) -> {}",
+        tile_name,
+        w,
+        h,
         if show_grid { " +grid" } else { "" },
         out.display()
     );

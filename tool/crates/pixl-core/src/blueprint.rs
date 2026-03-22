@@ -48,23 +48,91 @@ pub struct Blueprint {
 // ── Built-in: Humanoid Chibi (6-head proportions) ───────────────────
 
 const CHIBI_LANDMARKS: &[Landmark] = &[
-    Landmark { name: "head_top",       x: 0.50, y: 0.00 },
-    Landmark { name: "eye_left",       x: 0.35, y: 0.12 },
-    Landmark { name: "eye_right",      x: 0.65, y: 0.12 },
-    Landmark { name: "nose",           x: 0.50, y: 0.16 },
-    Landmark { name: "mouth",          x: 0.50, y: 0.19 },
-    Landmark { name: "chin",           x: 0.50, y: 0.22 },
-    Landmark { name: "shoulder_left",  x: 0.20, y: 0.28 },
-    Landmark { name: "shoulder_right", x: 0.80, y: 0.28 },
-    Landmark { name: "elbow_left",     x: 0.12, y: 0.45 },
-    Landmark { name: "elbow_right",    x: 0.88, y: 0.45 },
-    Landmark { name: "hand_left",      x: 0.10, y: 0.60 },
-    Landmark { name: "hand_right",     x: 0.90, y: 0.60 },
-    Landmark { name: "waist",          x: 0.50, y: 0.55 },
-    Landmark { name: "knee_left",      x: 0.35, y: 0.78 },
-    Landmark { name: "knee_right",     x: 0.65, y: 0.78 },
-    Landmark { name: "foot_left",      x: 0.35, y: 1.00 },
-    Landmark { name: "foot_right",     x: 0.65, y: 1.00 },
+    Landmark {
+        name: "head_top",
+        x: 0.50,
+        y: 0.00,
+    },
+    Landmark {
+        name: "eye_left",
+        x: 0.35,
+        y: 0.12,
+    },
+    Landmark {
+        name: "eye_right",
+        x: 0.65,
+        y: 0.12,
+    },
+    Landmark {
+        name: "nose",
+        x: 0.50,
+        y: 0.16,
+    },
+    Landmark {
+        name: "mouth",
+        x: 0.50,
+        y: 0.19,
+    },
+    Landmark {
+        name: "chin",
+        x: 0.50,
+        y: 0.22,
+    },
+    Landmark {
+        name: "shoulder_left",
+        x: 0.20,
+        y: 0.28,
+    },
+    Landmark {
+        name: "shoulder_right",
+        x: 0.80,
+        y: 0.28,
+    },
+    Landmark {
+        name: "elbow_left",
+        x: 0.12,
+        y: 0.45,
+    },
+    Landmark {
+        name: "elbow_right",
+        x: 0.88,
+        y: 0.45,
+    },
+    Landmark {
+        name: "hand_left",
+        x: 0.10,
+        y: 0.60,
+    },
+    Landmark {
+        name: "hand_right",
+        x: 0.90,
+        y: 0.60,
+    },
+    Landmark {
+        name: "waist",
+        x: 0.50,
+        y: 0.55,
+    },
+    Landmark {
+        name: "knee_left",
+        x: 0.35,
+        y: 0.78,
+    },
+    Landmark {
+        name: "knee_right",
+        x: 0.65,
+        y: 0.78,
+    },
+    Landmark {
+        name: "foot_left",
+        x: 0.35,
+        y: 1.00,
+    },
+    Landmark {
+        name: "foot_right",
+        x: 0.65,
+        y: 1.00,
+    },
 ];
 
 /// Get the size rule for a given canvas size.
@@ -72,25 +140,49 @@ fn size_rule_for(w: u32, h: u32) -> SizeRule {
     match (w, h) {
         (0..=8, _) | (_, 0..=8) => SizeRule {
             omit: vec![
-                "eye_left", "eye_right", "nose", "mouth", "chin",
-                "elbow_left", "elbow_right", "hand_left", "hand_right",
-                "knee_left", "knee_right",
-            ].into_iter().map(String::from).collect(),
+                "eye_left",
+                "eye_right",
+                "nose",
+                "mouth",
+                "chin",
+                "elbow_left",
+                "elbow_right",
+                "hand_left",
+                "hand_right",
+                "knee_left",
+                "knee_right",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect(),
             eye_size_px: 0,
             has_pupil: false,
             has_highlight: false,
         },
         (w, h) if w <= 16 && h <= 16 => SizeRule {
             omit: vec![
-                "eye_left", "eye_right", "nose", "mouth", "chin",
-                "elbow_left", "elbow_right", "hand_left", "hand_right",
-            ].into_iter().map(String::from).collect(),
+                "eye_left",
+                "eye_right",
+                "nose",
+                "mouth",
+                "chin",
+                "elbow_left",
+                "elbow_right",
+                "hand_left",
+                "hand_right",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect(),
             eye_size_px: 0,
             has_pupil: false,
             has_highlight: false,
         },
         (w, h) if w <= 16 && h <= 32 => SizeRule {
-            omit: vec!["nose", "mouth"].into_iter().map(String::from).collect(),
+            omit: vec!["nose", "mouth"]
+                .into_iter()
+                .map(String::from)
+                .collect(),
             eye_size_px: 2,
             has_pupil: false,
             has_highlight: false,
@@ -150,10 +242,7 @@ pub fn render_guide(model: &str, width: u32, height: u32) -> Option<String> {
     let bp = resolve(model, width, height)?;
 
     let mut lines = Vec::new();
-    lines.push(format!(
-        "Canvas {}x{} ({} model):",
-        width, height, model
-    ));
+    lines.push(format!("Canvas {}x{} ({} model):", width, height, model));
 
     if bp.eye_size == 0 {
         lines.push("  No facial features at this size (color region only).".to_string());

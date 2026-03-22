@@ -1,4 +1,4 @@
-use crate::types::{PaxFile, Palette, PaletteRaw, Rgba};
+use crate::types::{Palette, PaletteRaw, PaxFile, Rgba};
 use std::collections::HashMap;
 use thiserror::Error;
 
@@ -26,10 +26,7 @@ pub fn parse_pax(source: &str) -> Result<PaxFile, ParseError> {
 }
 
 /// Resolve a raw palette (HashMap<String, String>) into a typed Palette.
-pub fn resolve_palette(
-    name: &str,
-    raw: &PaletteRaw,
-) -> Result<Palette, ParseError> {
+pub fn resolve_palette(name: &str, raw: &PaletteRaw) -> Result<Palette, ParseError> {
     let mut symbols = HashMap::with_capacity(raw.len());
 
     for (key, hex) in raw {
@@ -61,9 +58,7 @@ pub fn resolve_palette(
 }
 
 /// Resolve all palettes in a PaxFile.
-pub fn resolve_all_palettes(
-    file: &PaxFile,
-) -> Result<HashMap<String, Palette>, ParseError> {
+pub fn resolve_all_palettes(file: &PaxFile) -> Result<HashMap<String, Palette>, ParseError> {
     let mut palettes = HashMap::new();
     for (name, raw) in &file.palette {
         let palette = resolve_palette(name, raw)?;

@@ -1,4 +1,4 @@
-use crate::types::{Theme, Palette, Rgba};
+use crate::types::{Palette, Rgba, Theme};
 use std::collections::HashMap;
 use thiserror::Error;
 
@@ -13,7 +13,9 @@ pub enum ThemeError {
     #[error("theme '{name}': circular extends chain detected (visited: {chain})")]
     CircularExtends { name: String, chain: String },
 
-    #[error("theme '{name}': role '{role}' maps to symbol '{sym}' which is not in palette '{palette}'")]
+    #[error(
+        "theme '{name}': role '{role}' maps to symbol '{sym}' which is not in palette '{palette}'"
+    )]
     RoleSymbolNotInPalette {
         name: String,
         role: String,
@@ -53,10 +55,12 @@ pub fn resolve_theme(
     let mut current = name;
 
     loop {
-        let theme = themes.get(current).ok_or_else(|| ThemeError::ParentNotFound {
-            name: name.to_string(),
-            parent: current.to_string(),
-        })?;
+        let theme = themes
+            .get(current)
+            .ok_or_else(|| ThemeError::ParentNotFound {
+                name: name.to_string(),
+                parent: current.to_string(),
+            })?;
 
         match &theme.extends {
             Some(parent) => {
@@ -152,54 +156,55 @@ pub fn evaluate_constraints(
     for constraint_name in theme.constraints.keys() {
         match constraint_name.as_str() {
             "fg_brighter_than_bg" => {
-                if let (Some(&fg), Some(&bg)) =
-                    (resolved.roles.get("fg"), resolved.roles.get("bg"))
+                if let (Some(&fg), Some(&bg)) = (resolved.roles.get("fg"), resolved.roles.get("bg"))
                     && let (Some(fg_c), Some(bg_c)) =
                         (palette.symbols.get(&fg), palette.symbols.get(&bg))
-                        && luminance(fg_c) <= luminance(bg_c) {
-                            warnings.push(ThemeError::ConstraintViolation {
-                                name: resolved.name.clone(),
-                                constraint: constraint_name.clone(),
-                                reason: format!(
-                                    "fg luminance ({:.3}) <= bg luminance ({:.3})",
-                                    luminance(fg_c),
-                                    luminance(bg_c)
-                                ),
-                            });
-                        }
+                    && luminance(fg_c) <= luminance(bg_c)
+                {
+                    warnings.push(ThemeError::ConstraintViolation {
+                        name: resolved.name.clone(),
+                        constraint: constraint_name.clone(),
+                        reason: format!(
+                            "fg luminance ({:.3}) <= bg luminance ({:.3})",
+                            luminance(fg_c),
+                            luminance(bg_c)
+                        ),
+                    });
+                }
             }
             "shadow_darker_than_bg" => {
                 if let (Some(&shadow), Some(&bg)) =
                     (resolved.roles.get("shadow"), resolved.roles.get("bg"))
                     && let (Some(s_c), Some(bg_c)) =
                         (palette.symbols.get(&shadow), palette.symbols.get(&bg))
-                        && luminance(s_c) >= luminance(bg_c) {
-                            warnings.push(ThemeError::ConstraintViolation {
-                                name: resolved.name.clone(),
-                                constraint: constraint_name.clone(),
-                                reason: format!(
-                                    "shadow luminance ({:.3}) >= bg luminance ({:.3})",
-                                    luminance(s_c),
-                                    luminance(bg_c)
-                                ),
-                            });
-                        }
+                    && luminance(s_c) >= luminance(bg_c)
+                {
+                    warnings.push(ThemeError::ConstraintViolation {
+                        name: resolved.name.clone(),
+                        constraint: constraint_name.clone(),
+                        reason: format!(
+                            "shadow luminance ({:.3}) >= bg luminance ({:.3})",
+                            luminance(s_c),
+                            luminance(bg_c)
+                        ),
+                    });
+                }
             }
             "accent_hue_distinct_from_bg" => {
                 if let (Some(&accent), Some(&bg)) =
                     (resolved.roles.get("accent"), resolved.roles.get("bg"))
                     && let (Some(a_c), Some(bg_c)) =
                         (palette.symbols.get(&accent), palette.symbols.get(&bg))
-                    {
-                        let dist = hue_distance(a_c, bg_c);
-                        if dist < 40.0 {
-                            warnings.push(ThemeError::ConstraintViolation {
-                                name: resolved.name.clone(),
-                                constraint: constraint_name.clone(),
-                                reason: format!("hue distance {:.1}° < 40°", dist),
-                            });
-                        }
+                {
+                    let dist = hue_distance(a_c, bg_c);
+                    if dist < 40.0 {
+                        warnings.push(ThemeError::ConstraintViolation {
+                            name: resolved.name.clone(),
+                            constraint: constraint_name.clone(),
+                            reason: format!("hue distance {:.1}° < 40°", dist),
+                        });
                     }
+                }
             }
             _ => {} // Unknown constraints are silently ignored in V1
         }
@@ -257,13 +262,69 @@ mod tests {
 
     fn dungeon_palette() -> Palette {
         let mut symbols = HashMap::new();
-        symbols.insert('.', Rgba { r: 0, g: 0, b: 0, a: 0 });
-        symbols.insert('#', Rgba { r: 42, g: 31, b: 61, a: 255 });    // dark purple
-        symbols.insert('+', Rgba { r: 74, g: 58, b: 109, a: 255 });   // lighter purple
-        symbols.insert('s', Rgba { r: 26, g: 15, b: 46, a: 255 });    // very dark
-        symbols.insert('o', Rgba { r: 200, g: 160, b: 53, a: 255 });  // gold
-        symbols.insert('r', Rgba { r: 139, g: 26, b: 26, a: 255 });   // red
-        symbols.insert('g', Rgba { r: 45, g: 90, b: 39, a: 255 });    // green
+        symbols.insert(
+            '.',
+            Rgba {
+                r: 0,
+                g: 0,
+                b: 0,
+                a: 0,
+            },
+        );
+        symbols.insert(
+            '#',
+            Rgba {
+                r: 42,
+                g: 31,
+                b: 61,
+                a: 255,
+            },
+        ); // dark purple
+        symbols.insert(
+            '+',
+            Rgba {
+                r: 74,
+                g: 58,
+                b: 109,
+                a: 255,
+            },
+        ); // lighter purple
+        symbols.insert(
+            's',
+            Rgba {
+                r: 26,
+                g: 15,
+                b: 46,
+                a: 255,
+            },
+        ); // very dark
+        symbols.insert(
+            'o',
+            Rgba {
+                r: 200,
+                g: 160,
+                b: 53,
+                a: 255,
+            },
+        ); // gold
+        symbols.insert(
+            'r',
+            Rgba {
+                r: 139,
+                g: 26,
+                b: 26,
+                a: 255,
+            },
+        ); // red
+        symbols.insert(
+            'g',
+            Rgba {
+                r: 45,
+                g: 90,
+                b: 39,
+                a: 255,
+            },
+        ); // green
         Palette { symbols }
     }
 
@@ -327,8 +388,8 @@ mod tests {
             "blood_theme".to_string(),
             Theme {
                 palette: "dungeon".to_string(),
-                scale: None,          // inherit from parent
-                canvas: None,         // inherit from parent
+                scale: None,  // inherit from parent
+                canvas: None, // inherit from parent
                 max_palette_size: None,
                 light_source: None,
                 extends: Some("dark_fantasy".to_string()),
@@ -342,7 +403,7 @@ mod tests {
 
         let resolved = resolve_theme("blood_theme", &themes, &palettes).unwrap();
         assert_eq!(resolved.roles["accent"], 'r'); // overridden
-        assert_eq!(resolved.roles["fg"], '+');      // inherited
+        assert_eq!(resolved.roles["fg"], '+'); // inherited
     }
 
     #[test]
@@ -402,9 +463,24 @@ mod tests {
 
     #[test]
     fn luminance_ordering() {
-        let dark = Rgba { r: 42, g: 31, b: 61, a: 255 };
-        let light = Rgba { r: 74, g: 58, b: 109, a: 255 };
-        let shadow = Rgba { r: 26, g: 15, b: 46, a: 255 };
+        let dark = Rgba {
+            r: 42,
+            g: 31,
+            b: 61,
+            a: 255,
+        };
+        let light = Rgba {
+            r: 74,
+            g: 58,
+            b: 109,
+            a: 255,
+        };
+        let shadow = Rgba {
+            r: 26,
+            g: 15,
+            b: 46,
+            a: 255,
+        };
         assert!(luminance(&light) > luminance(&dark));
         assert!(luminance(&shadow) < luminance(&dark));
     }

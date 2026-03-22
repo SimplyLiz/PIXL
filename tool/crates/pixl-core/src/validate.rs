@@ -1,8 +1,8 @@
-use crate::grid::{parse_grid, GridError};
-use crate::parser::{resolve_all_palettes, ParseError};
-use crate::rle::{parse_rle, RleError};
-use crate::template::{validate_templates, TemplateError};
-use crate::theme::{resolve_theme, ThemeError};
+use crate::grid::{GridError, parse_grid};
+use crate::parser::{ParseError, resolve_all_palettes};
+use crate::rle::{RleError, parse_rle};
+use crate::template::{TemplateError, validate_templates};
+use crate::theme::{ThemeError, resolve_theme};
 use crate::types::{PaxFile, parse_size};
 use thiserror::Error;
 
@@ -54,7 +54,9 @@ pub enum ValidationError {
         palette: String,
     },
 
-    #[error("tile '{tile}': uses {count} distinct symbols but theme max_palette_size = {max}. Symbols: {symbols}")]
+    #[error(
+        "tile '{tile}': uses {count} distinct symbols but theme max_palette_size = {max}. Symbols: {symbols}"
+    )]
     PaletteSizeExceeded {
         tile: String,
         count: usize,
@@ -74,7 +76,9 @@ pub enum ValidationError {
     #[error("tile '{tile}': auto_rotate requires square tiles (width == height), got {w}x{h}")]
     RotateNonSquare { tile: String, w: u32, h: u32 },
 
-    #[error("tile_run '{name}': {side}.edge_class.{dir} = '{got}', expected '{expected}' (must match middle)")]
+    #[error(
+        "tile_run '{name}': {side}.edge_class.{dir} = '{got}', expected '{expected}' (must match middle)"
+    )]
     TileRunEdgeMismatch {
         name: String,
         side: String,
@@ -83,7 +87,9 @@ pub enum ValidationError {
         expected: String,
     },
 
-    #[error("sprite '{spriteset}/{sprite}': frame {index}: delta base {base} must be < {index} and Grid-encoded")]
+    #[error(
+        "sprite '{spriteset}/{sprite}': frame {index}: delta base {base} must be < {index} and Grid-encoded"
+    )]
     InvalidDeltaBase {
         spriteset: String,
         sprite: String,
@@ -92,10 +98,7 @@ pub enum ValidationError {
     },
 
     #[error("sprite '{spriteset}/{sprite}': frame indices not contiguous starting at 1")]
-    NonContiguousFrames {
-        spriteset: String,
-        sprite: String,
-    },
+    NonContiguousFrames { spriteset: String, sprite: String },
 }
 
 /// Validate an entire PaxFile. Returns all errors and warnings.
@@ -127,7 +130,11 @@ pub fn validate(file: &PaxFile, _check_edges: bool) -> ValidationResult {
             Ok(resolved) => {
                 // Evaluate constraints as warnings
                 let theme = &file.theme[name];
-                for w in crate::theme::evaluate_constraints(theme, &resolved, &palettes[&resolved.palette]) {
+                for w in crate::theme::evaluate_constraints(
+                    theme,
+                    &resolved,
+                    &palettes[&resolved.palette],
+                ) {
                     warnings.push(format!("{}", w));
                 }
             }
@@ -158,11 +165,11 @@ pub fn validate(file: &PaxFile, _check_edges: bool) -> ValidationResult {
         };
 
         if let Err(e) = parse_grid(&stamp_raw.grid, w, h, palette) {
-                errors.push(ValidationError::StampGrid {
-                    stamp: name.clone(),
-                    source: e,
-                });
-            }
+            errors.push(ValidationError::StampGrid {
+                stamp: name.clone(),
+                source: e,
+            });
+        }
     }
 
     // 5. Validate tiles
@@ -212,50 +219,50 @@ pub fn validate(file: &PaxFile, _check_edges: bool) -> ValidationResult {
 
         // Validate grid encoding
         if let Some(ref grid_str) = tile_raw.grid {
-                // Account for symmetry — grid may be half/quarter size
-                let (grid_w, grid_h) = match tile_raw.symmetry.as_deref() {
-                    Some("horizontal") => (w / 2, h),
-                    Some("vertical") => (w, h / 2),
-                    Some("quad") => (w / 2, h / 2),
-                    _ => (w, h),
-                };
+            // Account for symmetry — grid may be half/quarter size
+            let (grid_w, grid_h) = match tile_raw.symmetry.as_deref() {
+                Some("horizontal") => (w / 2, h),
+                Some("vertical") => (w, h / 2),
+                Some("quad") => (w / 2, h / 2),
+                _ => (w, h),
+            };
 
-                match parse_grid(grid_str, grid_w, grid_h, palette) {
-                    Ok(grid) => {
-                        // Check max_palette_size
-                        if let Some(max) = max_palette_size {
-                            let unique: std::collections::HashSet<char> =
-                                grid.iter().flat_map(|r| r.iter()).copied().collect();
-                            if unique.len() > max as usize {
-                                let excess: Vec<String> =
-                                    unique.iter().map(|c| c.to_string()).collect();
-                                errors.push(ValidationError::PaletteSizeExceeded {
-                                    tile: name.clone(),
-                                    count: unique.len(),
-                                    max,
-                                    symbols: excess.join(", "),
-                                });
-                            }
+            match parse_grid(grid_str, grid_w, grid_h, palette) {
+                Ok(grid) => {
+                    // Check max_palette_size
+                    if let Some(max) = max_palette_size {
+                        let unique: std::collections::HashSet<char> =
+                            grid.iter().flat_map(|r| r.iter()).copied().collect();
+                        if unique.len() > max as usize {
+                            let excess: Vec<String> =
+                                unique.iter().map(|c| c.to_string()).collect();
+                            errors.push(ValidationError::PaletteSizeExceeded {
+                                tile: name.clone(),
+                                count: unique.len(),
+                                max,
+                                symbols: excess.join(", "),
+                            });
                         }
                     }
-                    Err(e) => {
-                        errors.push(ValidationError::Grid {
-                            tile: name.clone(),
-                            source: e,
-                        });
-                    }
                 }
-        }
-
-        // Validate RLE encoding
-        if let Some(ref rle_str) = tile_raw.rle {
-            if let Err(e) = parse_rle(rle_str, w, h, palette) {
-                    errors.push(ValidationError::Rle {
+                Err(e) => {
+                    errors.push(ValidationError::Grid {
                         tile: name.clone(),
                         source: e,
                     });
                 }
             }
+        }
+
+        // Validate RLE encoding
+        if let Some(ref rle_str) = tile_raw.rle
+            && let Err(e) = parse_rle(rle_str, w, h, palette)
+        {
+            errors.push(ValidationError::Rle {
+                tile: name.clone(),
+                source: e,
+            });
+        }
 
         // Validate auto_rotate on non-square
         if tile_raw.auto_rotate.is_some()
@@ -279,37 +286,40 @@ pub fn validate(file: &PaxFile, _check_edges: bool) -> ValidationResult {
         ) {
             // left.e must match middle.w
             if let (Some(le), Some(mw)) = (&left.edge_class, &mid.edge_class)
-                && le.e != mw.w {
-                    errors.push(ValidationError::TileRunEdgeMismatch {
-                        name: name.clone(),
-                        side: "left".to_string(),
-                        dir: "e/w".to_string(),
-                        got: le.e.clone(),
-                        expected: mw.w.clone(),
-                    });
-                }
+                && le.e != mw.w
+            {
+                errors.push(ValidationError::TileRunEdgeMismatch {
+                    name: name.clone(),
+                    side: "left".to_string(),
+                    dir: "e/w".to_string(),
+                    got: le.e.clone(),
+                    expected: mw.w.clone(),
+                });
+            }
             // middle.e must match middle.w (self-repeating)
             if let Some(me) = &mid.edge_class
-                && me.e != me.w {
-                    errors.push(ValidationError::TileRunEdgeMismatch {
-                        name: name.clone(),
-                        side: "middle".to_string(),
-                        dir: "e/w self-repeat".to_string(),
-                        got: me.e.clone(),
-                        expected: me.w.clone(),
-                    });
-                }
+                && me.e != me.w
+            {
+                errors.push(ValidationError::TileRunEdgeMismatch {
+                    name: name.clone(),
+                    side: "middle".to_string(),
+                    dir: "e/w self-repeat".to_string(),
+                    got: me.e.clone(),
+                    expected: me.w.clone(),
+                });
+            }
             // middle.e must match right.w
             if let (Some(me), Some(rw)) = (&mid.edge_class, &right.edge_class)
-                && me.e != rw.w {
-                    errors.push(ValidationError::TileRunEdgeMismatch {
-                        name: name.clone(),
-                        side: "right".to_string(),
-                        dir: "e/w".to_string(),
-                        got: me.e.clone(),
-                        expected: rw.w.clone(),
-                    });
-                }
+                && me.e != rw.w
+            {
+                errors.push(ValidationError::TileRunEdgeMismatch {
+                    name: name.clone(),
+                    side: "right".to_string(),
+                    dir: "e/w".to_string(),
+                    got: me.e.clone(),
+                    expected: rw.w.clone(),
+                });
+            }
         }
     }
 
@@ -329,28 +339,29 @@ pub fn validate(file: &PaxFile, _check_edges: bool) -> ValidationResult {
             // Check delta bases
             for frame in &sprite.frames {
                 if frame.encoding.as_deref() == Some("delta")
-                    && let Some(base) = frame.base {
-                        if base >= frame.index {
-                            errors.push(ValidationError::InvalidDeltaBase {
-                                spriteset: ss_name.clone(),
-                                sprite: sprite.name.clone(),
-                                index: frame.index,
-                                base,
-                            });
-                        }
-                        // Check base is grid-encoded
-                        if let Some(base_frame) = sprite.frames.iter().find(|f| f.index == base)
-                            && base_frame.encoding.as_deref() != Some("grid")
-                                && base_frame.encoding.is_some()
-                            {
-                                errors.push(ValidationError::InvalidDeltaBase {
-                                    spriteset: ss_name.clone(),
-                                    sprite: sprite.name.clone(),
-                                    index: frame.index,
-                                    base,
-                                });
-                            }
+                    && let Some(base) = frame.base
+                {
+                    if base >= frame.index {
+                        errors.push(ValidationError::InvalidDeltaBase {
+                            spriteset: ss_name.clone(),
+                            sprite: sprite.name.clone(),
+                            index: frame.index,
+                            base,
+                        });
                     }
+                    // Check base is grid-encoded
+                    if let Some(base_frame) = sprite.frames.iter().find(|f| f.index == base)
+                        && base_frame.encoding.as_deref() != Some("grid")
+                        && base_frame.encoding.is_some()
+                    {
+                        errors.push(ValidationError::InvalidDeltaBase {
+                            spriteset: ss_name.clone(),
+                            sprite: sprite.name.clone(),
+                            index: frame.index,
+                            base,
+                        });
+                    }
+                }
             }
         }
     }
@@ -386,8 +397,8 @@ mod tests {
 
     #[test]
     fn validate_dungeon_example() {
-        let source =
-            std::fs::read_to_string("../../examples/dungeon.pax").expect("dungeon.pax should exist");
+        let source = std::fs::read_to_string("../../examples/dungeon.pax")
+            .expect("dungeon.pax should exist");
         let file = parse_pax(&source).unwrap();
         let result = validate(&file, false);
 
@@ -420,7 +431,10 @@ mod tests {
         let file = parse_pax(source).unwrap();
         let result = validate(&file, false);
         assert!(
-            result.errors.iter().any(|e| matches!(e, ValidationError::PaletteSizeExceeded { .. })),
+            result
+                .errors
+                .iter()
+                .any(|e| matches!(e, ValidationError::PaletteSizeExceeded { .. })),
             "should catch palette size exceeded"
         );
     }

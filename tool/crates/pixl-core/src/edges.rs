@@ -15,12 +15,14 @@ pub fn extract_edges(grid: &[Vec<char>]) -> (String, String, String, String) {
 
     let north: String = grid[0].iter().collect();
     let south: String = grid[h - 1].iter().collect();
-    let west: String = grid.iter().map(|row| {
-        row.first().copied().unwrap_or('.')
-    }).collect();
-    let east: String = grid.iter().map(|row| {
-        row.get(w - 1).copied().unwrap_or('.')
-    }).collect();
+    let west: String = grid
+        .iter()
+        .map(|row| row.first().copied().unwrap_or('.'))
+        .collect();
+    let east: String = grid
+        .iter()
+        .map(|row| row.get(w - 1).copied().unwrap_or('.'))
+        .collect();
 
     (north, east, south, west)
 }
@@ -104,13 +106,21 @@ mod tests {
     #[test]
     fn classify_symmetric() {
         let class = classify_edge("#+.+#");
-        assert!(class.starts_with("sym_"), "expected sym_ prefix, got {}", class);
+        assert!(
+            class.starts_with("sym_"),
+            "expected sym_ prefix, got {}",
+            class
+        );
     }
 
     #[test]
     fn classify_mixed() {
         let class = classify_edge("#++.");
-        assert!(class.starts_with("mixed_"), "expected mixed_ prefix, got {}", class);
+        assert!(
+            class.starts_with("mixed_"),
+            "expected mixed_ prefix, got {}",
+            class
+        );
     }
 
     #[test]
@@ -127,12 +137,7 @@ mod tests {
 
     #[test]
     fn auto_classify_full_grid() {
-        let grid = make_grid(&[
-            "####",
-            "#++#",
-            "#++#",
-            "++++"
-        ]);
+        let grid = make_grid(&["####", "#++#", "#++#", "++++"]);
         let ec = auto_classify_edges(&grid);
         assert_eq!(ec.n, "solid_#");
         assert_eq!(ec.s, "solid_+");

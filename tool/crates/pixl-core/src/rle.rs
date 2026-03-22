@@ -4,7 +4,11 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum RleError {
     #[error("row {row}: expected {expected} pixels, got {got}")]
-    WidthMismatch { row: usize, expected: u32, got: usize },
+    WidthMismatch {
+        row: usize,
+        expected: u32,
+        got: usize,
+    },
 
     #[error("expected {expected} rows, got {got}")]
     HeightMismatch { expected: u32, got: usize },
@@ -13,7 +17,11 @@ pub enum RleError {
     InvalidToken { row: usize, token: String },
 
     #[error("row {row}: unknown symbol '{sym}' in token '{token}'")]
-    UnknownSymbol { row: usize, sym: char, token: String },
+    UnknownSymbol {
+        row: usize,
+        sym: char,
+        token: String,
+    },
 
     #[error("RLE data is empty")]
     Empty,
@@ -141,14 +149,38 @@ pub fn encode_rle(grid: &[Vec<char>]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
     use crate::types::Rgba;
+    use std::collections::HashMap;
 
     fn test_palette() -> Palette {
         let mut symbols = HashMap::new();
-        symbols.insert('.', Rgba { r: 0, g: 0, b: 0, a: 0 });
-        symbols.insert('#', Rgba { r: 42, g: 31, b: 61, a: 255 });
-        symbols.insert('+', Rgba { r: 74, g: 58, b: 109, a: 255 });
+        symbols.insert(
+            '.',
+            Rgba {
+                r: 0,
+                g: 0,
+                b: 0,
+                a: 0,
+            },
+        );
+        symbols.insert(
+            '#',
+            Rgba {
+                r: 42,
+                g: 31,
+                b: 61,
+                a: 255,
+            },
+        );
+        symbols.insert(
+            '+',
+            Rgba {
+                r: 74,
+                g: 58,
+                b: 109,
+                a: 255,
+            },
+        );
         Palette { symbols }
     }
 
@@ -176,7 +208,13 @@ mod tests {
         let palette = test_palette();
         let raw = "4#\n4+";
         let err = parse_rle(raw, 4, 4, &palette).unwrap_err();
-        assert!(matches!(err, RleError::HeightMismatch { expected: 4, got: 2 }));
+        assert!(matches!(
+            err,
+            RleError::HeightMismatch {
+                expected: 4,
+                got: 2
+            }
+        ));
     }
 
     #[test]
@@ -184,7 +222,14 @@ mod tests {
         let palette = test_palette();
         let raw = "3#\n4+\n4+\n4+";
         let err = parse_rle(raw, 4, 4, &palette).unwrap_err();
-        assert!(matches!(err, RleError::WidthMismatch { row: 0, expected: 4, got: 3 }));
+        assert!(matches!(
+            err,
+            RleError::WidthMismatch {
+                row: 0,
+                expected: 4,
+                got: 3
+            }
+        ));
     }
 
     #[test]

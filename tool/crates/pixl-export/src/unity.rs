@@ -71,7 +71,8 @@ mod tests {
         let meta = generate_unity_meta(
             "dungeon",
             &["wall".to_string(), "floor".to_string()],
-            16, 16,
+            16,
+            16,
             "atlas.png",
             &collision,
         );

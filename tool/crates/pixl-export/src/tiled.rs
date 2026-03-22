@@ -227,8 +227,12 @@ mod tests {
         let tileset = generate_tileset(
             "test",
             &["wall".to_string(), "floor".to_string()],
-            16, 16,
-            "atlas.png", 32, 16, 2,
+            16,
+            16,
+            "atlas.png",
+            32,
+            16,
+            2,
             &collision,
         );
 
@@ -239,10 +243,7 @@ mod tests {
 
     #[test]
     fn map_from_wfc_grid() {
-        let grid = vec![
-            vec![0, 1, 0],
-            vec![1, 0, 1],
-        ];
+        let grid = vec![vec![0, 1, 0], vec![1, 0, 1]];
         let map = generate_map(&grid, 16, 16, "tileset.tsj");
         assert_eq!(map.width, 3);
         assert_eq!(map.height, 2);
@@ -252,8 +253,14 @@ mod tests {
     #[test]
     fn tileset_json_serializes() {
         let tileset = generate_tileset(
-            "dungeon", &["wall".to_string()],
-            16, 16, "atlas.png", 16, 16, 1,
+            "dungeon",
+            &["wall".to_string()],
+            16,
+            16,
+            "atlas.png",
+            16,
+            16,
+            1,
             &HashMap::new(),
         );
         let json = serde_json::to_string_pretty(&tileset).unwrap();

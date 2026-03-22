@@ -3,7 +3,7 @@ use std::collections::HashMap;
 /// Generate a Godot .tres TileSet resource from PAX tile data.
 /// Godot 4 uses .tres (text resource) format for tilesets.
 pub fn generate_tres(
-    name: &str,
+    _name: &str,
     tile_names: &[String],
     tile_width: u32,
     tile_height: u32,
@@ -25,7 +25,10 @@ pub fn generate_tres(
 
     // TileSet resource
     lines.push("[resource]".to_string());
-    lines.push(format!("tile_size = Vector2i({}, {})", tile_width, tile_height));
+    lines.push(format!(
+        "tile_size = Vector2i({}, {})",
+        tile_width, tile_height
+    ));
     lines.push(String::new());
 
     // Physics layer for collision
@@ -50,13 +53,13 @@ pub fn generate_tres(
         lines.push(format!("{}/0 = 0", atlas_x));
 
         // Add collision polygon if tile has collision
-        if let Some(collision) = collision_map.get(tile_name) {
-            if collision == "full" {
-                lines.push(format!(
+        if let Some(collision) = collision_map.get(tile_name)
+            && collision == "full"
+        {
+            lines.push(format!(
                     "{}/0/physics_layer_0/polygon_0/points = PackedVector2Array(0, 0, {}, 0, {}, {}, 0, {})",
                     atlas_x, tile_width, tile_width, tile_height, tile_height
                 ));
-            }
         }
     }
 
@@ -78,7 +81,8 @@ mod tests {
         let tres = generate_tres(
             "dungeon",
             &["wall".to_string(), "floor".to_string()],
-            16, 16,
+            16,
+            16,
             "dungeon_atlas.png",
             &collision,
         );

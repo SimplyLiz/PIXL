@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tool
+
+      - name: Build
+        working-directory: tool
+        run: cargo build --release
+
+      - name: Test
+        working-directory: tool
+        run: cargo test
+
+      - name: Clippy
+        working-directory: tool
+        run: cargo clippy --all-targets -- -D warnings
+        if: matrix.os == 'ubuntu-latest'
+
+      - name: Format check
+        working-directory: tool
+        run: cargo fmt --check
+        if: matrix.os == 'ubuntu-latest'
+
+  validate-example:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tool
+
+      - name: Build
+        working-directory: tool
+        run: cargo build --release
+
+      - name: Validate dungeon.pax
+        working-directory: tool
+        run: cargo run --release -- validate examples/dungeon.pax
+
+      - name: Render wall_solid
+        working-directory: tool
+        run: cargo run --release -- render examples/dungeon.pax --tile wall_solid --scale 4 --out /tmp/wall.png
+
+      - name: Pack atlas
+        working-directory: tool
+        run: cargo run --release -- atlas examples/dungeon.pax --out /tmp/atlas.png --map /tmp/atlas.json

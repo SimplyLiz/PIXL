@@ -16,7 +16,9 @@ pub enum CycleError {
     #[error("cycle '{name}': must have at least 2 symbols to cycle")]
     TooFewSymbols { name: String },
 
-    #[error("cycle '{name}': invalid direction '{direction}' (expected: forward, backward, ping-pong)")]
+    #[error(
+        "cycle '{name}': invalid direction '{direction}' (expected: forward, backward, ping-pong)"
+    )]
     InvalidDirection { name: String, direction: String },
 
     #[error("cycle '{name}': fps must be > 0")]
@@ -132,10 +134,42 @@ mod tests {
 
     fn test_palette() -> Palette {
         let mut symbols = HashMap::new();
-        symbols.insert('~', Rgba { r: 26, g: 58, b: 92, a: 255 });
-        symbols.insert('h', Rgba { r: 106, g: 90, b: 157, a: 255 });
-        symbols.insert('+', Rgba { r: 74, g: 58, b: 109, a: 255 });
-        symbols.insert('o', Rgba { r: 200, g: 160, b: 53, a: 255 });
+        symbols.insert(
+            '~',
+            Rgba {
+                r: 26,
+                g: 58,
+                b: 92,
+                a: 255,
+            },
+        );
+        symbols.insert(
+            'h',
+            Rgba {
+                r: 106,
+                g: 90,
+                b: 157,
+                a: 255,
+            },
+        );
+        symbols.insert(
+            '+',
+            Rgba {
+                r: 74,
+                g: 58,
+                b: 109,
+                a: 255,
+            },
+        );
+        symbols.insert(
+            'o',
+            Rgba {
+                r: 200,
+                g: 160,
+                b: 53,
+                a: 255,
+            },
+        );
         Palette { symbols }
     }
 
@@ -167,7 +201,11 @@ mod tests {
             fps: 8,
         };
         let errors = validate_cycle("bad", &cycle, &palettes);
-        assert!(errors.iter().any(|e| matches!(e, CycleError::SymbolNotFound { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, CycleError::SymbolNotFound { .. }))
+        );
     }
 
     #[test]
@@ -181,7 +219,11 @@ mod tests {
             fps: 8,
         };
         let errors = validate_cycle("short", &cycle, &palettes);
-        assert!(errors.iter().any(|e| matches!(e, CycleError::TooFewSymbols { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, CycleError::TooFewSymbols { .. }))
+        );
     }
 
     #[test]

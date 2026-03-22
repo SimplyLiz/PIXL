@@ -3,10 +3,14 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum SymmetryError {
-    #[error("horizontal symmetry requires grid width = tile_width/2, got {got} (tile_width={tile_width})")]
+    #[error(
+        "horizontal symmetry requires grid width = tile_width/2, got {got} (tile_width={tile_width})"
+    )]
     HorizontalWidthMismatch { got: usize, tile_width: u32 },
 
-    #[error("vertical symmetry requires grid height = tile_height/2, got {got} (tile_height={tile_height})")]
+    #[error(
+        "vertical symmetry requires grid height = tile_height/2, got {got} (tile_height={tile_height})"
+    )]
     VerticalHeightMismatch { got: usize, tile_height: u32 },
 
     #[error("{axis} symmetry requires even tile dimension, got {dim}")]
@@ -107,10 +111,7 @@ mod tests {
 
     #[test]
     fn horizontal_symmetry() {
-        let half = vec![
-            vec!['#', '+'],
-            vec!['+', '#'],
-        ];
+        let half = vec![vec!['#', '+'], vec!['+', '#']];
         let full = expand_symmetry(&half, 4, 2, Symmetry::Horizontal).unwrap();
         assert_eq!(full[0], vec!['#', '+', '+', '#']);
         assert_eq!(full[1], vec!['+', '#', '#', '+']);
@@ -118,10 +119,7 @@ mod tests {
 
     #[test]
     fn vertical_symmetry() {
-        let half = vec![
-            vec!['#', '#', '#', '#'],
-            vec!['+', '+', '+', '+'],
-        ];
+        let half = vec![vec!['#', '#', '#', '#'], vec!['+', '+', '+', '+']];
         let full = expand_symmetry(&half, 4, 4, Symmetry::Vertical).unwrap();
         assert_eq!(full.len(), 4);
         assert_eq!(full[0], vec!['#', '#', '#', '#']);
@@ -132,10 +130,7 @@ mod tests {
 
     #[test]
     fn quad_symmetry() {
-        let quarter = vec![
-            vec!['#', '+'],
-            vec!['+', '.'],
-        ];
+        let quarter = vec![vec!['#', '+'], vec!['+', '.']];
         let full = expand_symmetry(&quarter, 4, 4, Symmetry::Quad).unwrap();
         assert_eq!(full.len(), 4);
         assert_eq!(full[0], vec!['#', '+', '+', '#']);

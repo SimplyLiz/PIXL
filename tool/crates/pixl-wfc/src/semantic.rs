@@ -30,7 +30,8 @@ pub fn parse_forbids(rule: &str) -> Option<SemanticRule> {
     // Expected: ["affordance:X", "forbids", "affordance:Y", "adjacent"]
     if parts.len() >= 3 && parts[1] == "forbids" {
         let source = parts[0].strip_prefix("affordance:")?;
-        let target = parts[2].strip_prefix("affordance:")
+        let target = parts[2]
+            .strip_prefix("affordance:")
             .or_else(|| parts[2].strip_prefix("type:"))?;
         Some(SemanticRule::Forbids {
             source_affordance: source.to_string(),
@@ -46,7 +47,8 @@ pub fn parse_requires(rule: &str) -> Option<SemanticRule> {
     let parts: Vec<&str> = rule.split_whitespace().collect();
     if parts.len() >= 3 && parts[1] == "requires" {
         let source = parts[0].strip_prefix("affordance:")?;
-        let target = parts[2].strip_prefix("affordance:")
+        let target = parts[2]
+            .strip_prefix("affordance:")
             .or_else(|| parts[2].strip_prefix("type:"))?;
         Some(SemanticRule::Requires {
             source_affordance: source.to_string(),
@@ -81,15 +83,14 @@ pub fn check_forbids(
             source_affordance,
             target_affordance,
         } = rule
+            && cand == source_affordance
         {
-            if cand == source_affordance {
-                // Check if ANY neighbor has the forbidden affordance
-                for neighbor in neighbor_affordances {
-                    if let Some(naff) = neighbor {
-                        if naff == target_affordance {
-                            return false; // forbidden!
-                        }
-                    }
+            // Check if ANY neighbor has the forbidden affordance
+            for neighbor in neighbor_affordances {
+                if let Some(naff) = neighbor
+                    && naff == target_affordance
+                {
+                    return false; // forbidden!
                 }
             }
         }
@@ -119,16 +120,15 @@ pub fn compute_requires_bias(
             source_affordance,
             target_affordance,
         } = rule
+            && cand == source_affordance
         {
-            if cand == source_affordance {
-                let has_match = neighbor_affordances.iter().any(|n| {
-                    n.as_ref().is_some_and(|naff| naff == target_affordance)
-                });
-                if has_match {
-                    bias *= require_boost;
-                } else {
-                    bias *= 0.1; // suppress, don't prune
-                }
+            let has_match = neighbor_affordances
+                .iter()
+                .any(|n| n.as_ref().is_some_and(|naff| naff == target_affordance));
+            if has_match {
+                bias *= require_boost;
+            } else {
+                bias *= 0.1; // suppress, don't prune
             }
         }
     }
@@ -144,7 +144,10 @@ mod tests {
     fn parse_forbids_rule() {
         let rule = parse_forbids("affordance:obstacle forbids affordance:hazard adjacent").unwrap();
         match rule {
-            SemanticRule::Forbids { source_affordance, target_affordance } => {
+            SemanticRule::Forbids {
+                source_affordance,
+                target_affordance,
+            } => {
                 assert_eq!(source_affordance, "obstacle");
                 assert_eq!(target_affordance, "hazard");
             }
@@ -154,9 +157,13 @@ mod tests {
 
     #[test]
     fn parse_requires_rule() {
-        let rule = parse_requires("affordance:walkable requires affordance:obstacle adjacent_any").unwrap();
+        let rule = parse_requires("affordance:walkable requires affordance:obstacle adjacent_any")
+            .unwrap();
         match rule {
-            SemanticRule::Requires { source_affordance, target_affordance } => {
+            SemanticRule::Requires {
+                source_affordance,
+                target_affordance,
+            } => {
                 assert_eq!(source_affordance, "walkable");
                 assert_eq!(target_affordance, "obstacle");
             }

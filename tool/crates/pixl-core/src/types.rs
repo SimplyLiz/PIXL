@@ -65,8 +65,12 @@ pub struct Theme {
     pub constraints: HashMap<String, toml::Value>,
 }
 
-fn default_scale() -> u32 { 1 }
-fn default_canvas() -> u32 { 16 }
+fn default_scale() -> u32 {
+    1
+}
+fn default_canvas() -> u32 {
+    16
+}
 
 // ── Palette ─────────────────────────────────────────────────────────
 
@@ -105,15 +109,19 @@ pub struct PaletteSwap {
 #[derive(Debug, Deserialize, serde::Serialize)]
 pub struct Cycle {
     pub palette: String,
-    pub symbols: Vec<String>,       // cycle through these symbols' colors (not indices)
+    pub symbols: Vec<String>, // cycle through these symbols' colors (not indices)
     #[serde(default = "default_direction")]
     pub direction: String,
     #[serde(default = "default_fps")]
     pub fps: u32,
 }
 
-fn default_direction() -> String { "forward".to_string() }
-fn default_fps() -> u32 { 8 }
+fn default_direction() -> String {
+    "forward".to_string()
+}
+fn default_fps() -> u32 {
+    8
+}
 
 // ── Stamp ───────────────────────────────────────────────────────────
 
@@ -146,7 +154,7 @@ pub struct TileRaw {
     #[serde(default)]
     pub auto_rotate: Option<String>,
     #[serde(default)]
-    pub auto_rotate_weight: Option<String>,  // "equal" | "source_only" (default)
+    pub auto_rotate_weight: Option<String>, // "equal" | "source_only" (default)
     #[serde(default)]
     pub template: Option<String>,
     #[serde(default)]
@@ -174,7 +182,9 @@ pub struct TileRaw {
     pub layout: Option<String>,
 }
 
-fn default_weight() -> f64 { 1.0 }
+fn default_weight() -> f64 {
+    1.0
+}
 
 #[derive(Debug, Deserialize, Clone, serde::Serialize)]
 pub struct EdgeClassRaw {
@@ -199,7 +209,7 @@ pub struct SemanticRaw {
     #[serde(default)]
     pub collision: Option<String>,
     #[serde(default)]
-    pub tags: HashMap<String, toml::Value>,  // mixed types: bool, string, int
+    pub tags: HashMap<String, toml::Value>, // mixed types: bool, string, int
 }
 
 // ── Resolved Tile (after parsing grid/rle/compose/template) ─────────
@@ -259,7 +269,7 @@ pub struct EdgeClass {
 pub struct Semantic {
     pub affordance: String,
     pub collision: CollisionShape,
-    pub tags: HashMap<String, toml::Value>,  // mixed types: bool, string, int
+    pub tags: HashMap<String, toml::Value>, // mixed types: bool, string, int
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -301,7 +311,9 @@ pub struct SpriteRaw {
     pub frames: Vec<FrameRaw>,
 }
 
-fn default_loop() -> bool { true }
+fn default_loop() -> bool {
+    true
+}
 
 #[derive(Debug, Deserialize, serde::Serialize)]
 pub struct AnimTagRaw {
@@ -401,7 +413,9 @@ pub struct TileRun {
     pub single: Option<String>,
 }
 
-fn default_orientation() -> String { "horizontal".to_string() }
+fn default_orientation() -> String {
+    "horizontal".to_string()
+}
 
 // ── WFC Rules ───────────────────────────────────────────────────────
 
@@ -417,7 +431,9 @@ pub struct WfcRules {
     pub variant_groups: HashMap<String, Vec<String>>,
 }
 
-fn default_boost() -> f64 { 3.0 }
+fn default_boost() -> f64 {
+    3.0
+}
 
 // ── Atlas Config ────────────────────────────────────────────────────
 
@@ -438,10 +454,18 @@ pub struct AtlasConfig {
     pub map_output: Option<String>,
 }
 
-fn default_format() -> String { "texturepacker".to_string() }
-fn default_padding() -> u32 { 1 }
-fn default_atlas_scale() -> u32 { 1 }
-fn default_columns() -> u32 { 8 }
+fn default_format() -> String {
+    "texturepacker".to_string()
+}
+fn default_padding() -> u32 {
+    1
+}
+fn default_atlas_scale() -> u32 {
+    1
+}
+fn default_columns() -> u32 {
+    8
+}
 
 // ── Size parsing helper ─────────────────────────────────────────────
 
@@ -450,10 +474,17 @@ pub fn parse_size(s: &str) -> Result<(u32, u32), String> {
     if parts.len() != 2 {
         return Err(format!("invalid size '{}': expected 'WxH'", s));
     }
-    let w = parts[0].parse::<u32>().map_err(|_| format!("invalid width in '{}'", s))?;
-    let h = parts[1].parse::<u32>().map_err(|_| format!("invalid height in '{}'", s))?;
+    let w = parts[0]
+        .parse::<u32>()
+        .map_err(|_| format!("invalid width in '{}'", s))?;
+    let h = parts[1]
+        .parse::<u32>()
+        .map_err(|_| format!("invalid height in '{}'", s))?;
     if w == 0 || h == 0 {
-        return Err(format!("invalid size '{}': width and height must be > 0", s));
+        return Err(format!(
+            "invalid size '{}': width and height must be > 0",
+            s
+        ));
     }
     Ok((w, h))
 }

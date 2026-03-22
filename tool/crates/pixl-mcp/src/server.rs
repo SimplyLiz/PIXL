@@ -3,9 +3,8 @@ use rmcp::{
     Error as McpError,
     handler::server::ServerHandler,
     model::{
-        CallToolRequestParams, CallToolResult, Content,
-        InitializeResult, ListToolsResult, PaginatedRequestParams,
-        ServerCapabilities, ServerInfo, ToolsCapability,
+        CallToolRequestParams, CallToolResult, Content, ListToolsResult, PaginatedRequestParams,
+        ServerInfo, ToolsCapability,
     },
     service::{RequestContext, RoleServer},
 };
@@ -13,6 +12,12 @@ use std::sync::Mutex;
 
 pub struct PixlServer {
     state: Mutex<McpState>,
+}
+
+impl Default for PixlServer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PixlServer {
@@ -90,8 +95,8 @@ pub async fn run_stdio() -> Result<(), Box<dyn std::error::Error>> {
 
 pub async fn run_stdio_with_file(path: &str) -> Result<(), Box<dyn std::error::Error>> {
     let source = std::fs::read_to_string(path)?;
-    let server = PixlServer::with_source(&source)
-        .map_err(|e| format!("failed to load {}: {}", path, e))?;
+    let server =
+        PixlServer::with_source(&source).map_err(|e| format!("failed to load {}: {}", path, e))?;
     let transport = rmcp::transport::stdio();
     let service = rmcp::service::serve_server(server, transport).await?;
     service.waiting().await?;

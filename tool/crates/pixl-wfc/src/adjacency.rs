@@ -21,7 +21,12 @@ impl Direction {
     }
 
     pub fn all() -> [Direction; 4] {
-        [Direction::North, Direction::East, Direction::South, Direction::West]
+        [
+            Direction::North,
+            Direction::East,
+            Direction::South,
+            Direction::West,
+        ]
     }
 
     pub fn delta(self) -> (i32, i32) {
@@ -66,10 +71,7 @@ impl AdjacencyRules {
     /// Build adjacency rules from tile edge classes.
     /// Two tiles can be adjacent if their touching edge classes match.
     /// Variant groups: all members of a group share edge compatibility.
-    pub fn build(
-        tiles: &[TileEdges],
-        variant_groups: &HashMap<String, Vec<String>>,
-    ) -> Self {
+    pub fn build(tiles: &[TileEdges], variant_groups: &HashMap<String, Vec<String>>) -> Self {
         let n = tiles.len();
         let mut rules = vec![FixedBitSet::with_capacity(n); n * 4];
 
@@ -80,9 +82,9 @@ impl AdjacencyRules {
             .map(|(i, t)| (t.name.as_str(), i))
             .collect();
 
-        let group_members: HashMap<&str, Vec<usize>> = variant_groups
-            .iter()
-            .map(|(_, members)| {
+        let _group_members: HashMap<&str, Vec<usize>> = variant_groups
+            .values()
+            .map(|members| {
                 let indices: Vec<usize> = members
                     .iter()
                     .filter_map(|m| name_to_idx.get(m.as_str()).copied())
@@ -98,7 +100,10 @@ impl AdjacencyRules {
                     .iter()
                     .filter_map(|m| name_to_idx.get(m.as_str()).copied())
                     .collect();
-                indices.iter().map(|&i| (i, indices.clone())).collect::<Vec<_>>()
+                indices
+                    .iter()
+                    .map(|&i| (i, indices.clone()))
+                    .collect::<Vec<_>>()
             })
             .collect();
 
@@ -127,7 +132,10 @@ impl AdjacencyRules {
             }
         }
 
-        AdjacencyRules { num_tiles: n, rules }
+        AdjacencyRules {
+            num_tiles: n,
+            rules,
+        }
     }
 
     /// Get the set of tiles compatible with `tile_idx` in `direction`.
@@ -214,12 +222,36 @@ mod tests {
     #[test]
     fn variant_groups_expand_compatibility() {
         let tiles = vec![
-            TileEdges { name: "grass_a".to_string(), n: "grass".to_string(), e: "grass".to_string(), s: "grass".to_string(), w: "grass".to_string(), weight: 2.0 },
-            TileEdges { name: "grass_b".to_string(), n: "grass".to_string(), e: "grass".to_string(), s: "grass".to_string(), w: "grass".to_string(), weight: 1.0 },
-            TileEdges { name: "wall".to_string(), n: "solid".to_string(), e: "solid".to_string(), s: "solid".to_string(), w: "solid".to_string(), weight: 1.0 },
+            TileEdges {
+                name: "grass_a".to_string(),
+                n: "grass".to_string(),
+                e: "grass".to_string(),
+                s: "grass".to_string(),
+                w: "grass".to_string(),
+                weight: 2.0,
+            },
+            TileEdges {
+                name: "grass_b".to_string(),
+                n: "grass".to_string(),
+                e: "grass".to_string(),
+                s: "grass".to_string(),
+                w: "grass".to_string(),
+                weight: 1.0,
+            },
+            TileEdges {
+                name: "wall".to_string(),
+                n: "solid".to_string(),
+                e: "solid".to_string(),
+                s: "solid".to_string(),
+                w: "solid".to_string(),
+                weight: 1.0,
+            },
         ];
         let mut groups = HashMap::new();
-        groups.insert("grass".to_string(), vec!["grass_a".to_string(), "grass_b".to_string()]);
+        groups.insert(
+            "grass".to_string(),
+            vec!["grass_a".to_string(), "grass_b".to_string()],
+        );
 
         let rules = AdjacencyRules::build(&tiles, &groups);
         let compat = rules.compatible(0, Direction::East);

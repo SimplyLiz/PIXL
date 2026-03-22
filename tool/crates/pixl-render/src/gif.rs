@@ -78,7 +78,7 @@ fn quantize_frame(img: &RgbaImage) -> (Vec<u8>, Vec<u8>) {
         colors.push([0, 0, 0]);
     }
 
-    let flat: Vec<u8> = colors.into_iter().flat_map(|c| c).collect();
+    let flat: Vec<u8> = colors.into_iter().flatten().collect();
     (flat, indices)
 }
 

@@ -1,15 +1,11 @@
 use crate::state::McpState;
-use pixl_core::{blueprint, edges, grid, parser, types::parse_size, validate};
+use pixl_core::{blueprint, edges, grid, types::parse_size, validate};
 use pixl_render::renderer;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Mutex;
 
 /// Handle an MCP tool call. Returns the JSON result.
-pub fn handle_tool(
-    state: &Mutex<McpState>,
-    tool_name: &str,
-    args: &Value,
-) -> Value {
+pub fn handle_tool(state: &Mutex<McpState>, tool_name: &str, args: &Value) -> Value {
     match tool_name {
         "pixl_session_start" => handle_session_start(state),
         "pixl_get_palette" => handle_get_palette(state, args),
@@ -86,7 +82,7 @@ fn handle_get_palette(state: &Mutex<McpState>, args: &Value) -> Value {
             let role = theme
                 .roles
                 .iter()
-                .find(|(_, v)| v.chars().next() == Some(*ch))
+                .find(|(_, v)| v.starts_with(*ch))
                 .map(|(k, _)| k.as_str());
 
             (
@@ -124,7 +120,9 @@ fn handle_create_tile(state: &Mutex<McpState>, args: &Value) -> Value {
 
     let palette = match st.palettes.get(&palette_name) {
         Some(p) => p.clone(),
-        None => return json!({"ok": false, "error": format!("palette '{}' not found", palette_name)}),
+        None => {
+            return json!({"ok": false, "error": format!("palette '{}' not found", palette_name)});
+        }
     };
 
     // Parse grid
@@ -160,7 +158,11 @@ fn handle_create_tile(state: &Mutex<McpState>, args: &Value) -> Value {
     let tags: Vec<String> = args
         .get("tags")
         .and_then(|t| t.as_array())
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default();
 
     st.file.tile.insert(
@@ -169,7 +171,10 @@ fn handle_create_tile(state: &Mutex<McpState>, args: &Value) -> Value {
             palette: palette_name,
             size: Some(size_str.to_string()),
             encoding: None,
-            symmetry: args.get("symmetry").and_then(|v| v.as_str()).map(String::from),
+            symmetry: args
+                .get("symmetry")
+                .and_then(|v| v.as_str())
+                .map(String::from),
             auto_rotate: None,
             auto_rotate_weight: None,
             template: None,
@@ -204,7 +209,10 @@ fn handle_create_tile(state: &Mutex<McpState>, args: &Value) -> Value {
 
 fn handle_validate(state: &Mutex<McpState>, args: &Value) -> Value {
     let st = state.lock().unwrap();
-    let check_edges = args.get("check_edges").and_then(|v| v.as_bool()).unwrap_or(false);
+    let check_edges = args
+        .get("check_edges")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     let result = validate::validate(&st.file, check_edges);
 
     let errors: Vec<String> = result.errors.iter().map(|e| format!("{}", e)).collect();
@@ -357,7 +365,10 @@ fn handle_delete_tile(state: &Mutex<McpState>, args: &Value) -> Value {
 }
 
 fn handle_get_blueprint(args: &Value) -> Value {
-    let model = args.get("model").and_then(|v| v.as_str()).unwrap_or("humanoid_chibi");
+    let model = args
+        .get("model")
+        .and_then(|v| v.as_str())
+        .unwrap_or("humanoid_chibi");
     let width = args["width"].as_u64().unwrap_or(32) as u32;
     let height = args["height"].as_u64().unwrap_or(48) as u32;
 

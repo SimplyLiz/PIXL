@@ -10,7 +10,9 @@ pub enum TemplateError {
     #[error("tile '{child}': template '{template}' is itself a template (chains forbidden)")]
     Chain { child: String, template: String },
 
-    #[error("tile '{child}': has both 'template' and 'grid'/'rle'/'layout' — template tiles must not define pixel data")]
+    #[error(
+        "tile '{child}': has both 'template' and 'grid'/'rle'/'layout' — template tiles must not define pixel data"
+    )]
     HasPixelData { child: String },
 
     #[error("tile '{child}': template '{template}' has no grid data to inherit")]
@@ -65,10 +67,7 @@ pub fn validate_templates(tiles: &HashMap<String, TileRaw>) -> Vec<TemplateError
 
 /// Resolve a template tile's size from its base tile.
 /// Returns the base tile's size if the child doesn't have one.
-pub fn resolve_template_size(
-    child: &TileRaw,
-    tiles: &HashMap<String, TileRaw>,
-) -> Option<String> {
+pub fn resolve_template_size(child: &TileRaw, tiles: &HashMap<String, TileRaw>) -> Option<String> {
     if child.size.is_some() {
         return child.size.clone();
     }
@@ -114,8 +113,14 @@ mod tests {
     #[test]
     fn valid_template() {
         let mut tiles = HashMap::new();
-        tiles.insert("base".to_string(), make_tile("p", Some("16x16"), None, Some("####")));
-        tiles.insert("child".to_string(), make_tile("p2", None, Some("base"), None));
+        tiles.insert(
+            "base".to_string(),
+            make_tile("p", Some("16x16"), None, Some("####")),
+        );
+        tiles.insert(
+            "child".to_string(),
+            make_tile("p2", None, Some("base"), None),
+        );
 
         let errors = validate_templates(&tiles);
         assert!(errors.is_empty(), "expected no errors, got: {:?}", errors);
@@ -124,7 +129,10 @@ mod tests {
     #[test]
     fn missing_template() {
         let mut tiles = HashMap::new();
-        tiles.insert("child".to_string(), make_tile("p", None, Some("nonexistent"), None));
+        tiles.insert(
+            "child".to_string(),
+            make_tile("p", None, Some("nonexistent"), None),
+        );
 
         let errors = validate_templates(&tiles);
         assert_eq!(errors.len(), 1);
@@ -134,30 +142,50 @@ mod tests {
     #[test]
     fn template_chain_rejected() {
         let mut tiles = HashMap::new();
-        tiles.insert("base".to_string(), make_tile("p", Some("16x16"), Some("other"), Some("####")));
-        tiles.insert("child".to_string(), make_tile("p2", None, Some("base"), None));
+        tiles.insert(
+            "base".to_string(),
+            make_tile("p", Some("16x16"), Some("other"), Some("####")),
+        );
+        tiles.insert(
+            "child".to_string(),
+            make_tile("p2", None, Some("base"), None),
+        );
 
         let errors = validate_templates(&tiles);
-        assert!(errors.iter().any(|e| matches!(e, TemplateError::Chain { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, TemplateError::Chain { .. }))
+        );
     }
 
     #[test]
     fn template_with_grid_rejected() {
         let mut tiles = HashMap::new();
-        tiles.insert("base".to_string(), make_tile("p", Some("16x16"), None, Some("####")));
+        tiles.insert(
+            "base".to_string(),
+            make_tile("p", Some("16x16"), None, Some("####")),
+        );
         tiles.insert(
             "child".to_string(),
             make_tile("p2", None, Some("base"), Some("++++")),
         );
 
         let errors = validate_templates(&tiles);
-        assert!(errors.iter().any(|e| matches!(e, TemplateError::HasPixelData { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, TemplateError::HasPixelData { .. }))
+        );
     }
 
     #[test]
     fn resolve_size_from_base() {
         let mut tiles = HashMap::new();
-        tiles.insert("base".to_string(), make_tile("p", Some("16x16"), None, Some("####")));
+        tiles.insert(
+            "base".to_string(),
+            make_tile("p", Some("16x16"), None, Some("####")),
+        );
         let child = make_tile("p2", None, Some("base"), None);
 
         let size = resolve_template_size(&child, &tiles);

@@ -18,7 +18,7 @@ pub enum WfcError {
 
 /// Result of a successful WFC run.
 pub struct WfcResult {
-    pub grid: Vec<Vec<usize>>,  // tile indices
+    pub grid: Vec<Vec<usize>>, // tile indices
     pub width: usize,
     pub height: usize,
     pub seed: u64,
@@ -92,11 +92,14 @@ fn attempt_wfc(
     let mut rng = StdRng::seed_from_u64(seed);
 
     // Initialize: every cell can be any tile
-    let mut cells: Vec<FixedBitSet> = vec![{
-        let mut bs = FixedBitSet::with_capacity(num_tiles);
-        bs.set_range(.., true);
-        bs
-    }; w * h];
+    let mut cells: Vec<FixedBitSet> = vec![
+        {
+            let mut bs = FixedBitSet::with_capacity(num_tiles);
+            bs.set_range(.., true);
+            bs
+        };
+        w * h
+    ];
 
     let mut prop_stack: Vec<(usize, usize)> = Vec::new();
 
@@ -240,7 +243,7 @@ fn collapse_cell(
         .collect();
 
     // Compute adjusted weights
-    let mut adjusted: Vec<(usize, f64)> = cell
+    let adjusted: Vec<(usize, f64)> = cell
         .ones()
         .map(|i| {
             let base_w = weights[i].max(1e-10);
@@ -356,21 +359,29 @@ mod tests {
         let tiles = vec![
             TileEdges {
                 name: "wall".to_string(),
-                n: "solid".to_string(), e: "solid".to_string(),
-                s: "solid".to_string(), w: "solid".to_string(),
+                n: "solid".to_string(),
+                e: "solid".to_string(),
+                s: "solid".to_string(),
+                w: "solid".to_string(),
                 weight: 1.0,
             },
             TileEdges {
                 name: "floor".to_string(),
-                n: "floor".to_string(), e: "floor".to_string(),
-                s: "floor".to_string(), w: "floor".to_string(),
+                n: "floor".to_string(),
+                e: "floor".to_string(),
+                s: "floor".to_string(),
+                w: "floor".to_string(),
                 weight: 2.0,
             },
         ];
         let weights = vec![1.0, 2.0];
         let affordances = vec![
-            TileAffordance { affordance: Some("obstacle".to_string()) },
-            TileAffordance { affordance: Some("walkable".to_string()) },
+            TileAffordance {
+                affordance: Some("obstacle".to_string()),
+            },
+            TileAffordance {
+                affordance: Some("walkable".to_string()),
+            },
         ];
         (tiles, weights, affordances)
     }
@@ -410,14 +421,26 @@ mod tests {
         let rules = AdjacencyRules::build(&tiles, &HashMap::new());
 
         let config1 = WfcConfig {
-            width: 6, height: 6, seed: 123,
-            max_retries: 5, weights: weights.clone(), affordances: affordances.clone(),
-            forbids_rules: vec![], requires_rules: vec![], require_boost: 3.0,
+            width: 6,
+            height: 6,
+            seed: 123,
+            max_retries: 5,
+            weights: weights.clone(),
+            affordances: affordances.clone(),
+            forbids_rules: vec![],
+            requires_rules: vec![],
+            require_boost: 3.0,
         };
         let config2 = WfcConfig {
-            width: 6, height: 6, seed: 123,
-            max_retries: 5, weights, affordances,
-            forbids_rules: vec![], requires_rules: vec![], require_boost: 3.0,
+            width: 6,
+            height: 6,
+            seed: 123,
+            max_retries: 5,
+            weights,
+            affordances,
+            forbids_rules: vec![],
+            requires_rules: vec![],
+            require_boost: 3.0,
         };
 
         let r1 = run_wfc(&rules, &config1, &[]).unwrap();
@@ -431,15 +454,29 @@ mod tests {
         let rules = AdjacencyRules::build(&tiles, &HashMap::new());
 
         let config = WfcConfig {
-            width: 4, height: 4, seed: 42,
-            max_retries: 5, weights, affordances,
-            forbids_rules: vec![], requires_rules: vec![], require_boost: 3.0,
+            width: 4,
+            height: 4,
+            seed: 42,
+            max_retries: 5,
+            weights,
+            affordances,
+            forbids_rules: vec![],
+            requires_rules: vec![],
+            require_boost: 3.0,
         };
 
         // Pin compatible tiles (both wall — same edge class)
         let pins = vec![
-            Pin { x: 0, y: 0, tile_idx: 0 }, // wall at (0,0)
-            Pin { x: 3, y: 3, tile_idx: 0 }, // wall at (3,3)
+            Pin {
+                x: 0,
+                y: 0,
+                tile_idx: 0,
+            }, // wall at (0,0)
+            Pin {
+                x: 3,
+                y: 3,
+                tile_idx: 0,
+            }, // wall at (3,3)
         ];
 
         let result = run_wfc(&rules, &config, &pins).unwrap();
@@ -454,9 +491,15 @@ mod tests {
         let rules = AdjacencyRules::build(&tiles, &HashMap::new());
 
         let config = WfcConfig {
-            width: 8, height: 8, seed: 42,
-            max_retries: 5, weights, affordances,
-            forbids_rules: vec![], requires_rules: vec![], require_boost: 3.0,
+            width: 8,
+            height: 8,
+            seed: 42,
+            max_retries: 5,
+            weights,
+            affordances,
+            forbids_rules: vec![],
+            requires_rules: vec![],
+            require_boost: 3.0,
         };
 
         let result = run_wfc(&rules, &config, &[]).unwrap();
@@ -468,17 +511,29 @@ mod tests {
                 if x + 1 < 8 {
                     let r = result.grid[y][x + 1];
                     assert_eq!(
-                        tiles[t].e, tiles[r].w,
+                        tiles[t].e,
+                        tiles[r].w,
                         "edge mismatch at ({},{})-({},{}) east: {} vs {}",
-                        x, y, x + 1, y, tiles[t].e, tiles[r].w
+                        x,
+                        y,
+                        x + 1,
+                        y,
+                        tiles[t].e,
+                        tiles[r].w
                     );
                 }
                 if y + 1 < 8 {
                     let b = result.grid[y + 1][x];
                     assert_eq!(
-                        tiles[t].s, tiles[b].n,
+                        tiles[t].s,
+                        tiles[b].n,
                         "edge mismatch at ({},{})-({},{}) south: {} vs {}",
-                        x, y, x, y + 1, tiles[t].s, tiles[b].n
+                        x,
+                        y,
+                        x,
+                        y + 1,
+                        tiles[t].s,
+                        tiles[b].n
                     );
                 }
             }

@@ -70,12 +70,7 @@ pub fn generate_variants(
             for suffix in ["_90", "_180", "_270"] {
                 grid = rotate_grid_cw(&grid);
                 ec = rotate_edge_class_cw(&ec);
-                variants.push((
-                    suffix.to_string(),
-                    grid.clone(),
-                    ec.clone(),
-                    variant_weight,
-                ));
+                variants.push((suffix.to_string(), grid.clone(), ec.clone(), variant_weight));
             }
             variants
         }
@@ -101,7 +96,12 @@ pub fn generate_variants(
             // Original flipped
             let flipped = flip_grid_h(&source.grid);
             let flipped_ec = flip_edge_class_h(&source.edge_class);
-            variants.push(("_flip".to_string(), flipped.clone(), flipped_ec.clone(), variant_weight));
+            variants.push((
+                "_flip".to_string(),
+                flipped.clone(),
+                flipped_ec.clone(),
+                variant_weight,
+            ));
 
             // Flipped + 3 rotations
             let mut fgrid = flipped;
@@ -109,7 +109,12 @@ pub fn generate_variants(
             for suffix in ["_90f", "_180f", "_270f"] {
                 fgrid = rotate_grid_cw(&fgrid);
                 fec = rotate_edge_class_cw(&fec);
-                variants.push((suffix.to_string(), fgrid.clone(), fec.clone(), variant_weight));
+                variants.push((
+                    suffix.to_string(),
+                    fgrid.clone(),
+                    fec.clone(),
+                    variant_weight,
+                ));
             }
 
             variants
@@ -127,23 +132,14 @@ mod tests {
 
     #[test]
     fn rotate_90_cw() {
-        let grid = make_grid(&[
-            "12",
-            "34",
-        ]);
+        let grid = make_grid(&["12", "34"]);
         let rotated = rotate_grid_cw(&grid);
-        assert_eq!(rotated, make_grid(&[
-            "31",
-            "42",
-        ]));
+        assert_eq!(rotated, make_grid(&["31", "42",]));
     }
 
     #[test]
     fn rotate_360_identity() {
-        let grid = make_grid(&[
-            "AB",
-            "CD",
-        ]);
+        let grid = make_grid(&["AB", "CD"]);
         let r1 = rotate_grid_cw(&grid);
         let r2 = rotate_grid_cw(&r1);
         let r3 = rotate_grid_cw(&r2);
@@ -153,15 +149,9 @@ mod tests {
 
     #[test]
     fn flip_horizontal() {
-        let grid = make_grid(&[
-            "123",
-            "456",
-        ]);
+        let grid = make_grid(&["123", "456"]);
         let flipped = flip_grid_h(&grid);
-        assert_eq!(flipped, make_grid(&[
-            "321",
-            "654",
-        ]));
+        assert_eq!(flipped, make_grid(&["321", "654",]));
     }
 
     #[test]
@@ -176,6 +166,6 @@ mod tests {
         assert_eq!(rotated.n, "mixed"); // W -> N
         assert_eq!(rotated.e, "solid"); // N -> E
         assert_eq!(rotated.s, "floor"); // E -> S
-        assert_eq!(rotated.w, "open");  // S -> W
+        assert_eq!(rotated.w, "open"); // S -> W
     }
 }

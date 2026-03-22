@@ -37,7 +37,7 @@ pub fn generate_bitmask_table() -> [u8; 256] {
     // Apply corner cleanup to all 256 masks, collect unique values
     let cleaned: Vec<u8> = (0..=255u8).map(corner_cleanup).collect();
 
-    let mut unique_masks: Vec<u8> = {
+    let unique_masks: Vec<u8> = {
         let mut set = std::collections::BTreeSet::new();
         for &m in &cleaned {
             set.insert(m);
@@ -109,7 +109,12 @@ mod tests {
     fn table_has_47_unique_values() {
         let table = generate_bitmask_table();
         let unique: std::collections::HashSet<u8> = table.iter().copied().collect();
-        assert_eq!(unique.len(), 47, "expected 47 unique tile indices, got {}", unique.len());
+        assert_eq!(
+            unique.len(),
+            47,
+            "expected 47 unique tile indices, got {}",
+            unique.len()
+        );
     }
 
     #[test]
@@ -159,7 +164,10 @@ mod tests {
             vec![false, false, false],
         ];
         let mask = compute_bitmask(0, 0, 3, 3, |x, y| {
-            grid.get(y as usize).and_then(|row| row.get(x as usize)).copied().unwrap_or(false)
+            grid.get(y as usize)
+                .and_then(|row| row.get(x as usize))
+                .copied()
+                .unwrap_or(false)
         });
         // At (0,0): E=(1,0)=true, S=(0,1)=true, SE=(1,1)=false
         // After cleanup: E + S (no SE because SE requires both S and E, but SE cell is false)

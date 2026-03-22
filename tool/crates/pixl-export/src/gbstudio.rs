@@ -1,3 +1,4 @@
+use crate::renderer::render_grid;
 /// GBStudio export — 160x144 PNG grid layout for Game Boy style games.
 ///
 /// GBStudio uses a specific tileset format:
@@ -7,10 +8,8 @@
 /// - Tileset PNG width = 128px (16 tiles per row)
 ///
 /// This module generates the correctly-sized PNG grid that GBStudio expects.
-
 use image::{ImageBuffer, Rgba, RgbaImage};
 use pixl_core::types::Palette;
-use crate::renderer::render_grid;
 
 /// Pack tiles into a GBStudio-compatible tileset PNG.
 /// Width fixed at 128px (16 x 8px tiles per row).
@@ -24,8 +23,8 @@ pub fn pack_gbstudio(
 
     let tile_size = 8u32;
     let cols = 16u32;
-    let rows = ((tile_grids.len() as u32) + cols - 1) / cols;
-    let img_w = cols * tile_size;  // always 128
+    let rows = (tile_grids.len() as u32).div_ceil(cols);
+    let img_w = cols * tile_size; // always 128
     let img_h = rows * tile_size;
 
     let mut atlas: RgbaImage = ImageBuffer::from_pixel(img_w, img_h, Rgba([0, 0, 0, 0]));
@@ -56,10 +55,42 @@ mod tests {
 
     fn gb_palette() -> Palette {
         let mut symbols = HashMap::new();
-        symbols.insert('.', PaxRgba { r: 15, g: 56, b: 15, a: 255 });   // darkest
-        symbols.insert('1', PaxRgba { r: 48, g: 98, b: 48, a: 255 });
-        symbols.insert('2', PaxRgba { r: 139, g: 172, b: 15, a: 255 });
-        symbols.insert('3', PaxRgba { r: 155, g: 188, b: 15, a: 255 }); // lightest
+        symbols.insert(
+            '.',
+            PaxRgba {
+                r: 15,
+                g: 56,
+                b: 15,
+                a: 255,
+            },
+        ); // darkest
+        symbols.insert(
+            '1',
+            PaxRgba {
+                r: 48,
+                g: 98,
+                b: 48,
+                a: 255,
+            },
+        );
+        symbols.insert(
+            '2',
+            PaxRgba {
+                r: 139,
+                g: 172,
+                b: 15,
+                a: 255,
+            },
+        );
+        symbols.insert(
+            '3',
+            PaxRgba {
+                r: 155,
+                g: 188,
+                b: 15,
+                a: 255,
+            },
+        ); // lightest
         Palette { symbols }
     }
 
@@ -80,6 +111,6 @@ mod tests {
         let tiles = vec![tile.clone(); 20]; // 20 tiles
         let img = pack_gbstudio(&tiles, &palette).unwrap();
         assert_eq!(img.width(), 128); // 16 tiles x 8px
-        assert_eq!(img.height(), 16);  // 2 rows (ceil(20/16) = 2)
+        assert_eq!(img.height(), 16); // 2 rows (ceil(20/16) = 2)
     }
 }

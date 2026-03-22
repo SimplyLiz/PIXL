@@ -1,6 +1,6 @@
+use crate::renderer::render_grid;
 use image::{ImageBuffer, Rgba, RgbaImage};
 use pixl_core::types::Palette;
-use crate::renderer::render_grid;
 use serde::Serialize;
 use std::collections::HashMap;
 
@@ -89,7 +89,7 @@ pub fn pack_atlas(
 
     let cell_w = tw * scale + padding;
     let cell_h = th * scale + padding;
-    let rows = (tiles.len() as u32 + columns - 1) / columns;
+    let rows = (tiles.len() as u32).div_ceil(columns);
     let atlas_w = columns * cell_w + padding;
     let atlas_h = rows * cell_h + padding;
 
@@ -163,8 +163,24 @@ mod tests {
 
     fn test_palette() -> Palette {
         let mut symbols = HashMap::new();
-        symbols.insert('#', PaxRgba { r: 42, g: 31, b: 61, a: 255 });
-        symbols.insert('+', PaxRgba { r: 74, g: 58, b: 109, a: 255 });
+        symbols.insert(
+            '#',
+            PaxRgba {
+                r: 42,
+                g: 31,
+                b: 61,
+                a: 255,
+            },
+        );
+        symbols.insert(
+            '+',
+            PaxRgba {
+                r: 74,
+                g: 58,
+                b: 109,
+                a: 255,
+            },
+        );
         Palette { symbols }
     }
 

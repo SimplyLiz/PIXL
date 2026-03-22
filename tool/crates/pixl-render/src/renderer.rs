@@ -3,11 +3,7 @@ use pixl_core::types::{Palette, Rgba as PaxRgba};
 
 /// Render a resolved tile grid to an image at the given scale.
 /// Nearest-neighbor upscaling only — no bilinear, no anti-aliasing.
-pub fn render_grid(
-    grid: &[Vec<char>],
-    palette: &Palette,
-    scale: u32,
-) -> RgbaImage {
+pub fn render_grid(grid: &[Vec<char>], palette: &Palette, scale: u32) -> RgbaImage {
     let h = grid.len() as u32;
     let w = if h > 0 { grid[0].len() as u32 } else { 0 };
 
@@ -111,9 +107,33 @@ mod tests {
 
     fn test_palette() -> Palette {
         let mut symbols = HashMap::new();
-        symbols.insert('.', PaxRgba { r: 0, g: 0, b: 0, a: 0 });
-        symbols.insert('#', PaxRgba { r: 42, g: 31, b: 61, a: 255 });
-        symbols.insert('+', PaxRgba { r: 74, g: 58, b: 109, a: 255 });
+        symbols.insert(
+            '.',
+            PaxRgba {
+                r: 0,
+                g: 0,
+                b: 0,
+                a: 0,
+            },
+        );
+        symbols.insert(
+            '#',
+            PaxRgba {
+                r: 42,
+                g: 31,
+                b: 61,
+                a: 255,
+            },
+        );
+        symbols.insert(
+            '+',
+            PaxRgba {
+                r: 74,
+                g: 58,
+                b: 109,
+                a: 255,
+            },
+        );
         Palette { symbols }
     }
 

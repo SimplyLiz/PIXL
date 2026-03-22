@@ -4,7 +4,11 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum GridError {
     #[error("row {row}: expected {expected} columns, got {got}")]
-    WidthMismatch { row: usize, expected: u32, got: usize },
+    WidthMismatch {
+        row: usize,
+        expected: u32,
+        got: usize,
+    },
 
     #[error("expected {expected} rows, got {got}")]
     HeightMismatch { expected: u32, got: usize },
@@ -73,14 +77,38 @@ pub fn parse_grid(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
     use crate::types::Rgba;
+    use std::collections::HashMap;
 
     fn test_palette() -> Palette {
         let mut symbols = HashMap::new();
-        symbols.insert('.', Rgba { r: 0, g: 0, b: 0, a: 0 });
-        symbols.insert('#', Rgba { r: 42, g: 31, b: 61, a: 255 });
-        symbols.insert('+', Rgba { r: 74, g: 58, b: 109, a: 255 });
+        symbols.insert(
+            '.',
+            Rgba {
+                r: 0,
+                g: 0,
+                b: 0,
+                a: 0,
+            },
+        );
+        symbols.insert(
+            '#',
+            Rgba {
+                r: 42,
+                g: 31,
+                b: 61,
+                a: 255,
+            },
+        );
+        symbols.insert(
+            '+',
+            Rgba {
+                r: 74,
+                g: 58,
+                b: 109,
+                a: 255,
+            },
+        );
         Palette { symbols }
     }
 
@@ -99,7 +127,14 @@ mod tests {
         let palette = test_palette();
         let raw = "##.\n#+.+\n..##\n++++";
         let err = parse_grid(raw, 4, 4, &palette).unwrap_err();
-        assert!(matches!(err, GridError::WidthMismatch { row: 0, expected: 4, got: 3 }));
+        assert!(matches!(
+            err,
+            GridError::WidthMismatch {
+                row: 0,
+                expected: 4,
+                got: 3
+            }
+        ));
     }
 
     #[test]
@@ -107,7 +142,13 @@ mod tests {
         let palette = test_palette();
         let raw = "####\n++++";
         let err = parse_grid(raw, 4, 4, &palette).unwrap_err();
-        assert!(matches!(err, GridError::HeightMismatch { expected: 4, got: 2 }));
+        assert!(matches!(
+            err,
+            GridError::HeightMismatch {
+                expected: 4,
+                got: 2
+            }
+        ));
     }
 
     #[test]
@@ -115,6 +156,13 @@ mod tests {
         let palette = test_palette();
         let raw = "##X#\n++++\n++++\n++++";
         let err = parse_grid(raw, 4, 4, &palette).unwrap_err();
-        assert!(matches!(err, GridError::UnknownSymbol { row: 0, col: 2, sym: 'X' }));
+        assert!(matches!(
+            err,
+            GridError::UnknownSymbol {
+                row: 0,
+                col: 2,
+                sym: 'X'
+            }
+        ));
     }
 }

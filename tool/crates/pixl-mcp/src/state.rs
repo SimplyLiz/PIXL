@@ -1,5 +1,5 @@
-use pixl_core::types::{PaxFile, Palette};
 use pixl_core::parser::{parse_pax, resolve_all_palettes};
+use pixl_core::types::{Palette, PaxFile};
 use std::collections::HashMap;
 
 /// In-memory PAX file state for an MCP session.
@@ -13,11 +13,7 @@ pub struct McpState {
 impl McpState {
     /// Create a new empty session state.
     pub fn new() -> Self {
-        let source = concat!(
-            "[pax]\n",
-            "version = \"2.0\"\n",
-            "name = \"session\"\n",
-        );
+        let source = concat!("[pax]\n", "version = \"2.0\"\n", "name = \"session\"\n",);
         let file = parse_pax(source).expect("default pax should parse");
         McpState {
             file,
@@ -65,7 +61,10 @@ impl McpState {
     /// Track a refinement iteration for a tile.
     /// Returns the new count.
     pub fn record_refinement(&mut self, tile_name: &str) -> u32 {
-        let count = self.refinement_count.entry(tile_name.to_string()).or_insert(0);
+        let count = self
+            .refinement_count
+            .entry(tile_name.to_string())
+            .or_insert(0);
         *count += 1;
         *count
     }

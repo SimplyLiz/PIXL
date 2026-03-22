@@ -130,9 +130,10 @@ fn infer_row_height(
 ) -> Result<u32, ComposeError> {
     for token in tokens {
         if let Some(name) = token.strip_prefix('@')
-            && let Some(stamp) = stamps.get(name) {
-                return Ok(stamp.height);
-            }
+            && let Some(stamp) = stamps.get(name)
+        {
+            return Ok(stamp.height);
+        }
     }
     Err(ComposeError::NoStampsInRow { row: row_idx })
 }
