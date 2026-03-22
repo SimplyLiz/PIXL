@@ -49,10 +49,10 @@ pub struct Header {
 #[derive(Debug, Clone, Deserialize)]
 pub struct Theme {
     pub palette: String,
-    #[serde(default = "default_scale")]
-    pub scale: u32,
-    #[serde(default = "default_canvas")]
-    pub canvas: u32,
+    #[serde(default)]
+    pub scale: Option<u32>,
+    #[serde(default)]
+    pub canvas: Option<u32>,
     #[serde(default)]
     pub max_palette_size: Option<u32>,
     #[serde(default)]
@@ -452,6 +452,9 @@ pub fn parse_size(s: &str) -> Result<(u32, u32), String> {
     }
     let w = parts[0].parse::<u32>().map_err(|_| format!("invalid width in '{}'", s))?;
     let h = parts[1].parse::<u32>().map_err(|_| format!("invalid height in '{}'", s))?;
+    if w == 0 || h == 0 {
+        return Err(format!("invalid size '{}': width and height must be > 0", s));
+    }
     Ok((w, h))
 }
 

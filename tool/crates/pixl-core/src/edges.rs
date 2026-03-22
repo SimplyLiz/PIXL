@@ -2,14 +2,25 @@ use crate::types::EdgeClass;
 use std::hash::Hasher;
 
 /// Extract the four edge strings from a resolved tile grid.
+/// Returns (north, east, south, west). Returns empty strings for empty/0-width grids.
 pub fn extract_edges(grid: &[Vec<char>]) -> (String, String, String, String) {
     let h = grid.len();
-    let w = if h > 0 { grid[0].len() } else { 0 };
+    if h == 0 {
+        return (String::new(), String::new(), String::new(), String::new());
+    }
+    let w = grid[0].len();
+    if w == 0 {
+        return (String::new(), String::new(), String::new(), String::new());
+    }
 
-    let north: String = if h > 0 { grid[0].iter().collect() } else { String::new() };
-    let south: String = if h > 0 { grid[h - 1].iter().collect() } else { String::new() };
-    let west: String = grid.iter().map(|row| row[0]).collect();
-    let east: String = grid.iter().map(|row| row[w - 1]).collect();
+    let north: String = grid[0].iter().collect();
+    let south: String = grid[h - 1].iter().collect();
+    let west: String = grid.iter().map(|row| {
+        row.first().copied().unwrap_or('.')
+    }).collect();
+    let east: String = grid.iter().map(|row| {
+        row.get(w - 1).copied().unwrap_or('.')
+    }).collect();
 
     (north, east, south, west)
 }

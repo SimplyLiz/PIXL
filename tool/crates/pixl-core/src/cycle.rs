@@ -106,17 +106,18 @@ pub fn cycle_color_at_frame(
     let n = cycle.symbols.len();
     let offset = (frame_tick as usize) % n;
 
-    let effective_idx = match cycle.direction.as_str() {
-        "forward" => (pos + offset) % n,
-        "backward" => (pos + n - offset) % n,
+    let displacement = match cycle.direction.as_str() {
+        "forward" => offset % n,
+        "backward" => (n - (offset % n)) % n,
         "ping-pong" => {
-            // ping-pong: 0,1,2,...,n-1,n-2,...,1,0,1,...
+            // ping-pong displacement: 0,1,2,...,n-1,n-2,...,1,0,1,...
             let period = if n > 1 { 2 * (n - 1) } else { 1 };
             let t = offset % period;
             if t < n { t } else { period - t }
         }
-        _ => pos, // fallback: no cycling
+        _ => 0, // fallback: no cycling
     };
+    let effective_idx = (pos + displacement) % n;
 
     let effective_sym_str = &cycle.symbols[effective_idx];
     let effective_ch = effective_sym_str.chars().next()?;

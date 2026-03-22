@@ -47,12 +47,19 @@ pub enum ValidationError {
     #[error("tile '{tile}': no pixel data (grid/rle/layout) and no template")]
     NoPixelData { tile: String },
 
-    #[error("tile '{tile}': uses {count} symbols but theme max_palette_size = {max}. Excess: {excess}")]
+    #[error("{entity_type} '{name}': palette '{palette}' not found")]
+    PaletteNotFound {
+        entity_type: String,
+        name: String,
+        palette: String,
+    },
+
+    #[error("tile '{tile}': uses {count} distinct symbols but theme max_palette_size = {max}. Symbols: {symbols}")]
     PaletteSizeExceeded {
         tile: String,
         count: usize,
         max: u32,
-        excess: String,
+        symbols: String,
     },
 
     #[error("stamp '{stamp}': {source}")]
@@ -141,14 +148,21 @@ pub fn validate(file: &PaxFile, _check_edges: bool) -> ValidationResult {
             }
         };
 
-        if let Some(palette) = palettes.get(&stamp_raw.palette) {
-            if let Err(e) = parse_grid(&stamp_raw.grid, w, h, palette) {
+        let Some(palette) = palettes.get(&stamp_raw.palette) else {
+            errors.push(ValidationError::PaletteNotFound {
+                entity_type: "stamp".to_string(),
+                name: name.clone(),
+                palette: stamp_raw.palette.clone(),
+            });
+            continue;
+        };
+
+        if let Err(e) = parse_grid(&stamp_raw.grid, w, h, palette) {
                 errors.push(ValidationError::StampGrid {
                     stamp: name.clone(),
                     source: e,
                 });
             }
-        }
     }
 
     // 5. Validate tiles
@@ -186,9 +200,18 @@ pub fn validate(file: &PaxFile, _check_edges: bool) -> ValidationResult {
             continue;
         }
 
+        // Palette must exist
+        let Some(palette) = palettes.get(&tile_raw.palette) else {
+            errors.push(ValidationError::PaletteNotFound {
+                entity_type: "tile".to_string(),
+                name: name.clone(),
+                palette: tile_raw.palette.clone(),
+            });
+            continue;
+        };
+
         // Validate grid encoding
         if let Some(ref grid_str) = tile_raw.grid {
-            if let Some(palette) = palettes.get(&tile_raw.palette) {
                 // Account for symmetry — grid may be half/quarter size
                 let (grid_w, grid_h) = match tile_raw.symmetry.as_deref() {
                     Some("horizontal") => (w / 2, h),
@@ -210,7 +233,7 @@ pub fn validate(file: &PaxFile, _check_edges: bool) -> ValidationResult {
                                     tile: name.clone(),
                                     count: unique.len(),
                                     max,
-                                    excess: excess.join(", "),
+                                    symbols: excess.join(", "),
                                 });
                             }
                         }
@@ -222,20 +245,17 @@ pub fn validate(file: &PaxFile, _check_edges: bool) -> ValidationResult {
                         });
                     }
                 }
-            }
         }
 
         // Validate RLE encoding
         if let Some(ref rle_str) = tile_raw.rle {
-            if let Some(palette) = palettes.get(&tile_raw.palette) {
-                if let Err(e) = parse_rle(rle_str, w, h, palette) {
+            if let Err(e) = parse_rle(rle_str, w, h, palette) {
                     errors.push(ValidationError::Rle {
                         tile: name.clone(),
                         source: e,
                     });
                 }
             }
-        }
 
         // Validate auto_rotate on non-square
         if tile_raw.auto_rotate.is_some()
@@ -258,8 +278,8 @@ pub fn validate(file: &PaxFile, _check_edges: bool) -> ValidationResult {
             file.tile.get(&run.right),
         ) {
             // left.e must match middle.w
-            if let (Some(le), Some(mw)) = (&left.edge_class, &mid.edge_class) {
-                if le.e != mw.w {
+            if let (Some(le), Some(mw)) = (&left.edge_class, &mid.edge_class)
+                && le.e != mw.w {
                     errors.push(ValidationError::TileRunEdgeMismatch {
                         name: name.clone(),
                         side: "left".to_string(),
@@ -268,10 +288,9 @@ pub fn validate(file: &PaxFile, _check_edges: bool) -> ValidationResult {
                         expected: mw.w.clone(),
                     });
                 }
-            }
             // middle.e must match middle.w (self-repeating)
-            if let Some(me) = &mid.edge_class {
-                if me.e != me.w {
+            if let Some(me) = &mid.edge_class
+                && me.e != me.w {
                     errors.push(ValidationError::TileRunEdgeMismatch {
                         name: name.clone(),
                         side: "middle".to_string(),
@@ -280,10 +299,9 @@ pub fn validate(file: &PaxFile, _check_edges: bool) -> ValidationResult {
                         expected: me.w.clone(),
                     });
                 }
-            }
             // middle.e must match right.w
-            if let (Some(me), Some(rw)) = (&mid.edge_class, &right.edge_class) {
-                if me.e != rw.w {
+            if let (Some(me), Some(rw)) = (&mid.edge_class, &right.edge_class)
+                && me.e != rw.w {
                     errors.push(ValidationError::TileRunEdgeMismatch {
                         name: name.clone(),
                         side: "right".to_string(),
@@ -292,7 +310,6 @@ pub fn validate(file: &PaxFile, _check_edges: bool) -> ValidationResult {
                         expected: rw.w.clone(),
                     });
                 }
-            }
         }
     }
 
@@ -311,8 +328,8 @@ pub fn validate(file: &PaxFile, _check_edges: bool) -> ValidationResult {
 
             // Check delta bases
             for frame in &sprite.frames {
-                if frame.encoding.as_deref() == Some("delta") {
-                    if let Some(base) = frame.base {
+                if frame.encoding.as_deref() == Some("delta")
+                    && let Some(base) = frame.base {
                         if base >= frame.index {
                             errors.push(ValidationError::InvalidDeltaBase {
                                 spriteset: ss_name.clone(),
@@ -322,8 +339,8 @@ pub fn validate(file: &PaxFile, _check_edges: bool) -> ValidationResult {
                             });
                         }
                         // Check base is grid-encoded
-                        if let Some(base_frame) = sprite.frames.iter().find(|f| f.index == base) {
-                            if base_frame.encoding.as_deref() != Some("grid")
+                        if let Some(base_frame) = sprite.frames.iter().find(|f| f.index == base)
+                            && base_frame.encoding.as_deref() != Some("grid")
                                 && base_frame.encoding.is_some()
                             {
                                 errors.push(ValidationError::InvalidDeltaBase {
@@ -333,9 +350,7 @@ pub fn validate(file: &PaxFile, _check_edges: bool) -> ValidationResult {
                                     base,
                                 });
                             }
-                        }
                     }
-                }
             }
         }
     }

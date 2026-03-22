@@ -25,7 +25,7 @@ pub fn expand_symmetry(
         Symmetry::None => Ok(grid.to_vec()),
 
         Symmetry::Horizontal => {
-            if tile_width % 2 != 0 {
+            if !tile_width.is_multiple_of(2) {
                 return Err(SymmetryError::OddDimension {
                     axis: "horizontal".to_string(),
                     dim: tile_width,
@@ -50,7 +50,7 @@ pub fn expand_symmetry(
         }
 
         Symmetry::Vertical => {
-            if tile_height % 2 != 0 {
+            if !tile_height.is_multiple_of(2) {
                 return Err(SymmetryError::OddDimension {
                     axis: "vertical".to_string(),
                     dim: tile_height,
@@ -70,13 +70,13 @@ pub fn expand_symmetry(
         }
 
         Symmetry::Quad => {
-            if tile_width % 2 != 0 {
+            if !tile_width.is_multiple_of(2) {
                 return Err(SymmetryError::OddDimension {
                     axis: "horizontal (quad)".to_string(),
                     dim: tile_width,
                 });
             }
-            if tile_height % 2 != 0 {
+            if !tile_height.is_multiple_of(2) {
                 return Err(SymmetryError::OddDimension {
                     axis: "vertical (quad)".to_string(),
                     dim: tile_height,

@@ -130,8 +130,8 @@ pub fn resolve(model: &str, width: u32, height: u32) -> Option<ResolvedBlueprint
         .filter(|l| !rule.omit.iter().any(|o| o == l.name))
         .map(|l| ResolvedLandmark {
             name: l.name.to_string(),
-            x: (l.x * width as f32).round() as u32,
-            y: (l.y * height as f32).round() as u32,
+            x: ((l.x * width as f32).round() as u32).min(width.saturating_sub(1)),
+            y: ((l.y * height as f32).round() as u32).min(height.saturating_sub(1)),
         })
         .collect();
 

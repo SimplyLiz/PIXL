@@ -45,15 +45,19 @@ pub fn flip_edge_class_h(ec: &EdgeClass) -> EdgeClass {
 /// Returns: Vec<(suffix, grid, edge_class, weight)>
 pub fn generate_variants(
     source: &Tile,
+    auto_rotate_weight: Option<&str>,
 ) -> Vec<(String, Vec<Vec<char>>, EdgeClass, f64)> {
-    let _source_only = source
-        .auto_rotate != AutoRotate::EightWay
-        && source.auto_rotate != AutoRotate::FourWay
-        && source.auto_rotate != AutoRotate::Flip;
+    let num_variants = match source.auto_rotate {
+        AutoRotate::None => return vec![],
+        AutoRotate::FourWay => 3,
+        AutoRotate::Flip => 1,
+        AutoRotate::EightWay => 7,
+    };
 
-    // Determine variant weight
-    let _is_source_only = true; // default behavior
-    let variant_weight = 0.1;
+    let variant_weight = match auto_rotate_weight.unwrap_or("source_only") {
+        "equal" => source.weight / (num_variants as f64 + 1.0),
+        _ => 0.1, // "source_only": original keeps full weight, variants get 0.1
+    };
 
     match source.auto_rotate {
         AutoRotate::None => vec![],

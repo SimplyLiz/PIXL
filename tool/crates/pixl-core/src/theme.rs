@@ -88,8 +88,12 @@ pub fn resolve_theme(
     for theme_name in chain.iter().rev() {
         let theme = &themes[theme_name];
         resolved.palette = theme.palette.clone();
-        resolved.scale = theme.scale;
-        resolved.canvas = theme.canvas;
+        if let Some(s) = theme.scale {
+            resolved.scale = s;
+        }
+        if let Some(c) = theme.canvas {
+            resolved.canvas = c;
+        }
         if theme.max_palette_size.is_some() {
             resolved.max_palette_size = theme.max_palette_size;
         }
@@ -98,9 +102,17 @@ pub fn resolve_theme(
         }
         // Roles: child overrides parent
         for (role, sym_str) in &theme.roles {
-            if let Some(ch) = sym_str.chars().next() {
-                resolved.roles.insert(role.clone(), ch);
+            let chars: Vec<char> = sym_str.chars().collect();
+            if chars.len() == 1 {
+                resolved.roles.insert(role.clone(), chars[0]);
+            } else if !sym_str.is_empty() {
+                return Err(ThemeError::ConstraintViolation {
+                    name: name.to_string(),
+                    constraint: format!("role '{}'", role),
+                    reason: format!("role symbol must be exactly 1 char, got '{}'", sym_str),
+                });
             }
+            // Empty string: role silently dropped (no symbol assigned)
         }
     }
 
@@ -137,16 +149,14 @@ pub fn evaluate_constraints(
 ) -> Vec<ThemeError> {
     let mut warnings = Vec::new();
 
-    for (constraint_name, _value) in &theme.constraints {
+    for constraint_name in theme.constraints.keys() {
         match constraint_name.as_str() {
             "fg_brighter_than_bg" => {
                 if let (Some(&fg), Some(&bg)) =
                     (resolved.roles.get("fg"), resolved.roles.get("bg"))
-                {
-                    if let (Some(fg_c), Some(bg_c)) =
+                    && let (Some(fg_c), Some(bg_c)) =
                         (palette.symbols.get(&fg), palette.symbols.get(&bg))
-                    {
-                        if luminance(fg_c) <= luminance(bg_c) {
+                        && luminance(fg_c) <= luminance(bg_c) {
                             warnings.push(ThemeError::ConstraintViolation {
                                 name: resolved.name.clone(),
                                 constraint: constraint_name.clone(),
@@ -157,17 +167,13 @@ pub fn evaluate_constraints(
                                 ),
                             });
                         }
-                    }
-                }
             }
             "shadow_darker_than_bg" => {
                 if let (Some(&shadow), Some(&bg)) =
                     (resolved.roles.get("shadow"), resolved.roles.get("bg"))
-                {
-                    if let (Some(s_c), Some(bg_c)) =
+                    && let (Some(s_c), Some(bg_c)) =
                         (palette.symbols.get(&shadow), palette.symbols.get(&bg))
-                    {
-                        if luminance(s_c) >= luminance(bg_c) {
+                        && luminance(s_c) >= luminance(bg_c) {
                             warnings.push(ThemeError::ConstraintViolation {
                                 name: resolved.name.clone(),
                                 constraint: constraint_name.clone(),
@@ -178,14 +184,11 @@ pub fn evaluate_constraints(
                                 ),
                             });
                         }
-                    }
-                }
             }
             "accent_hue_distinct_from_bg" => {
                 if let (Some(&accent), Some(&bg)) =
                     (resolved.roles.get("accent"), resolved.roles.get("bg"))
-                {
-                    if let (Some(a_c), Some(bg_c)) =
+                    && let (Some(a_c), Some(bg_c)) =
                         (palette.symbols.get(&accent), palette.symbols.get(&bg))
                     {
                         let dist = hue_distance(a_c, bg_c);
@@ -197,7 +200,6 @@ pub fn evaluate_constraints(
                             });
                         }
                     }
-                }
             }
             _ => {} // Unknown constraints are silently ignored in V1
         }
@@ -289,8 +291,8 @@ mod tests {
 
         Theme {
             palette: "dungeon".to_string(),
-            scale: 2,
-            canvas: 16,
+            scale: Some(2),
+            canvas: Some(16),
             max_palette_size: Some(16),
             light_source: Some("top-left".to_string()),
             extends: None,
@@ -325,8 +327,8 @@ mod tests {
             "blood_theme".to_string(),
             Theme {
                 palette: "dungeon".to_string(),
-                scale: 2,
-                canvas: 16,
+                scale: None,          // inherit from parent
+                canvas: None,         // inherit from parent
                 max_palette_size: None,
                 light_source: None,
                 extends: Some("dark_fantasy".to_string()),
@@ -350,8 +352,8 @@ mod tests {
             "a".to_string(),
             Theme {
                 palette: "dungeon".to_string(),
-                scale: 1,
-                canvas: 16,
+                scale: None,
+                canvas: None,
                 max_palette_size: None,
                 light_source: None,
                 extends: Some("b".to_string()),
@@ -363,8 +365,8 @@ mod tests {
             "b".to_string(),
             Theme {
                 palette: "dungeon".to_string(),
-                scale: 1,
-                canvas: 16,
+                scale: None,
+                canvas: None,
                 max_palette_size: None,
                 light_source: None,
                 extends: Some("a".to_string()),
