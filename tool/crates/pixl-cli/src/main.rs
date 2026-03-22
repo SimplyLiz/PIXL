@@ -102,6 +102,13 @@ enum Commands {
         #[arg(long, default_value = "humanoid_chibi")]
         model: String,
     },
+
+    /// Start the MCP server (stdio transport)
+    Mcp {
+        /// Optional: pre-load a .pax file
+        #[arg(long)]
+        file: Option<PathBuf>,
+    },
 }
 
 fn main() {
@@ -146,7 +153,28 @@ fn main() {
         Commands::Blueprint { size, model } => {
             cmd_blueprint(&size, &model);
         }
+        Commands::Mcp { file } => {
+            cmd_mcp(file.as_deref());
+        }
     }
+}
+
+#[tokio::main]
+async fn cmd_mcp_async(file: Option<&std::path::Path>) {
+    let result = if let Some(path) = file {
+        pixl_mcp::server::run_stdio_with_file(&path.to_string_lossy()).await
+    } else {
+        pixl_mcp::server::run_stdio().await
+    };
+
+    if let Err(e) = result {
+        eprintln!("MCP server error: {}", e);
+        process::exit(1);
+    }
+}
+
+fn cmd_mcp(file: Option<&std::path::Path>) {
+    cmd_mcp_async(file);
 }
 
 fn cmd_validate(file: &PathBuf, check_edges: bool) {

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 // ── Top-level PAX file ──────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, serde::Serialize)]
 pub struct PaxFile {
     pub pax: Header,
     #[serde(default)]
@@ -32,7 +32,7 @@ pub struct PaxFile {
 
 // ── Header ──────────────────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, serde::Serialize)]
 pub struct Header {
     pub version: String,
     pub name: String,
@@ -46,7 +46,7 @@ pub struct Header {
 
 // ── Theme ───────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, serde::Serialize)]
 pub struct Theme {
     pub palette: String,
     #[serde(default)]
@@ -89,7 +89,7 @@ pub struct Rgba {
 
 // ── Palette Swap ────────────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, serde::Serialize)]
 pub struct PaletteSwap {
     pub base: String,
     #[serde(default)]
@@ -102,7 +102,7 @@ pub struct PaletteSwap {
 
 // ── Color Cycle ─────────────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, serde::Serialize)]
 pub struct Cycle {
     pub palette: String,
     pub symbols: Vec<String>,       // cycle through these symbols' colors (not indices)
@@ -117,7 +117,7 @@ fn default_fps() -> u32 { 8 }
 
 // ── Stamp ───────────────────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, serde::Serialize)]
 pub struct StampRaw {
     pub palette: String,
     pub size: String,
@@ -134,7 +134,7 @@ pub struct Stamp {
 
 // ── Tile ────────────────────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, serde::Serialize)]
 pub struct TileRaw {
     pub palette: String,
     #[serde(default)]
@@ -176,7 +176,7 @@ pub struct TileRaw {
 
 fn default_weight() -> f64 { 1.0 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, serde::Serialize)]
 pub struct EdgeClassRaw {
     pub n: String,
     pub e: String,
@@ -184,7 +184,7 @@ pub struct EdgeClassRaw {
     pub w: String,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, serde::Serialize)]
 pub struct NineSlice {
     pub left: u32,
     pub right: u32,
@@ -192,7 +192,7 @@ pub struct NineSlice {
     pub bottom: u32,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, serde::Serialize)]
 pub struct SemanticRaw {
     #[serde(default)]
     pub affordance: Option<String>,
@@ -276,7 +276,7 @@ pub enum CollisionShape {
 
 // ── Spriteset ───────────────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, serde::Serialize)]
 pub struct SpritesetRaw {
     pub palette: String,
     pub size: String,
@@ -288,7 +288,7 @@ pub struct SpritesetRaw {
     pub sprite: Vec<SpriteRaw>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, serde::Serialize)]
 pub struct SpriteRaw {
     pub name: String,
     #[serde(default = "default_fps")]
@@ -303,14 +303,14 @@ pub struct SpriteRaw {
 
 fn default_loop() -> bool { true }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, serde::Serialize)]
 pub struct AnimTagRaw {
     pub name: String,
     pub from_frame: u32,
     pub to_frame: u32,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, serde::Serialize)]
 pub struct FrameRaw {
     pub index: u32,
     #[serde(default)]
@@ -329,7 +329,7 @@ pub struct FrameRaw {
     pub mirror: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, serde::Serialize)]
 pub struct DeltaChange {
     pub x: u32,
     pub y: u32,
@@ -374,7 +374,7 @@ pub struct Frame {
 
 // ── Multi-tile Objects ──────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, serde::Serialize)]
 pub struct ObjectRaw {
     pub size_tiles: String,
     #[serde(default)]
@@ -390,7 +390,7 @@ pub struct ObjectRaw {
 
 // ── Tile Run Groups ─────────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, serde::Serialize)]
 pub struct TileRun {
     #[serde(default = "default_orientation")]
     pub orientation: String,
@@ -405,7 +405,7 @@ fn default_orientation() -> String { "horizontal".to_string() }
 
 // ── WFC Rules ───────────────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, serde::Serialize)]
 pub struct WfcRules {
     #[serde(default)]
     pub forbids: Vec<String>,
@@ -421,7 +421,7 @@ fn default_boost() -> f64 { 3.0 }
 
 // ── Atlas Config ────────────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, serde::Serialize)]
 pub struct AtlasConfig {
     #[serde(default = "default_format")]
     pub format: String,
