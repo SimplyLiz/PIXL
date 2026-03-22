@@ -1,0 +1,52 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/pixl-core",
+    "crates/pixl-render",
+    "crates/pixl-wfc",
+    "crates/pixl-mcp",
+    "crates/pixl-export",
+    "crates/pixl-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+authors = ["Lisa <lisa@tastehub.com>"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/tastehub/pixl"
+description = "PIXL — LLM-native pixel art toolchain"
+
+[workspace.dependencies]
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# Hashing
+fnv = "1.0"              # FNV-1a for edge classification (DefaultHasher uses SipHash, not FNV)
+
+# Error handling
+thiserror = "2"
+
+# Image
+image = { version = "0.25", default-features = false, features = ["png", "gif"] }
+base64 = "0.22"
+
+# WFC
+rand = "0.9"
+fixedbitset = "0.5"
+
+# MCP
+rmcp = { version = "1.2", features = ["server", "transport-io", "macros"] }
+tokio = { version = "1", features = ["full"] }
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Internal crates
+pixl-core = { path = "crates/pixl-core" }
+pixl-render = { path = "crates/pixl-render" }
+pixl-wfc = { path = "crates/pixl-wfc" }
+pixl-mcp = { path = "crates/pixl-mcp" }
+pixl-export = { path = "crates/pixl-export" }

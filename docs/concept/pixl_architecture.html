@@ -1,0 +1,344 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    background: #0d0b14;
+    color: #c8c0e0;
+    padding: 24px;
+    min-height: 100vh;
+  }
+
+  h1 {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: #c8a035;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+  }
+  .subtitle {
+    font-size: 11px;
+    color: #6a5a9a;
+    margin-bottom: 28px;
+    letter-spacing: 0.05em;
+  }
+
+  /* Layer stack */
+  .layer-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 28px;
+  }
+  .layer {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 16px;
+    border-radius: 6px;
+    border-left: 3px solid;
+    position: relative;
+  }
+  .layer-num {
+    font-size: 10px;
+    font-weight: 700;
+    opacity: 0.5;
+    min-width: 52px;
+    letter-spacing: 0.05em;
+  }
+  .layer-name {
+    font-size: 13px;
+    font-weight: 700;
+    min-width: 130px;
+  }
+  .layer-desc {
+    font-size: 11px;
+    opacity: 0.75;
+    flex: 1;
+  }
+  .layer-ex {
+    font-size: 10px;
+    color: #888;
+    font-style: italic;
+    max-width: 200px;
+    text-align: right;
+  }
+
+  .l4 { background: #1a0f2e; border-color: #c8a035; }
+  .l4 .layer-name { color: #c8a035; }
+  .l3 { background: #0f1a1f; border-color: #3ab0c8; }
+  .l3 .layer-name { color: #3ab0c8; }
+  .l2 { background: #0f1f0f; border-color: #5ac84a; }
+  .l2 .layer-name { color: #5ac84a; }
+  .l1 { background: #1a1a0a; border-color: #c8b84a; }
+  .l1 .layer-name { color: #c8b84a; }
+  .l0 { background: #1a0a0a; border-color: #c84a4a; }
+  .l0 .layer-name { color: #c84a4a; }
+  .ltheme { background: #0a0a1a; border-color: #8a4ac8; border-style: dashed; }
+  .ltheme .layer-name { color: #8a4ac8; }
+
+  /* Research callouts */
+  .research-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 28px;
+    flex-wrap: wrap;
+  }
+  .research-card {
+    flex: 1;
+    min-width: 180px;
+    background: #120e1e;
+    border: 1px solid #2a1f3d;
+    border-radius: 6px;
+    padding: 10px 12px;
+  }
+  .research-card h3 {
+    font-size: 10px;
+    color: #c8a035;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 6px;
+  }
+  .research-card p {
+    font-size: 10px;
+    line-height: 1.5;
+    color: #9a8ab0;
+  }
+  .research-card .source {
+    font-size: 9px;
+    color: #5a4a7a;
+    margin-top: 5px;
+    font-style: italic;
+  }
+
+  /* Toolchain */
+  .toolchain {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 28px;
+  }
+  .tool {
+    background: #0e0c18;
+    border: 1px solid #2a1f3d;
+    border-radius: 6px;
+    padding: 8px 10px;
+  }
+  .tool .cmd {
+    font-size: 11px;
+    color: #5ac84a;
+    margin-bottom: 4px;
+  }
+  .tool .tdesc {
+    font-size: 10px;
+    color: #7a6a9a;
+    line-height: 1.4;
+  }
+
+  /* MCP tools */
+  .mcp-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 20px;
+  }
+  .mcp-tool {
+    background: #0a0e14;
+    border: 1px solid #1a2a3a;
+    border-radius: 4px;
+    padding: 7px 10px;
+    font-size: 10px;
+  }
+  .mcp-tool .fn { color: #3ab0c8; margin-bottom: 3px; font-size: 10px; }
+  .mcp-tool .fdesc { color: #6a7a8a; line-height: 1.4; }
+
+  /* Flow arrows */
+  .flow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 10px 0;
+    font-size: 11px;
+    color: #5a4a7a;
+    padding: 0 8px;
+  }
+  .flow-arrow { color: #c8a035; font-size: 14px; }
+
+  /* Section headers */
+  .section-head {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #5a4a7a;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #1a0f2e;
+  }
+
+  /* Sample PIXL code */
+  .code-sample {
+    background: #060408;
+    border: 1px solid #1a0f2e;
+    border-radius: 6px;
+    padding: 12px 14px;
+    font-size: 10px;
+    line-height: 1.6;
+    margin-bottom: 20px;
+    overflow-x: auto;
+  }
+  .kw { color: #8a4ac8; }
+  .nm { color: #c8a035; }
+  .sym { color: #c84a4a; }
+  .cm { color: #3a2a5a; }
+  .str { color: #5ac84a; }
+  .op { color: #3ab0c8; }
+
+  .innovations {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .inn {
+    background: #0d0b14;
+    border: 1px solid #2a1f3d;
+    border-left: 3px solid #c8a035;
+    border-radius: 4px;
+    padding: 8px 10px;
+    font-size: 10px;
+  }
+  .inn strong { color: #c8a035; display: block; margin-bottom: 3px; font-size: 11px; }
+  .inn span { color: #7a6a9a; line-height: 1.5; }
+</style>
+</head>
+<body>
+
+<h1>PIXL — Pixel Intelligence eXchange Language</h1>
+<div class="subtitle">LLM-Native Pixel Art Format · Architecture Overview</div>
+
+<div class="section-head">Format Layer Stack (LLMs work top-down, renderer bottom-up)</div>
+<div class="layer-stack">
+  <div class="layer ltheme">
+    <div class="layer-num">THEME</div>
+    <div class="layer-name">@theme / @palette</div>
+    <div class="layer-desc">CSS-like style inheritance. Semantic color roles, scale, dither, validation rules. The LLM never touches hex codes.</div>
+    <div class="layer-ex">dark_fantasy, sci_fi, nature…</div>
+  </div>
+  <div class="layer l4">
+    <div class="layer-num">LAYER 4</div>
+    <div class="layer-name">Map / @map</div>
+    <div class="layer-desc">Assembled from tile groups. Can be hand-authored or WFC-generated with seed for reproducibility.</div>
+    <div class="layer-ex">@generator wfc { seed=42 }</div>
+  </div>
+  <div class="layer l3">
+    <div class="layer-num">LAYER 3</div>
+    <div class="layer-name">Tile Group / @tilegroup</div>
+    <div class="layer-desc">Complete autotile set (47 topological variants). WFC adjacency rules derived automatically from tile names (N/S/E/W).</div>
+    <div class="layer-ex">dungeon_wall, cave_floor…</div>
+  </div>
+  <div class="layer l2">
+    <div class="layer-num">LAYER 2</div>
+    <div class="layer-name">Tile / Sprite / @tile @sprite</div>
+    <div class="layer-desc">Primary authoring unit. 8×8 to 64×64. Composed from micro-tiles OR direct symbols + RLE. Edge declarations for WFC. @diff for animation frames.</div>
+    <div class="layer-ex">wall_NS, hero_walk[4 frames]</div>
+  </div>
+  <div class="layer l1">
+    <div class="layer-num">LAYER 1</div>
+    <div class="layer-name">Micro-tile / @micro</div>
+    <div class="layer-desc">Named 4×4 reusable fragments. The BPE tokens of PIXL — frequent visual patterns get semantic names. LLM composes from vocabulary.</div>
+    <div class="layer-ex">corner_nw, wall_cap, crack_v…</div>
+  </div>
+  <div class="layer l0">
+    <div class="layer-num">LAYER 0</div>
+    <div class="layer-name">Symbol / Pixel</div>
+    <div class="layer-desc">Single printable char = single palette entry. Max 62 symbols (a-z, A-Z, 0-9). '.' always = transparent. Chars chosen for visual mnemonics.</div>
+    <div class="layer-ex"># = stone, ~ = water, o = gold</div>
+  </div>
+</div>
+
+<div class="section-head">Research Foundations</div>
+<div class="research-row">
+  <div class="research-card">
+    <h3>BPE Image Tokenization</h3>
+    <p>Applying Byte-Pair Encoding to visual patches creates shorter, more learnable sequences. PIXL's micro-tile vocabulary is a human-readable implementation of this insight.</p>
+    <div class="source">Zhang et al. ICLR 2025 · Elsner et al. NeurIPS 2024</div>
+  </div>
+  <div class="research-card">
+    <h3>Wave Function Collapse</h3>
+    <p>Constraint propagation via entropy minimization. PIXL uses WFC as a validator and completer — the LLM designs tiles, WFC checks and fills gaps.</p>
+    <div class="source">Gumin 2016 · N-WFC arxiv 2023</div>
+  </div>
+  <div class="research-card">
+    <h3>LLM Spatial Reasoning Gap</h3>
+    <p>LLMs fail at pixel-space spatial reasoning but excel at semantic-space composition. PIXL's symbolic palette maps characters to meanings, not colors.</p>
+    <div class="source">SkyPilot blog 2024 · ljvmiranda 2025</div>
+  </div>
+  <div class="research-card">
+    <h3>Grammar-Based PCG</h3>
+    <p>Generative grammars are the gold standard for cross-asset stylistic coherence in games (Caves of Qud, Townscaper). PIXL's @theme is this grammar.</p>
+    <div class="source">PCG Survey AAAI 2024</div>
+  </div>
+</div>
+
+<div class="section-head">PIXL Source — What the LLM Actually Writes</div>
+<div class="code-sample">
+<span class="kw">@theme</span> <span class="nm">dark_fantasy</span> {
+  <span class="kw">@palette</span> dungeon_dark &nbsp;&nbsp;<span class="cm">// symbol → semantic role → hex</span>
+  <span class="kw">@scale</span> 2 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="cm">// 2× pixel scale on render</span>
+  <span class="op">--stone</span>: <span class="sym">'#'</span> <span class="str">#2a1f3d</span>   <span class="cm">// LLM writes '#', never the hex</span>
+  <span class="op">--lit</span>:   <span class="sym">'+'</span> lighten(stone, 40%)
+  <span class="op">--water</span>: <span class="sym">'~'</span> <span class="str">#1a3a5c</span>
+  <span class="op">--gold</span>:  <span class="sym">'o'</span> <span class="str">#c8a035</span>
+}
+
+<span class="kw">@tilegroup</span> <span class="nm">dungeon_wall</span> {
+  <span class="kw">@wfc</span> auto  <span class="cm">// edge rules derived from variant names below</span>
+
+  <span class="kw">tile</span> <span class="nm">NSEW</span> { <span class="cm">// surrounded on all sides</span>
+    <span class="kw">grid</span> { 16<span class="sym">#</span> / 1<span class="sym">#</span>14<span class="op">+</span>1<span class="sym">#</span> / 1<span class="sym">#</span>6<span class="op">+</span>2<span class="sym">s</span>6<span class="op">+</span>1<span class="sym">#</span> / 16<span class="sym">#</span> }
+  }
+  <span class="kw">tile</span> <span class="nm">NS</span>   { <span class="kw">@compose</span> { [wall_cap] [wall_cap] / [wall_side] [wall_side] … } }
+  <span class="kw">tile</span> <span class="nm">N</span>    { <span class="kw">@symmetry</span> horizontal; <span class="kw">grid</span> { … } }
+}
+
+<span class="kw">@sprite</span> <span class="nm">hero_walk</span> 16x32 { <span class="kw">@frames</span> 4; <span class="kw">@fps</span> 8; <span class="kw">@loop</span> cycle
+  <span class="kw">frame</span> 1 { <span class="kw">grid</span> { … full sprite … } }
+  <span class="kw">frame</span> 2 { <span class="kw">@diff</span> from=1 { 20:7=<span class="op">+</span>, 22:6=<span class="sym">#</span> } } <span class="cm">// only changed pixels</span>
+}
+</div>
+
+<div class="section-head">CLI Toolchain (Go or Rust)</div>
+<div class="toolchain">
+  <div class="tool"><div class="cmd">pixl render</div><div class="tdesc">→ PNG. Reads .pixl, renders pixel-perfect output</div></div>
+  <div class="tool"><div class="cmd">pixl validate</div><div class="tdesc">→ edge compat, palette, size checks. CI-ready</div></div>
+  <div class="tool"><div class="cmd">pixl wfc</div><div class="tdesc">→ generate tilemap from tilegroup + constraints</div></div>
+  <div class="tool"><div class="cmd">pixl pack</div><div class="tdesc">→ sprite atlas PNG + Tiled/Godot JSON</div></div>
+  <div class="tool"><div class="cmd">pixl serve</div><div class="tdesc">→ HTTP API for web integrations</div></div>
+  <div class="tool"><div class="cmd">pixl mcp</div><div class="tdesc">→ MCP server (stdio). Full LLM integration</div></div>
+</div>
+
+<div class="section-head">MCP Tools — The LLM Integration Layer</div>
+<div class="mcp-grid">
+  <div class="mcp-tool"><div class="fn">pixl.get_palette(theme)</div><div class="fdesc">Returns symbol table + semantic roles. LLM reads this before generating any tile.</div></div>
+  <div class="mcp-tool"><div class="fn">pixl.validate_tile(source)</div><div class="fdesc">Returns edge errors, unknown symbols, size issues. LLM iterates until clean.</div></div>
+  <div class="mcp-tool"><div class="fn">pixl.check_tileable(a, b, dir)</div><div class="fdesc">Returns compatible:bool + reason. LLM validates edge matching before committing.</div></div>
+  <div class="mcp-tool"><div class="fn">pixl.render_tile(source)</div><div class="fdesc">Returns png_base64. LLM can visually inspect what it wrote.</div></div>
+  <div class="mcp-tool"><div class="fn">pixl.generate_wfc_map(group, w, h, seed)</div><div class="fdesc">Returns complete @map block. LLM can inspect, edit, or accept as-is.</div></div>
+  <div class="mcp-tool"><div class="fn">pixl.suggest_compatible(edge_N, edge_W)</div><div class="fdesc">Returns tiles that can go here. LLM uses when hand-authoring a map.</div></div>
+</div>
+
+<div class="section-head">Why This Is Groundbreaking</div>
+<div class="innovations">
+  <div class="inn"><strong>First LLM-native visual authorship format</strong><span>Not "describe → AI generates" — the LLM IS the author, writing auditable, diffable, editable source.</span></div>
+  <div class="inn"><strong>Semantic compression = natural LLM token space</strong><span>Micro-tiles are human-readable BPE. LLMs compose from vocabulary, not coordinate-by-coordinate.</span></div>
+  <div class="inn"><strong>Validation loops = autonomous iteration</strong><span>write → validate → fix → validate. Same loop as Claude Code for software, now for art.</span></div>
+  <div class="inn"><strong>WFC as validator, not generator</strong><span>LLM keeps authorial intent. WFC enforces tileability. No contradiction between design and constraint.</span></div>
+  <div class="inn"><strong>Style coherence by construction</strong><span>Shared @theme means all assets are palette-compatible. Impossible to accidentally use wrong colors.</span></div>
+  <div class="inn"><strong>Git-native art pipeline</strong><span>Diff, review, CI/CD for sprites. Art assets become first-class citizens in version control.</span></div>
+</div>
+
+</body>
+</html>

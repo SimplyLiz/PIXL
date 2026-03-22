@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'JetBrains Mono', 'Courier New', monospace; font-size: 11px; padding: 20px; background: #0d0b14; color: #c8c0e0; }
+
+h2 { font-size: 13px; font-weight: 700; color: #c8a035; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 1px solid #2a2438; padding-bottom: 6px; }
+h3 { font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: #5a4a7a; margin-bottom: 8px; }
+
+.section { margin-bottom: 24px; }
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.card { background: #13111e; border: 1px solid #2a2438; border-radius: 8px; padding: 12px 14px; }
+
+.spec-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.spec-label { font-size: 10px; color: #7a6a9a; min-width: 110px; }
+.spec-val { font-size: 10px; font-weight: 500; color: #c8c0e0; flex: 1; }
+.badge { font-size: 9px; padding: 1px 7px; border-radius: 10px; white-space: nowrap; }
+.bg { background: #0f2a1a; color: #5ac84a; border: 1px solid #2a5a3a; }
+.bw { background: #2a2010; color: #c8a035; border: 1px solid #5a4a20; }
+.br { background: #2a1010; color: #c84a4a; border: 1px solid #5a2020; }
+
+.ql-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid #1a1828; }
+.ql-row:last-child { border-bottom: none; }
+.ql-name { font-size: 10px; min-width: 180px; color: #9a8ab0; }
+.ql-track { flex: 1; height: 5px; background: #1a1828; border-radius: 3px; overflow: hidden; }
+.ql-bar { height: 100%; border-radius: 3px; }
+.ql-txt { font-size: 9px; min-width: 100px; text-align: right; }
+
+.blocker { border: 1px solid #2a2438; border-left: 3px solid; border-radius: 0 6px 6px 0; padding: 8px 10px; margin-bottom: 8px; }
+.blocker-title { font-size: 11px; font-weight: 700; margin-bottom: 4px; }
+.blocker-body { font-size: 10px; color: #7a6a9a; line-height: 1.6; }
+.blocker-fix { font-size: 10px; margin-top: 6px; padding: 4px 8px; border-radius: 4px; background: #0e0c18; line-height: 1.5; color: #9a8ab0; }
+.be { border-left-color: #5ac84a; }
+.be .blocker-title { color: #5ac84a; }
+.bm { border-left-color: #c8a035; }
+.bm .blocker-title { color: #c8a035; }
+.bh { border-left-color: #c84a4a; }
+.bh .blocker-title { color: #c84a4a; }
+
+.ntc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ntc-card { background: #13111e; border: 1px solid #2a2438; border-radius: 8px; padding: 12px 14px; }
+.ntc-title { font-size: 11px; font-weight: 700; margin-bottom: 6px; }
+.ntc-body { font-size: 10px; color: #7a6a9a; line-height: 1.6; }
+.ntc-no { border-left: 3px solid #c84a4a; }
+.ntc-no .ntc-title { color: #c84a4a; }
+.ntc-yes { border-left: 3px solid #5ac84a; }
+.ntc-yes .ntc-title { color: #5ac84a; }
+.ntc-adapted { border-left: 3px solid #8a4ac8; }
+.ntc-adapted .ntc-title { color: #8a4ac8; }
+
+.insight { background: #0a0818; border: 1px solid #3a2a5a; border-radius: 8px; padding: 12px 14px; margin-top: 12px; font-size: 10px; line-height: 1.7; color: #9a8ab0; }
+.insight strong { color: #c8a035; }
+
+.arch-flow { display: flex; align-items: center; gap: 0; flex-wrap: wrap; margin: 10px 0; }
+.arch-box { background: #1a1828; border: 1px solid #3a2a5a; border-radius: 6px; padding: 8px 12px; font-size: 10px; text-align: center; }
+.arch-box .ab-title { color: #8a6ac8; font-weight: 700; margin-bottom: 3px; }
+.arch-box .ab-sub { color: #5a4a7a; font-size: 9px; }
+.arch-arrow { color: #3a2a5a; font-size: 18px; padding: 0 8px; }
+</style>
+</head>
+<body>
+
+<!-- SECTION 1: GBA SPECS -->
+<div class="section">
+<h2>Can PAX make Zelda GBA quality? Technical breakdown</h2>
+
+<div class="card" style="margin-bottom:10px;">
+  <h3>GBA hardware vs PAX capability</h3>
+  <div class="spec-row"><span class="spec-label">Tile resolution</span><span class="spec-val">8×8 hardware (16×16 logical)</span><span class="badge bg">PAX native ✓</span></div>
+  <div class="spec-row"><span class="spec-label">Colors per sprite</span><span class="spec-val">16 from a 16-color palette</span><span class="badge bg">PAX palette system ✓</span></div>
+  <div class="spec-row"><span class="spec-label">On-screen palettes</span><span class="spec-val">16 palettes × 16 colors = 256 colors</span><span class="badge bg">PAX multi-palette ✓</span></div>
+  <div class="spec-row"><span class="spec-label">Unique tiles (VRAM)</span><span class="spec-val">1024 × 8×8 tiles maximum</span><span class="badge bg">WFC atlas handles ✓</span></div>
+  <div class="spec-row"><span class="spec-label">BG layers</span><span class="spec-val">4 layers (Mode 0)</span><span class="badge bg">PAX tilemap layers ✓</span></div>
+  <div class="spec-row"><span class="spec-label">Minish Cap tile count</span><span class="spec-val">~800–1200 unique tiles total</span><span class="badge bw">volume challenge ~</span></div>
+  <div class="spec-row"><span class="spec-label">Link animation frames</span><span class="spec-val">~300 frames across all anims</span><span class="badge br">human touch needed ✗</span></div>
+</div>
+
+<div class="card" style="margin-bottom:10px;">
+  <h3>Achievability by dimension</h3>
+  <div class="ql-row">
+    <span class="ql-name">Single tile quality</span>
+    <div class="ql-track"><div class="ql-bar" style="width:92%;background:#5ac84a;"></div></div>
+    <span class="ql-txt" style="color:#5ac84a">Zelda-tier ✓</span>
+  </div>
+  <div class="ql-row">
+    <span class="ql-name">Palette coherence</span>
+    <div class="ql-track"><div class="ql-bar" style="width:90%;background:#5ac84a;"></div></div>
+    <span class="ql-txt" style="color:#5ac84a">Enforced by theme ✓</span>
+  </div>
+  <div class="ql-row">
+    <span class="ql-name">Tileset edge matching</span>
+    <div class="ql-track"><div class="ql-bar" style="width:87%;background:#5ac84a;"></div></div>
+    <span class="ql-txt" style="color:#5ac84a">WFC guarantees ✓</span>
+  </div>
+  <div class="ql-row">
+    <span class="ql-name">Cross-world coherence</span>
+    <div class="ql-track"><div class="ql-bar" style="width:72%;background:#c8a035;"></div></div>
+    <span class="ql-txt" style="color:#c8a035">Theme inheritance ~</span>
+  </div>
+  <div class="ql-row">
+    <span class="ql-name">Lighting consistency</span>
+    <div class="ql-track"><div class="ql-bar" style="width:68%;background:#c8a035;"></div></div>
+    <span class="ql-txt" style="color:#c8a035">Needs light rules ~</span>
+  </div>
+  <div class="ql-row">
+    <span class="ql-name">Character animation</span>
+    <div class="ql-track"><div class="ql-bar" style="width:40%;background:#c84a4a;"></div></div>
+    <span class="ql-txt" style="color:#c84a4a">20 poses, rest delta ~</span>
+  </div>
+  <div class="ql-row">
+    <span class="ql-name">Full game art volume</span>
+    <div class="ql-track"><div class="ql-bar" style="width:75%;background:#c8a035;"></div></div>
+    <span class="ql-txt" style="color:#c8a035">Weeks not months ~</span>
+  </div>
+</div>
+
+<h3 style="margin-top:12px;">The four real blockers and fixes</h3>
+
+<div class="blocker be">
+  <div class="blocker-title">1. Palette discipline — easy fix</div>
+  <div class="blocker-body">GBA sprites use exactly 16 colors per palette. The LLM needs a hard constraint, not a suggestion.</div>
+  <div class="blocker-fix">→ Add <code>@constraint max_palette_size = 16</code> to theme. Hard validation error on generation if exceeded. LLM gets corrective feedback immediately.</div>
+</div>
+
+<div class="blocker bm">
+  <div class="blocker-title">2. Consistent light source — medium fix</div>
+  <div class="blocker-body">Minish Cap uses top-left lighting universally. Every tile, every sprite. Without this constraint the generated tileset feels incoherent even if individual tiles look good.</div>
+  <div class="blocker-fix">→ Add <code>@light_source top-left</code> to theme. Inject a 4×4 reference quad into every generation prompt showing shadow direction. Validate: shadow pixels must appear bottom-right of any solid form.</div>
+</div>
+
+<div class="blocker bm">
+  <div class="blocker-title">3. Character animation volume — medium fix</div>
+  <div class="blocker-body">~300 frames sounds impossible. But Minish Cap Link really only has ~20 truly distinct pose silhouettes. Walk-L and Walk-R are the same pose mirrored. Frame 3 of a walk cycle is a delta from frame 1.</div>
+  <div class="blocker-fix">→ Design 20 canonical skeleton poses. Human artist refines those 20. Everything else: PAX delta system generates 8-frame variations automatically from the canonical set. Sprite animation goes from "impossible" to "two weeks of human polish."</div>
+</div>
+
+<div class="blocker bh">
+  <div class="blocker-title">4. World-level visual variation — hardest, needs theme hierarchy</div>
+  <div class="blocker-body">Hyrule Town, Mount Crenel, Castor Wilds, Palace of Winds — each world has a distinct visual language. But Link, UI, and collectibles must look like they belong to the same game across all worlds.</div>
+  <div class="blocker-fix">→ PAX needs <code>@theme forest_world extends game_base { ... }</code> — inherited themes. Base theme locks character palette + UI + fonts. World themes only override environment tiles and terrain stamps. LLM generates world art with world theme active; player always uses base theme.</div>
+</div>
+
+<div class="insight">
+  <strong>Verdict:</strong> A full Zelda: Minish Cap–quality indie game is achievable with PIXL Studio. Environment tilesets — 90% of total visual work — are comfortably in PAX's wheelhouse. Character animation is the honest weak spot; plan 2–3 weeks of human artist time on the 20 canonical poses everything else derives from. Total asset production: from 6–12 months solo artist → 6–8 weeks with PAX + 1 artist doing quality control.
+</div>
+</div>
+
+<!-- SECTION 2: NVIDIA NTC -->
+<div class="section">
+<h2>NVIDIA NTC — what it actually is and what it means for PAX</h2>
+
+<div class="ntc-grid" style="margin-bottom:12px;">
+
+<div class="ntc-card ntc-no">
+  <div class="ntc-title">What NTC IS (and why it doesn't apply directly)</div>
+  <div class="ntc-body">
+    NTC compresses <strong>PBR texture bundles</strong> — albedo, normal, metalness, roughness, AO — for 3D rendering. It trains a tiny neural network per material, stores latents, and decodes individual texels on the GPU in real time. <br><br>
+    Reduction: 272 MB → 11 MB (96% compression) on RTX 4090. Requires tensor cores for real-time decode. Still in beta (v0.5).<br><br>
+    <strong>Why it's wrong for pixel art:</strong><br>
+    • Pixel art uses indexed palettes — NTC approximates continuous colors<br>
+    • 16×16 tiles need zero compression — they're already 512 bytes<br>
+    • NTC requires RTX GPU at runtime — indie games target all hardware<br>
+    • The entire point of pixel art is crisp discrete colors, not neural approximation
+  </div>
+</div>
+
+<div class="ntc-card ntc-yes">
+  <div class="ntc-title">The insight NTC gives us — the style latent concept</div>
+  <div class="ntc-body">
+    NTC's core idea: <em>encode correlated visual information as a compact neural representation, then decode on demand.</em><br><br>
+    For 3D: albedo and normal are correlated (detail in one corresponds to detail in the other) → compress together.<br><br>
+    For pixel art: tiles in a set are correlated — they share lighting direction, outline weight, pixel density, dithering patterns, palette relationships.<br><br>
+    <strong>The adaptation:</strong> encode the STYLE of a tileset as a compact "style token" that conditions every new generation. Not a neural decoder — a statistical fingerprint.
+  </div>
+</div>
+
+</div>
+
+<div class="ntc-card ntc-adapted" style="margin-bottom:12px;">
+  <div class="ntc-title">PAX Style Latent — NTC's idea applied to pixel art generation</div>
+  <div class="ntc-body" style="margin-top:6px;">
+    When an artist creates their first 5–10 tiles, PAX's style encoder analyzes them and extracts a compact style token. This token is stored in the .pax project and injected into every subsequent generation prompt. New tiles are generated consistent with the established style — without the artist having to re-specify every constraint each time.
+  </div>
+</div>
+
+<div class="arch-flow">
+  <div class="arch-box">
+    <div class="ab-title">5–10 seed tiles</div>
+    <div class="ab-sub">Artist draws by hand</div>
+  </div>
+  <div class="arch-arrow">→</div>
+  <div class="arch-box">
+    <div class="ab-title">Style encoder</div>
+    <div class="ab-sub">Extract fingerprint</div>
+  </div>
+  <div class="arch-arrow">→</div>
+  <div class="arch-box">
+    <div class="ab-title">Style token</div>
+    <div class="ab-sub">Stored in .pax project</div>
+  </div>
+  <div class="arch-arrow">→</div>
+  <div class="arch-box">
+    <div class="ab-title">Generation prompts</div>
+    <div class="ab-sub">Token injected automatically</div>
+  </div>
+  <div class="arch-arrow">→</div>
+  <div class="arch-box">
+    <div class="ab-title">All new tiles</div>
+    <div class="ab-sub">Style-consistent output</div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:12px;">
+  <h3>What the style token encodes — 8 measurable properties</h3>
+  <div class="spec-row"><span class="spec-label">Light direction</span><span class="spec-val">Dominant highlight vector (top-left, top, etc.)</span></div>
+  <div class="spec-row"><span class="spec-label">Palette distribution</span><span class="spec-val">Color usage frequency, contrast ratios between dark/mid/light</span></div>
+  <div class="spec-row"><span class="spec-label">Outline style</span><span class="spec-val">Self-outline weight, selective, drop-shadow, or none</span></div>
+  <div class="spec-row"><span class="spec-label">Dithering pattern</span><span class="spec-val">None / Bayer / checkerboard — detected from pixel runs</span></div>
+  <div class="spec-row"><span class="spec-label">Pixel density</span><span class="spec-val">Average detail density per 4×4 region (sparse vs. dense)</span></div>
+  <div class="spec-row"><span class="spec-label">Edge character</span><span class="spec-val">Hard vs. soft transitions, anti-aliasing usage frequency</span></div>
+  <div class="spec-row"><span class="spec-label">Hue bias</span><span class="spec-val">Warm or cool, saturation envelope</span></div>
+  <div class="spec-row"><span class="spec-label">Symmetry tendency</span><span class="spec-val">What % of tiles use horizontal/vertical symmetry</span></div>
+</div>
+
+<div class="insight" style="margin-top:12px;">
+  <strong>What this enables that nobody has yet:</strong> An indie developer can draw 8 tiles by hand — imperfect, rough, but with their own style — and PAX extracts the style fingerprint from those 8 tiles. Every subsequent generated tile comes out looking like it belongs with those 8. The system learns the human's style from minimal examples and enforces it on AI-generated output. This is the NTC insight applied to authorship rather than compression. It's a completely novel feature no pixel art tool has.
+</div>
+</div>
+
+</body>
+</html>

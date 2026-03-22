@@ -1,0 +1,16 @@
+[package]
+name = "pixl-wfc"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "PIXL Wave Function Collapse engine with semantic constraints"
+
+[dependencies]
+pixl-core = { workspace = true }
+rand = { workspace = true }
+fixedbitset = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = "1"

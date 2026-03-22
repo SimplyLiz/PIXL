@@ -1,0 +1,19 @@
+[package]
+name = "pixl-mcp"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "PIXL MCP server — AI integration layer"
+
+[dependencies]
+pixl-core = { workspace = true }
+pixl-render = { workspace = true }
+pixl-wfc = { workspace = true }
+rmcp = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = "1"

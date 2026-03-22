@@ -1,0 +1,20 @@
+[package]
+name = "pixl"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "PIXL CLI — render, validate, and generate pixel art"
+
+[[bin]]
+name = "pixl"
+path = "src/main.rs"
+
+[dependencies]
+pixl-core = { workspace = true }
+pixl-render = { workspace = true }
+pixl-wfc = { workspace = true }
+pixl-mcp = { workspace = true }
+pixl-export = { workspace = true }
+clap = { workspace = true }
+tokio = { workspace = true }

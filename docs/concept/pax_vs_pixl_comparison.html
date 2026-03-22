@@ -1,0 +1,146 @@
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Courier New', monospace; font-size: 11px; padding: 16px; }
+
+h2 { font-size: 13px; font-weight: 700; color: var(--color-text-primary); margin-bottom: 12px; letter-spacing: 0.05em; text-transform: uppercase; }
+
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+
+.card {
+  background: var(--color-background-secondary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-lg);
+  padding: 12px 14px;
+}
+.card-title {
+  font-size: 12px; font-weight: 500; margin-bottom: 8px;
+  display: flex; align-items: center; gap: 8px;
+}
+.badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 400; }
+.badge-pax { background: #dbeafe; color: #1e40af; }
+.badge-pixl { background: #fef3c7; color: #92400e; }
+.badge-win { background: #d1fae5; color: #065f46; }
+.badge-miss { background: #fee2e2; color: #991b1b; }
+
+.row { display: flex; align-items: baseline; gap: 6px; margin-bottom: 6px; font-size: 10px; line-height: 1.5; }
+.row-label { color: var(--color-text-secondary); min-width: 130px; }
+.win { color: #059669; }
+.lose { color: #dc2626; }
+.mid { color: var(--color-text-secondary); }
+
+.section-divider { 
+  border-top: 0.5px solid var(--color-border-tertiary); 
+  margin: 14px 0 10px; 
+  display: flex; align-items: center; gap: 8px;
+}
+.section-divider span { font-size: 10px; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.08em; }
+
+.new-card {
+  background: var(--color-background-primary);
+  border: 1px solid var(--color-border-secondary);
+  border-left: 3px solid #8b5cf6;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+.new-card-title { font-size: 11px; font-weight: 500; color: #7c3aed; margin-bottom: 4px; }
+.new-card-desc { font-size: 10px; color: var(--color-text-secondary); line-height: 1.6; }
+
+.score-row { display: flex; gap: 4px; align-items: center; margin-top: 6px; }
+.score-bar { height: 4px; border-radius: 2px; }
+.score-label { font-size: 9px; color: var(--color-text-secondary); min-width: 80px; }
+
+.verdict {
+  background: var(--color-background-secondary);
+  border: 0.5px solid var(--color-border-secondary);
+  border-radius: var(--border-radius-lg);
+  padding: 12px 14px;
+  margin-top: 14px;
+}
+.verdict-title { font-size: 12px; font-weight: 500; margin-bottom: 8px; color: var(--color-text-primary); }
+.verdict-body { font-size: 10px; line-height: 1.7; color: var(--color-text-secondary); }
+.verdict-body strong { color: var(--color-text-primary); font-weight: 500; }
+</style>
+
+<h2>PAX vs PIXL — Detailed Comparison</h2>
+
+<div class="grid">
+  <div class="card">
+    <div class="card-title"><span class="badge badge-pax">PAX</span> What PAX does better</div>
+    <div class="row"><span class="win">✓</span><span class="row-label">Research grounding</span><span class="win">Cites NeurIPS 2025, Martorell 2025, exact thresholds</span></div>
+    <div class="row"><span class="win">✓</span><span class="row-label">Three-tier encoding</span><span class="win">Grid → RLE → Compose mapped to LLM accuracy data</span></div>
+    <div class="row"><span class="win">✓</span><span class="row-label">TOML format</span><span class="win">Multi-line strings, battle-tested Go parser, human-editable</span></div>
+    <div class="row"><span class="win">✓</span><span class="row-label">Edge class system</span><span class="win">Fuzzy matching tolerates LLM imprecision</span></div>
+    <div class="row"><span class="win">✓</span><span class="row-label">Delta frames</span><span class="win">Animation diffs at coordinate level, not pixel grid</span></div>
+    <div class="row"><span class="win">✓</span><span class="row-label">Go implementation</span><span class="win">Concrete types, file structure, dependency list</span></div>
+    <div class="row"><span class="win">✓</span><span class="row-label">47-tile autotile</span><span class="win">Bitmask computation with corner cleanup specified</span></div>
+    <div class="row"><span class="win">✓</span><span class="row-label">WFC with backtracking</span><span class="win">Full algorithm with backtrack limit specified</span></div>
+  </div>
+  <div class="card">
+    <div class="card-title"><span class="badge badge-pixl">PIXL</span> What PIXL does better</div>
+    <div class="row"><span class="win">✓</span><span class="row-label">Symmetry declarations</span><span class="win">Write 1 quadrant → mirror rest. Halves LLM spatial load</span></div>
+    <div class="row"><span class="win">✓</span><span class="row-label">@theme / CSS system</span><span class="win">Semantic color roles, inheritance, validation rules</span></div>
+    <div class="row"><span class="win">✓</span><span class="row-label">BPE framing</span><span class="win">Micro-tiles = visual BPE tokens. Research-connected insight</span></div>
+    <div class="row"><span class="win">✓</span><span class="row-label">PIXL Studio editor</span><span class="win">Integrated editor spec, not just a CLI tool</span></div>
+    <div class="row"><span class="win">✓</span><span class="row-label">Knowledge base chat</span><span class="win">Domain-scoped AI expert with pixel art knowledge</span></div>
+    <div class="row"><span class="win">✓</span><span class="row-label">RLE in-row syntax</span><span class="win">8# 4+ inline — more natural than line-by-line</span></div>
+    <div class="row"><span class="win">✓</span><span class="row-label">Semantic color roles</span><span class="win">--bg, --fg, --accent — LLM reasons about roles not chars</span></div>
+    <div class="row"><span class="win">✓</span><span class="row-label">@wfc auto rule derive</span><span class="win">Rules derived from tile names (NS, EW, NSEW, etc.)</span></div>
+  </div>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <div class="card-title"><span class="badge badge-miss">PAX gaps</span> What PAX is missing</div>
+    <div class="row"><span class="lose">✗</span><span class="row-label">Symmetry declarations</span><span class="mid">LLM must write every pixel of large tiles</span></div>
+    <div class="row"><span class="lose">✗</span><span class="row-label">Vision feedback loop</span><span class="mid">No plan for LLM to see its own rendered output</span></div>
+    <div class="row"><span class="lose">✗</span><span class="row-label">Theme inheritance</span><span class="mid">No CSS-like style system — palette only</span></div>
+    <div class="row"><span class="lose">✗</span><span class="row-label">Semantic color roles</span><span class="mid">LLM must reason about symbol chars, not roles</span></div>
+    <div class="row"><span class="lose">✗</span><span class="row-label">Integrated editor</span><span class="mid">Pure CLI — no GUI for the artist workflow</span></div>
+    <div class="row"><span class="lose">✗</span><span class="row-label">Tile DNA / tags system</span><span class="mid">Tags defined but no semantic compatibility</span></div>
+  </div>
+  <div class="card">
+    <div class="card-title"><span class="badge badge-miss">PIXL gaps</span> What PIXL is missing</div>
+    <div class="row"><span class="lose">✗</span><span class="row-label">Research backing</span><span class="mid">Grid size thresholds stated but not cited</span></div>
+    <div class="row"><span class="lose">✗</span><span class="row-label">TOML / practical format</span><span class="mid">Custom syntax harder to parse and edit</span></div>
+    <div class="row"><span class="lose">✗</span><span class="row-label">Exact WFC algorithm</span><span class="mid">WFC mentioned but not specified</span></div>
+    <div class="row"><span class="lose">✗</span><span class="row-label">Autotile bitmask</span><span class="mid">47-tile system not detailed</span></div>
+    <div class="row"><span class="lose">✗</span><span class="row-label">Delta frame encoding</span><span class="mid">@diff exists but coordinate-level not specified</span></div>
+    <div class="row"><span class="lose">✗</span><span class="lose">Backtracking WFC</span><span class="mid">No contradiction handling</span></div>
+  </div>
+</div>
+
+<div class="section-divider"><span>What neither spec has — the real next level</span></div>
+
+<div class="new-card">
+  <div class="new-card-title">1. Vision feedback loop — the biggest missing insight</div>
+  <div class="new-card-desc">Modern Claude has vision. After rendering a tile to PNG, the MCP tool can return it as base64 and the LLM can <strong>actually see what it drew</strong> and self-correct. Neither spec exploits this. This changes everything: the LLM is no longer writing blind. Error correction goes from "parse validation errors" to "I can see the edge doesn't look right." This is a completely different quality ceiling.</div>
+</div>
+
+<div class="new-card">
+  <div class="new-card-title">2. Semantic tile DNA — beyond edge classes</div>
+  <div class="new-card-desc">Edge classes only check geometric compatibility. Semantic tags ("wall", "floor", "transition") are defined in PAX but unused by WFC. The next level: WFC uses <strong>semantic rules</strong> — "a wall tile can never be directly above a water tile", "moss only appears adjacent to floor tiles". This produces game-sensible maps, not just geometrically valid ones.</div>
+</div>
+
+<div class="new-card">
+  <div class="new-card-title">3. Progressive refinement passes</div>
+  <div class="new-card-desc">Instead of one-shot generation, the workflow is: (1) rough structural pass — LLM places semantic blocks, (2) detail pass — AI-assisted fill within blocks using stamps, (3) variation pass — introduce cracks, moss, variation without breaking edges. Each pass is smaller and more reliable than one monolithic generation attempt.</div>
+</div>
+
+<div class="new-card">
+  <div class="new-card-title">4. Stamp corpus as community asset</div>
+  <div class="new-card-desc">A curated, versioned library of named stamps (corner_stone, crack_diagonal, moss_patch, torch_bracket…) shared across projects. LLMs reference the corpus by name. Over time, the corpus grows via contribution — it becomes a <strong>visual vocabulary</strong> that gets richer with every project, making generation more reliable on every new tileset.</div>
+</div>
+
+<div class="new-card">
+  <div class="new-card-title">5. Symmetry-first generation for large sprites</div>
+  <div class="new-card-desc">PIXL mentions symmetry declarations but doesn't go far enough. The key insight: a 32×32 sprite with 4-way symmetry only requires an 8×8 quadrant — well within LLM reliability. The tool should <strong>automatically detect symmetry opportunities</strong> from the tile type (a gem, a coin, a circular motif) and request only the minimal unique region from the LLM.</div>
+</div>
+
+<div class="verdict">
+  <div class="verdict-title">Verdict</div>
+  <div class="verdict-body">
+    <strong>PAX wins on format and algorithms. PIXL wins on UX and vision.</strong> Neither is complete alone. PAX's TOML + three-tier encoding + fuzzy edge classes + concrete WFC spec is the right technical foundation. PIXL's symmetry system + @theme + BPE framing + PIXL Studio integration is the right product vision. The merged spec — call it <strong>PAX 2.0</strong> — takes PAX's bones and grafts PIXL's soul onto them. Then the vision feedback loop, semantic tile DNA, and progressive refinement are what make it genuinely groundbreaking.
+  </div>
+</div>

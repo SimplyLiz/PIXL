@@ -1,0 +1,16 @@
+[package]
+name = "pixl-export"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "PIXL game engine export — Tiled, Godot, Unity, GBStudio"
+
+[dependencies]
+pixl-core = { workspace = true }
+pixl-render = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = "1"

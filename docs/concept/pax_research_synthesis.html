@@ -1,0 +1,329 @@
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Courier New', monospace; font-size: 11px; padding: 16px; }
+
+h2 { font-size: 12px; font-weight: 500; color: var(--color-text-secondary); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
+
+.section { margin-bottom: 20px; }
+
+/* Research cards */
+.research-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 20px; }
+.rcard {
+  background: var(--color-background-secondary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-lg);
+  padding: 10px 12px;
+}
+.rcard-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.rcard-title { font-size: 11px; font-weight: 500; color: var(--color-text-primary); }
+.rcard-badge { font-size: 9px; padding: 1px 6px; border-radius: 8px; }
+.badge-new { background: #d1fae5; color: #065f46; }
+.badge-validates { background: #dbeafe; color: #1e40af; }
+.badge-gap { background: #fee2e2; color: #991b1b; }
+.badge-asset { background: #fef3c7; color: #92400e; }
+.rcard-body { font-size: 10px; line-height: 1.6; color: var(--color-text-secondary); }
+.rcard-source { font-size: 9px; color: var(--color-text-secondary); margin-top: 5px; opacity: 0.6; font-style: italic; }
+.rcard-insight { font-size: 10px; margin-top: 6px; padding: 4px 8px; background: var(--color-background-primary); border-left: 2px solid #8b5cf6; border-radius: 0 4px 4px 0; color: var(--color-text-primary); line-height: 1.5; }
+
+/* Engine compatibility matrix */
+.matrix { width: 100%; border-collapse: collapse; font-size: 10px; margin-bottom: 20px; }
+.matrix th { 
+  text-align: left; padding: 6px 10px; 
+  background: var(--color-background-secondary);
+  border: 0.5px solid var(--color-border-tertiary);
+  font-weight: 500; font-size: 10px; color: var(--color-text-secondary);
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.matrix td { 
+  padding: 6px 10px; 
+  border: 0.5px solid var(--color-border-tertiary);
+  color: var(--color-text-secondary);
+  vertical-align: top;
+}
+.matrix tr:nth-child(even) td { background: var(--color-background-secondary); }
+.engine { font-weight: 500; color: var(--color-text-primary); }
+.yes { color: #059669; }
+.partial { color: #d97706; }
+.plugin { color: #7c3aed; }
+.no { color: #dc2626; }
+.format-pill {
+  display: inline-block;
+  font-size: 9px; padding: 1px 6px; border-radius: 8px;
+  background: var(--color-background-secondary);
+  border: 0.5px solid var(--color-border-secondary);
+  margin: 1px 2px;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+}
+
+/* Self-refine loop diagram */
+.loop-diagram {
+  background: var(--color-background-secondary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-lg);
+  padding: 14px;
+  margin-bottom: 20px;
+}
+.loop-steps { display: flex; align-items: center; gap: 0; flex-wrap: nowrap; overflow-x: auto; }
+.loop-step {
+  flex-shrink: 0;
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-secondary);
+  border-radius: 6px;
+  padding: 8px 10px;
+  min-width: 100px;
+  text-align: center;
+}
+.loop-step .ls-num { font-size: 9px; color: var(--color-text-secondary); margin-bottom: 3px; }
+.loop-step .ls-name { font-size: 10px; font-weight: 500; color: var(--color-text-primary); margin-bottom: 2px; }
+.loop-step .ls-desc { font-size: 9px; color: var(--color-text-secondary); line-height: 1.4; }
+.loop-arrow { color: #8b5cf6; font-size: 16px; padding: 0 6px; flex-shrink: 0; }
+.loop-exit { color: #059669; font-size: 10px; padding: 0 8px; flex-shrink: 0; }
+.loop-note { font-size: 10px; color: var(--color-text-secondary); margin-top: 8px; padding-top: 8px; border-top: 0.5px solid var(--color-border-tertiary); line-height: 1.5; }
+.loop-note strong { color: #7c3aed; }
+
+/* Improvements grid */
+.improve-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.imp {
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-left: 3px solid;
+  border-radius: 0 6px 6px 0;
+  padding: 8px 10px;
+}
+.imp-title { font-size: 11px; font-weight: 500; margin-bottom: 4px; }
+.imp-body { font-size: 10px; color: var(--color-text-secondary); line-height: 1.5; }
+.imp-source { font-size: 9px; margin-top: 4px; opacity: 0.6; font-style: italic; color: var(--color-text-secondary); }
+.c1 { border-left-color: #7c3aed; }
+.c1 .imp-title { color: #7c3aed; }
+.c2 { border-left-color: #059669; }
+.c2 .imp-title { color: #059669; }
+.c3 { border-left-color: #d97706; }
+.c3 .imp-title { color: #d97706; }
+.c4 { border-left-color: #dc2626; }
+.c4 .imp-title { color: #dc2626; }
+.c5 { border-left-color: #0284c7; }
+.c5 .imp-title { color: #0284c7; }
+.c6 { border-left-color: #db2777; }
+.c6 .imp-title { color: #db2777; }
+</style>
+
+<div class="section">
+<h2>Key research findings — what changes in our design</h2>
+<div class="research-grid">
+
+<div class="rcard">
+  <div class="rcard-head"><span class="rcard-title">SELF-REFINE</span><span class="rcard-badge badge-validates">validates our loop</span></div>
+  <div class="rcard-body">Formal proof that LLMs iteratively self-correct without retraining — generate → evaluate → refine. Works on code, math, creative tasks. Stronger models (GPT-4 class) benefit more. This is the academic foundation for our visual correction loop.</div>
+  <div class="rcard-insight">→ The vision loop isn't just a nice idea. It's proven. We should call it explicitly in our docs and implement it as a first-class workflow, not a footnote.</div>
+  <div class="rcard-source">Madaan et al., NeurIPS 2023 · confirmed by R3V (NAACL 2025)</div>
+</div>
+
+<div class="rcard">
+  <div class="rcard-head"><span class="rcard-title">GameTileNet</span><span class="rcard-badge badge-asset">direct asset</span></div>
+  <div class="rcard-body">2,142 semantically-labeled pixel art tiles from OpenGameArt.org (CC licensed), with affordance types, connectivity, object names. 361 normalized tags. Achieves 92.2% classification accuracy with ResNet18. This is exactly the stamp corpus foundation we need.</div>
+  <div class="rcard-insight">→ Don't build the semantic tag vocabulary from scratch. License-compatible tiles from GameTileNet seed the stamp corpus. PAX ships with a real dataset on day one.</div>
+  <div class="rcard-source">Chen & Jhala, AAAI AIIDE 2025 · arxiv 2507.02941</div>
+</div>
+
+<div class="rcard">
+  <div class="rcard-head"><span class="rcard-title">Narrative-to-Scene pipeline</span><span class="rcard-badge badge-new">new direction</span></div>
+  <div class="rcard-body">LLM extracts Object-Relation-Object triples from narrative → semantic embedding retrieval from GameTileNet → Cellular Automata terrain → placed objects. Works across 10 diverse stories. Key gap identified: no spatial conflict resolution.</div>
+  <div class="rcard-insight">→ PAX can absorb this entire pipeline. "I want a forest village with a tavern near water" → LLM extracts predicates → PAX's semantic WFC places tiles. Natural language to playable map. Nobody has closed this loop properly yet.</div>
+  <div class="rcard-source">arxiv 2509.04481, Aug 2025</div>
+</div>
+
+<div class="rcard">
+  <div class="rcard-head"><span class="rcard-title">Aseprite MCP experiment</span><span class="rcard-badge badge-gap">confirms gap we fill</span></div>
+  <div class="rcard-body">Claude Opus 4 can produce creative pixel art via MCP but per-pixel tool calls are the wrong abstraction. "Drawing pixel art might not be the best use-case for a tool-calling LLM." The researcher's suggested better use-cases: palette recoloring, spritesheet export, dimension correction — all structural tasks.</div>
+  <div class="rcard-insight">→ PAX's tile-level abstraction (not pixel-level) is exactly the right granularity. We're solving the problem the researcher identified as unsolved.</div>
+  <div class="rcard-source">ljvmiranda921.github.io, Jul 2025</div>
+</div>
+
+<div class="rcard">
+  <div class="rcard-head"><span class="rcard-title">Tiled TMX/JSON — universal interchange</span><span class="rcard-badge badge-validates">format decision</span></div>
+  <div class="rcard-body">Tiled's TMX (XML) and JSON formats are natively supported by Godot 4 (YATI plugin), Unity (SuperTiled2Unity), and 40+ other engines. TexturePacker JSON Hash is the de-facto sprite atlas standard for 48+ engines including Unity, UE, Godot, libGDX, Phaser, Cocos2d. Both formats are trivial to generate.</div>
+  <div class="rcard-insight">→ PAX doesn't need custom Unity/Godot exporters. Export Tiled JSON + TexturePacker JSON Hash = works in every engine. Two formats, universal reach.</div>
+  <div class="rcard-source">doc.mapeditor.org · codeandweb.com · github YATI/SuperTiled2Unity</div>
+</div>
+
+<div class="rcard">
+  <div class="rcard-head"><span class="rcard-title">OpenGameArt CC0 on HuggingFace</span><span class="rcard-badge badge-asset">free training data</span></div>
+  <div class="rcard-body">Complete CC0 dataset of OpenGameArt.org assets with metadata as JSONL on HuggingFace (nyuuzyou/OpenGameArt-CC0). Includes 2D art, textures, tilesets. No attribution required (CC0 = public domain). Combined with GameTileNet annotations, this is the stamp corpus.</div>
+  <div class="rcard-insight">→ Pre-ship PAX with a curated CC0 stamp library — real art, not placeholder. Makes day-one generation meaningfully better and gives the community a starting point.</div>
+  <div class="rcard-source">huggingface.co/nyuuzyou/OpenGameArt-CC0</div>
+</div>
+
+</div>
+</div>
+
+<div class="section">
+<h2>The SELF-REFINE visual correction loop — how it works in PAX</h2>
+<div class="loop-diagram">
+  <div class="loop-steps">
+    <div class="loop-step">
+      <div class="ls-num">① GENERATE</div>
+      <div class="ls-name">LLM writes PAX</div>
+      <div class="ls-desc">Tile source from prompt + theme + palette constraints</div>
+    </div>
+    <div class="loop-arrow">→</div>
+    <div class="loop-step">
+      <div class="ls-num">② RENDER</div>
+      <div class="ls-name">Go renders PNG</div>
+      <div class="ls-desc">16× zoom, returned as base64 in MCP response</div>
+    </div>
+    <div class="loop-arrow">→</div>
+    <div class="loop-step">
+      <div class="ls-num">③ VALIDATE</div>
+      <div class="ls-name">Tool checks rules</div>
+      <div class="ls-desc">Edges, palette, size, WFC compat — structured errors</div>
+    </div>
+    <div class="loop-arrow">→</div>
+    <div class="loop-step">
+      <div class="ls-num">④ SEE + CRITIQUE</div>
+      <div class="ls-name">LLM examines</div>
+      <div class="ls-desc">Vision: "edge row 8 has a gap" + validation errors</div>
+    </div>
+    <div class="loop-arrow">→</div>
+    <div class="loop-step">
+      <div class="ls-num">⑤ REFINE</div>
+      <div class="ls-name">Targeted fix</div>
+      <div class="ls-desc">Delta edit — only broken rows/regions rewritten</div>
+    </div>
+    <div class="loop-exit">✓ accept</div>
+  </div>
+  <div class="loop-note">
+    <strong>Why this works better than one-shot generation:</strong> SELF-REFINE literature shows 10–20% quality improvement per iteration on structured output tasks. For pixel art specifically, the LLM can literally see the rendered result — not just textual error messages — and reason about what looks wrong visually. This is the difference between "row 8 col 3 is wrong" and "I can see the left edge doesn't align." Max 3 refinement passes before escalating to user. Passes 2+ only fix the delta, not the full tile.
+  </div>
+</div>
+</div>
+
+<div class="section">
+<h2>Game engine compatibility — the full picture</h2>
+<table class="matrix">
+<tr>
+  <th>Engine</th>
+  <th>Sprite Atlas</th>
+  <th>Tilemap</th>
+  <th>Autotile</th>
+  <th>PAX export format</th>
+</tr>
+<tr>
+  <td class="engine">Unity 2D</td>
+  <td><span class="yes">✓ native</span></td>
+  <td><span class="plugin">✓ SuperTiled2Unity</span></td>
+  <td><span class="partial">manual rule setup</span></td>
+  <td><span class="format-pill">TexturePacker JSON</span><span class="format-pill">TMX/JSON</span><span class="format-pill">.spriteatlas</span></td>
+</tr>
+<tr>
+  <td class="engine">Godot 4</td>
+  <td><span class="yes">✓ native</span></td>
+  <td><span class="plugin">✓ YATI plugin</span></td>
+  <td><span class="yes">✓ native terrain</span></td>
+  <td><span class="format-pill">TMJ (JSON)</span><span class="format-pill">.tres TileSet</span><span class="format-pill">TexturePacker</span></td>
+</tr>
+<tr>
+  <td class="engine">Phaser 3</td>
+  <td><span class="yes">✓ native</span></td>
+  <td><span class="yes">✓ native Tiled</span></td>
+  <td><span class="partial">via Tiled</span></td>
+  <td><span class="format-pill">TexturePacker JSON</span><span class="format-pill">TMX/JSON</span></td>
+</tr>
+<tr>
+  <td class="engine">libGDX</td>
+  <td><span class="yes">✓ TextureAtlas</span></td>
+  <td><span class="yes">✓ native Tiled</span></td>
+  <td><span class="partial">via Tiled</span></td>
+  <td><span class="format-pill">TexturePacker JSON</span><span class="format-pill">TMX</span></td>
+</tr>
+<tr>
+  <td class="engine">Bevy</td>
+  <td><span class="yes">✓ native</span></td>
+  <td><span class="plugin">✓ bevy_ecs_tilemap</span></td>
+  <td><span class="partial">community</span></td>
+  <td><span class="format-pill">TexturePacker JSON</span><span class="format-pill">TMX via plugin</span></td>
+</tr>
+<tr>
+  <td class="engine">GameMaker</td>
+  <td><span class="partial">sprite import</span></td>
+  <td><span class="yes">✓ Tiled plugin</span></td>
+  <td><span class="yes">✓ native</span></td>
+  <td><span class="format-pill">PNG + GMX</span><span class="format-pill">Tiled GMS2 plugin</span></td>
+</tr>
+<tr>
+  <td class="engine">Unreal Engine</td>
+  <td><span class="plugin">Paper2D via TP</span></td>
+  <td><span class="plugin">Paper2D tiles</span></td>
+  <td><span class="no">no native</span></td>
+  <td><span class="format-pill">TexturePacker .paper2dsprites</span></td>
+</tr>
+<tr>
+  <td class="engine">LÖVE (Lua)</td>
+  <td><span class="yes">✓ via STI</span></td>
+  <td><span class="yes">✓ STI library</span></td>
+  <td><span class="partial">via Tiled</span></td>
+  <td><span class="format-pill">TMX/JSON</span></td>
+</tr>
+<tr>
+  <td class="engine">GBStudio</td>
+  <td><span class="yes">✓ native</span></td>
+  <td><span class="yes">✓ native</span></td>
+  <td><span class="yes">✓ native</span></td>
+  <td><span class="format-pill">PNG grid (specific layout)</span></td>
+</tr>
+<tr>
+  <td class="engine">Defold</td>
+  <td><span class="yes">✓ atlas native</span></td>
+  <td><span class="plugin">✓ defold-tiledmap</span></td>
+  <td><span class="partial">via Tiled</span></td>
+  <td><span class="format-pill">TexturePacker JSON</span><span class="format-pill">TMX</span></td>
+</tr>
+</table>
+<div style="font-size:10px; color:var(--color-text-secondary); margin-top:-12px; margin-bottom:16px; line-height:1.6;">
+  <strong style="color:var(--color-text-primary)">Bottom line:</strong> TexturePacker JSON Hash + Tiled TMJ = universal reach. Two Go functions cover 95% of the game engine ecosystem. GBStudio (Game Boy style) needs a specific PNG grid layout — worth implementing as PAX ships a retro theme.
+</div>
+</div>
+
+<div class="section">
+<h2>Six concrete improvements from the research</h2>
+<div class="improve-grid">
+
+<div class="imp c1">
+  <div class="imp-title">1. Absorb GameTileNet as the stamp corpus seed</div>
+  <div class="imp-body">2,142 CC-licensed, semantically-annotated tiles ready to ship. Convert to PAX format at tool build time. Gives every PAX install a real stamp library — not placeholder art — on day one. The affordance labels map directly onto semantic tile DNA tags.</div>
+  <div class="imp-source">GameTileNet AAAI 2025 · OpenGameArt CC0 HuggingFace dataset</div>
+</div>
+
+<div class="imp c2">
+  <div class="imp-title">2. Narrative-to-map: "a rainy fishing village" → tilemap</div>
+  <div class="imp-body">PAX + LLM can implement the full Narrative-to-Scene pipeline. LLM extracts spatial predicates from natural language, PAX's semantic WFC resolves them into a valid tilemap. This is the killer demo: type a description, get a playable map. The gap paper identified (spatial conflict resolution) is exactly what semantic WFC rules fix.</div>
+  <div class="imp-source">arxiv 2509.04481 Narrative-to-Scene pipeline</div>
+</div>
+
+<div class="imp c3">
+  <div class="imp-title">3. SELF-REFINE: formalize the loop, cap at 3 iterations</div>
+  <div class="imp-body">The academic literature shows 3 refinement passes capture most improvement. Beyond 3, gains are marginal vs. cost. Implement as: generate → render+validate → LLM critiques via vision → delta refine → re-render → LLM confirms. Stop at accept or 3 passes. Return best result with iteration count in metadata.</div>
+  <div class="imp-source">Madaan et al. SELF-REFINE NeurIPS 2023</div>
+</div>
+
+<div class="imp c4">
+  <div class="imp-title">4. GBStudio export: the retro niche nobody serves</div>
+  <div class="imp-body">GBStudio is huge in the indie scene for Game Boy-style games. It needs a very specific 160×144 background tileset format in a fixed grid PNG. PAX can generate this exactly — and nobody else automates it. A `pax export --format gbstudio` command would make PIXL Studio the only AI tool that outputs GBStudio-ready assets.</div>
+  <div class="imp-source">spritefusion.com · GBStudio documentation</div>
+</div>
+
+<div class="imp c5">
+  <div class="imp-title">5. TexturePacker JSON Hash as the primary atlas format</div>
+  <div class="imp-body">Every engine that doesn't natively read Tiled maps reads TexturePacker JSON. It's the lowest common denominator for sprite atlases. The format is trivial to generate: frames dict, frame rect, trimmed bool, pivot. Make this the default `pax atlas` output, with Tiled JSON as secondary. Both in the same command.</div>
+  <div class="imp-source">TexturePacker docs · 48+ engine support confirmed</div>
+</div>
+
+<div class="imp c6">
+  <div class="imp-title">6. Affordance-aware semantic WFC — smarter than edge-only</div>
+  <div class="imp-body">GameTileNet's affordance taxonomy (walkable, obstacle, collectible, hazard, decoration, character) maps perfectly onto semantic WFC rules. A "hazard" tile cannot be placed adjacent to "spawn" without a "warning" transition. This produces game-sensible maps, not just geometrically valid ones. The WFC propagator gets a 10-line semantic predicate filter.</div>
+  <div class="imp-source">GameTileNet affordance labels · VGDL taxonomy</div>
+</div>
+
+</div>
+</div>

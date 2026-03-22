@@ -1,0 +1,16 @@
+[package]
+name = "pixl-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "PIXL core format types, parser, and validator"
+
+[dependencies]
+serde = { workspace = true }
+toml = { workspace = true }
+fnv = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = "1"

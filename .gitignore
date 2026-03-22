@@ -1,0 +1,31 @@
+# Rust
+target/
+**/*.rs.bk
+Cargo.lock
+
+# Flutter
+studio/.dart_tool/
+studio/.packages
+studio/.pub-cache/
+studio/.pub/
+studio/build/
+studio/.flutter-plugins
+studio/.flutter-plugins-dependencies
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Build artifacts
+*.png
+*.gif
+!docs/**/*.png
+!examples/**/*.png
+
+# Environment
+.env
+.env.local

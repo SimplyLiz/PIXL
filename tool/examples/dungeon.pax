@@ -1,0 +1,300 @@
+[pax]
+version = "2.0"
+name    = "dungeon_tileset"
+author  = "claude"
+created = "2026-03-22T12:00:00Z"
+theme   = "dark_fantasy"
+
+# --- Theme ---
+
+[theme.dark_fantasy]
+palette          = "dungeon"
+scale            = 2
+canvas           = 16
+max_palette_size = 16
+light_source     = "top-left"
+
+[theme.dark_fantasy.roles]
+void   = "."
+bg     = "#"
+fg     = "+"
+accent = "o"
+danger = "r"
+shadow = "s"
+life   = "g"
+hi     = "h"
+bone   = "w"
+
+[theme.dark_fantasy.constraints]
+fg_brighter_than_bg         = true
+shadow_darker_than_bg       = true
+accent_hue_distinct_from_bg = true
+max_colors_per_tile         = 16
+
+# --- Palette ---
+
+[palette.dungeon]
+"." = "#00000000"
+"#" = "#2a1f3d"
+"+" = "#4a3a6d"
+"s" = "#1a0f2e"
+"~" = "#1a3a5c"
+"g" = "#2d5a27"
+"o" = "#c8a035"
+"r" = "#8b1a1a"
+"h" = "#6a5a9d"
+"w" = "#e8e0d4"
+
+# --- Palette Swaps ---
+
+[palette_swap.frozen]
+base    = "dungeon"
+partial = true
+map     = { "#" = "#2a3f6d", "+" = "#4a6a9d", "~" = "#e8f0ff" }
+
+# --- Color Cycles ---
+
+[cycle.water_shimmer]
+palette   = "dungeon"
+symbols   = ["~", "h"]
+direction = "ping-pong"
+fps       = 6
+
+# --- Stamps ---
+
+[stamp.brick_nw_4x4]
+palette = "dungeon"
+size    = "4x4"
+grid    = '''
+##++
+#+++
+++##
++##s
+'''
+
+[stamp.brick_ne_4x4]
+palette = "dungeon"
+size    = "4x4"
+grid    = '''
+++##
++++#
+##++
+s##+
+'''
+
+[stamp.stone_flat_4x4]
+palette = "dungeon"
+size    = "4x4"
+grid    = '''
+++++
+++++
+++++
+++++
+'''
+
+[stamp.shadow_base_4x4]
+palette = "dungeon"
+size    = "4x4"
+grid    = '''
+ssss
+s##s
+s##s
+ssss
+'''
+
+# --- Tiles ---
+# IMPORTANT: grid/rle/layout MUST appear BEFORE [tile.X.semantic] subtable.
+# TOML subtable headers capture all subsequent keys until the next header.
+
+[tile.wall_solid]
+palette    = "dungeon"
+size       = "16x16"
+edge_class = { n = "solid", e = "solid", s = "solid", w = "solid" }
+tags       = ["wall", "interior"]
+weight     = 1.0
+semantic   = { affordance = "obstacle", collision = "full", tags = { light_blocks = true, biome = "dungeon" } }
+grid = '''
+################
+##++##++##++####
+#+++++++++++++##
+##++########++##
+################
+##++++++++####++
+#++++##+++++++++
+##++##++##++####
+################
+##++##++########
+#+++++++++++++##
+##++##++##++####
+################
+##++##++##++####
+#+++++++++++++##
+################
+'''
+
+[tile.floor_stone]
+palette    = "dungeon"
+size       = "16x16"
+edge_class = { n = "floor", e = "floor", s = "floor", w = "floor" }
+tags       = ["floor", "interior"]
+weight     = 3.0
+semantic   = { affordance = "walkable", collision = "none", tags = { biome = "dungeon" } }
+grid = '''
+++++++++++++++++
++++++++++++s++++
+++++s+++++++++++
+++++++++++++++++
+++++++++s+++++++
+++++++++++++++++
++s++++++++++++++
++++++++++++++s++
+++++++++++++++++
+++++++s+++++++++
+++++++++++++++++
+++++++++++++++++
+++s+++++++++++++
+++++++++++s+++++
+++++++++++++++++
+++++++++++++++++
+'''
+
+[tile.floor_moss]
+palette    = "dungeon"
+size       = "16x16"
+edge_class = { n = "floor", e = "floor", s = "floor", w = "floor" }
+tags       = ["floor", "interior", "organic"]
+weight     = 1.0
+semantic   = { affordance = "walkable", collision = "none", tags = { moisture = "high", biome = "dungeon" } }
+grid = '''
+++++g++++++g++++
++++++g++++++++++
+++++gg++++++g+++
++++ggg+++++gg+++
+++++g+++++++g+++
+++++++++++++++++
++g++++++++++++++
++gg++++++++++g++
+++g++++g+++++g++
+++++++gg++++++++
++++++ggg+++g++++
+++++++g++++gg+++
+++g+++++++++++++
+++++++++++g+++++
+++++++++++gg++++
+++++++++++++++++
+'''
+
+[tile.wall_floor_n]
+palette    = "dungeon"
+size       = "16x16"
+edge_class = { n = "solid", e = "solid", s = "floor", w = "solid" }
+tags       = ["transition", "wall_base"]
+weight     = 1.0
+semantic   = { affordance = "obstacle", collision = "full", tags = { biome = "dungeon" } }
+grid = '''
+################
+################
+################
+################
+################
+##++##++##++####
+#+++++++++++++##
+##++##++##++####
+################
+###+++++++++####
+++++++++++++++##
+++++++++++++++++
+++++++++++++++++
+++++++++++++++++
+++++++++++++++++
+++++++++++++++++
+'''
+
+# Template tile — inherits grid from wall_solid, uses frozen palette
+[tile.wall_ice]
+template      = "wall_solid"
+palette       = "dungeon"
+palette_swaps = ["frozen"]
+
+# --- Tile with auto-rotation ---
+
+[tile.wall_corner_ne]
+palette     = "dungeon"
+size        = "16x16"
+auto_rotate = "4way"
+edge_class  = { n = "solid", e = "solid", s = "floor", w = "floor" }
+tags        = ["wall", "corner"]
+weight      = 1.0
+semantic    = { affordance = "obstacle", collision = "full", tags = { biome = "dungeon" } }
+grid = '''
+################
+################
+################
+################
+################
+################
+################
+################
+++++++++++######
+++++++++++++####
++++++++++++++###
+++++++++++++++##
++++++++++++++++#
+++++++++++++++++
+++++++++++++++++
+++++++++++++++++
+'''
+
+# --- Water tile with cycling ---
+
+[tile.water_surface]
+palette    = "dungeon"
+size       = "16x16"
+edge_class = { n = "water", e = "water", s = "water", w = "water" }
+cycles     = ["water_shimmer"]
+tags       = ["water"]
+weight     = 1.0
+semantic   = { affordance = "hazard", collision = "full", tags = { depth = "shallow", biome = "dungeon" } }
+grid = '''
+~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~+~
+~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
+~+~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~+~
+~~~~~~~~~~~~~~~~
+~+~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
+'''
+
+# --- WFC Rules ---
+
+[wfc_rules]
+forbids = [
+    "affordance:obstacle forbids affordance:hazard adjacent",
+]
+require_boost = 3.0
+requires = [
+    "affordance:walkable requires affordance:obstacle adjacent_any",
+]
+
+[wfc_rules.variant_groups]
+stone_floor = ["floor_stone", "floor_moss"]
+
+# --- Atlas ---
+
+[atlas]
+format     = "texturepacker"
+padding    = 1
+scale      = 2
+columns    = 8
+include    = ["wall_*", "floor_*", "water_*"]
+output     = "dungeon_atlas.png"
+map_output = "dungeon_atlas.json"
