@@ -34,6 +34,7 @@ pub fn tool_definitions() -> Vec<Tool> {
             "Get the .pax source of the current session.",
         ),
         tool("pixl_delete_tile", "Delete a tile from the session."),
+        tool("pixl_narrate_map", "Generate a map from spatial predicates. Pass an array of rules like 'border:wall_solid', 'region:chamber:floor_stone:3x3:southeast', 'path:0,3:11,3'. Returns rendered PNG + tile grid."),
         tool("pixl_learn_style", "Extract style latent from reference tiles. Returns style description for prompt injection."),
         tool("pixl_check_style", "Score a tile against the session style latent. Returns 0-1 match score."),
         tool(

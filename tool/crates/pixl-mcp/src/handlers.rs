@@ -1,5 +1,6 @@
 use crate::state::McpState;
 use pixl_core::{blueprint, edges, grid, style::StyleLatent, types::parse_size, validate};
+use pixl_wfc::{adjacency::TileEdges, narrate, semantic};
 use pixl_render::renderer;
 use serde_json::{Value, json};
 use std::sync::Mutex;
@@ -17,6 +18,7 @@ pub fn handle_tool(state: &Mutex<McpState>, tool_name: &str, args: &Value) -> Va
         "pixl_get_file" => handle_get_file(state, args),
         "pixl_delete_tile" => handle_delete_tile(state, args),
         "pixl_get_blueprint" => handle_get_blueprint(args),
+        "pixl_narrate_map" => handle_narrate_map(state, args),
         "pixl_learn_style" => handle_learn_style(state, args),
         "pixl_check_style" => handle_check_style(state, args),
         _ => json!({"error": format!("unknown tool: {}", tool_name)}),
@@ -364,6 +366,166 @@ fn handle_delete_tile(state: &Mutex<McpState>, args: &Value) -> Value {
         "name": name,
         "message": if deleted { "tile deleted" } else { "tile not found" },
     })
+}
+
+fn handle_narrate_map(state: &Mutex<McpState>, args: &Value) -> Value {
+    let st = state.lock().unwrap();
+
+    let width = args.get("width").and_then(|v| v.as_u64()).unwrap_or(12) as usize;
+    let height = args.get("height").and_then(|v| v.as_u64()).unwrap_or(8) as usize;
+    let seed = args.get("seed").and_then(|v| v.as_u64()).unwrap_or(42);
+
+    let rules_arr: Vec<String> = args
+        .get("rules")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .unwrap_or_default();
+
+    if rules_arr.is_empty() {
+        return json!({
+            "ok": false,
+            "error": "no rules provided. Pass an array of predicate strings.",
+            "examples": [
+                "border:wall_solid",
+                "region:chamber:floor_stone:3x3:southeast",
+                "region:entrance:floor_moss:2x2:northwest",
+                "path:0,3:11,3"
+            ]
+        });
+    }
+
+    // Get palette
+    let palette_name = st.file.tile.values().next().map(|t| t.palette.clone()).unwrap_or_default();
+    let palette = match st.palettes.get(&palette_name) {
+        Some(p) => p.clone(),
+        None => return json!({"ok": false, "error": "no palette found"}),
+    };
+
+    // Build tile edges, affordances, grids
+    let mut tile_edges = Vec::new();
+    let mut tile_affordances = Vec::new();
+    let mut tile_names: Vec<String> = Vec::new();
+    let mut tile_grids: Vec<Vec<Vec<char>>> = Vec::new();
+
+    for (name, tile_raw) in &st.file.tile {
+        if tile_raw.template.is_some() || tile_raw.grid.is_none() {
+            continue;
+        }
+        let ec = tile_raw.edge_class.as_ref();
+        tile_edges.push(TileEdges {
+            name: name.clone(),
+            n: ec.map(|e| e.n.clone()).unwrap_or_default(),
+            e: ec.map(|e| e.e.clone()).unwrap_or_default(),
+            s: ec.map(|e| e.s.clone()).unwrap_or_default(),
+            w: ec.map(|e| e.w.clone()).unwrap_or_default(),
+            weight: tile_raw.weight,
+        });
+        tile_affordances.push(semantic::TileAffordance {
+            affordance: tile_raw.semantic.as_ref().and_then(|s| s.affordance.clone()),
+        });
+        tile_names.push(name.clone());
+
+        let size_str = tile_raw.size.as_deref().unwrap_or("16x16");
+        let (w, h) = parse_size(size_str).unwrap_or((16, 16));
+        if let Some(ref grid_str) = tile_raw.grid {
+            if let Ok(g) = grid::parse_grid(grid_str, w, h, &palette) {
+                tile_grids.push(g);
+            } else {
+                tile_grids.push(vec![vec!['.'; w as usize]; h as usize]);
+            }
+        } else {
+            tile_grids.push(vec![vec!['.'; w as usize]; h as usize]);
+        }
+    }
+
+    if tile_edges.is_empty() {
+        return json!({"ok": false, "error": "no tiles with edge classes found"});
+    }
+
+    // Build adjacency rules
+    let variant_groups = st.file.wfc_rules.as_ref()
+        .map(|r| r.variant_groups.clone()).unwrap_or_default();
+    let adj_rules = pixl_wfc::adjacency::AdjacencyRules::build(&tile_edges, &variant_groups);
+
+    // Parse semantic rules
+    let forbids: Vec<semantic::SemanticRule> = st.file.wfc_rules.as_ref()
+        .map(|r| r.forbids.iter().filter_map(|s| semantic::parse_forbids(s)).collect())
+        .unwrap_or_default();
+    let requires: Vec<semantic::SemanticRule> = st.file.wfc_rules.as_ref()
+        .map(|r| r.requires.iter().filter_map(|s| semantic::parse_requires(s)).collect())
+        .unwrap_or_default();
+    let require_boost = st.file.wfc_rules.as_ref().map(|r| r.require_boost).unwrap_or(3.0);
+
+    // Parse predicates
+    let predicates: Vec<narrate::Predicate> = rules_arr
+        .iter()
+        .filter_map(|r| narrate::parse_predicate(r))
+        .collect();
+
+    let config = narrate::NarrateConfig {
+        width,
+        height,
+        seed,
+        max_retries: 5,
+        predicates,
+    };
+
+    match narrate::narrate_map(&tile_edges, &tile_affordances, &adj_rules, &forbids, &requires, require_boost, &config) {
+        Ok(result) => {
+            // Render the map
+            let tile_size = st.file.tile.values().next()
+                .and_then(|t| t.size.as_deref())
+                .and_then(|s| parse_size(s).ok())
+                .unwrap_or((16, 16));
+
+            let scale = 2u32;
+            let img_w = width as u32 * tile_size.0 * scale;
+            let img_h = height as u32 * tile_size.1 * scale;
+            let mut img = image::ImageBuffer::new(img_w, img_h);
+
+            for (ty, row) in result.grid.iter().enumerate() {
+                for (tx, &tile_idx) in row.iter().enumerate() {
+                    if tile_idx < tile_grids.len() {
+                        let tile_img = renderer::render_grid(&tile_grids[tile_idx], &palette, scale);
+                        let ox = tx as u32 * tile_size.0 * scale;
+                        let oy = ty as u32 * tile_size.1 * scale;
+                        for py in 0..tile_img.height() {
+                            for px in 0..tile_img.width() {
+                                let ax = ox + px;
+                                let ay = oy + py;
+                                if ax < img_w && ay < img_h {
+                                    img.put_pixel(ax, ay, *tile_img.get_pixel(px, py));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            let preview_b64 = renderer::png_to_base64(&renderer::encode_png(&img));
+
+            // Build tile name grid
+            let tile_grid: Vec<Vec<&str>> = result.grid.iter()
+                .map(|row| row.iter().map(|&idx| tile_names.get(idx).map(|s| s.as_str()).unwrap_or("?")).collect())
+                .collect();
+
+            json!({
+                "ok": true,
+                "width": width,
+                "height": height,
+                "seed": result.seed,
+                "retries": result.retries,
+                "pins_applied": result.pins_applied,
+                "tile_grid": tile_grid,
+                "preview_b64": preview_b64,
+            })
+        }
+        Err(e) => json!({
+            "ok": false,
+            "error": format!("{}", e),
+            "hint": "Try simpler predicates, add transition tiles, or increase tileset variety.",
+        }),
+    }
 }
 
 fn handle_learn_style(state: &Mutex<McpState>, args: &Value) -> Value {
