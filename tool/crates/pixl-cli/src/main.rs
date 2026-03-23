@@ -207,6 +207,17 @@ enum Commands {
         #[arg(long)]
         file: Option<PathBuf>,
     },
+
+    /// Start the HTTP API server (for PIXL Studio)
+    Serve {
+        /// Port to listen on
+        #[arg(long, default_value = "3742")]
+        port: u16,
+
+        /// Optional: pre-load a .pax file
+        #[arg(long)]
+        file: Option<PathBuf>,
+    },
 }
 
 fn main() {
@@ -289,6 +300,9 @@ fn main() {
         Commands::Mcp { file } => {
             cmd_mcp(file.as_deref());
         }
+        Commands::Serve { port, file } => {
+            cmd_serve(port, file.as_deref());
+        }
     }
 }
 
@@ -308,6 +322,29 @@ async fn cmd_mcp_async(file: Option<&std::path::Path>) {
 
 fn cmd_mcp(file: Option<&std::path::Path>) {
     cmd_mcp_async(file);
+}
+
+fn cmd_serve(port: u16, file: Option<&std::path::Path>) {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let state = if let Some(path) = file {
+            let source = std::fs::read_to_string(path).unwrap_or_else(|e| {
+                eprintln!("error: {}", e);
+                process::exit(1);
+            });
+            pixl_mcp::state::McpState::from_source(&source).unwrap_or_else(|e| {
+                eprintln!("error: {}", e);
+                process::exit(1);
+            })
+        } else {
+            pixl_mcp::state::McpState::new()
+        };
+
+        if let Err(e) = pixl_mcp::http::run_http(state, port).await {
+            eprintln!("server error: {}", e);
+            process::exit(1);
+        }
+    });
 }
 
 fn cmd_validate(file: &PathBuf, check_edges: bool) {
@@ -359,6 +396,27 @@ fn cmd_validate(file: &PathBuf, check_edges: bool) {
         );
         process::exit(1);
     }
+}
+
+/// Check if a user-declared edge class is compatible with an auto-classified one.
+/// "solid" matches "solid_#", "floor" matches "solid_+", "open" matches "open", etc.
+fn edge_class_compatible(declared: &str, auto: &str) -> bool {
+    if declared == auto {
+        return true;
+    }
+    // User-friendly alias: "solid" matches "solid_#", "solid_+"
+    if auto.starts_with(declared) && auto.as_bytes().get(declared.len()) == Some(&b'_') {
+        return true;
+    }
+    // "floor" is commonly used for "solid_+" (walkable surface)
+    if declared == "floor" && auto.starts_with("solid_") {
+        return true;
+    }
+    // "water" commonly used for "solid_~"
+    if declared == "water" && auto.starts_with("solid_") {
+        return true;
+    }
+    false
 }
 
 fn cmd_check_fix(file: &PathBuf) {
@@ -430,7 +488,7 @@ fn cmd_check_fix(file: &PathBuf) {
                 (&ec.w, &auto.w, "w"),
             ]
             .iter()
-            .filter(|(declared, computed, _)| declared != computed)
+            .filter(|(declared, computed, _)| !edge_class_compatible(declared, computed))
             .map(|(declared, computed, dir)| {
                 format!("{}='{}' (auto='{}')", dir, declared, computed)
             })
@@ -698,52 +756,14 @@ fn cmd_render(file: &PathBuf, tile_name: &str, scale: u32, out: &PathBuf) {
         }
     };
 
-    let size_str = tile_raw.size.as_deref().unwrap_or("16x16");
-    let (w, h) = match pixl_core::types::parse_size(size_str) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error: {}", e);
-            process::exit(1);
-        }
-    };
-
-    let grid_str = match &tile_raw.grid {
-        Some(g) => g,
-        None => {
-            eprintln!(
-                "error: tile '{}' has no grid data (RLE/compose not yet supported in CLI render)",
-                tile_name
-            );
-            process::exit(1);
-        }
-    };
-
-    // Parse grid with symmetry
-    let (grid_w, grid_h) = match tile_raw.symmetry.as_deref() {
-        Some("horizontal") => (w / 2, h),
-        Some("vertical") => (w, h / 2),
-        Some("quad") => (w / 2, h / 2),
-        _ => (w, h),
-    };
-
-    let grid = match pixl_core::grid::parse_grid(grid_str, grid_w, grid_h, palette) {
-        Ok(g) => g,
-        Err(e) => {
-            eprintln!("error: {}", e);
-            process::exit(1);
-        }
-    };
-
-    // Expand symmetry
-    let sym = match tile_raw.symmetry.as_deref() {
-        Some("horizontal") => pixl_core::types::Symmetry::Horizontal,
-        Some("vertical") => pixl_core::types::Symmetry::Vertical,
-        Some("quad") => pixl_core::types::Symmetry::Quad,
-        _ => pixl_core::types::Symmetry::None,
-    };
-
-    let full_grid = match pixl_core::symmetry::expand_symmetry(&grid, w, h, sym) {
-        Ok(g) => g,
+    // Use unified resolver — handles grid, RLE, compose, template, symmetry
+    let (full_grid, w, h) = match pixl_core::resolve::resolve_tile_grid(
+        tile_name,
+        &pax_file.tile,
+        &palettes,
+        &std::collections::HashMap::new(), // stamps resolved separately if needed
+    ) {
+        Ok(r) => r,
         Err(e) => {
             eprintln!("error: {}", e);
             process::exit(1);
@@ -759,11 +779,7 @@ fn cmd_render(file: &PathBuf, tile_name: &str, scale: u32, out: &PathBuf) {
 
     println!(
         "rendered '{}' ({}x{} @{}x) -> {}",
-        tile_name,
-        w,
-        h,
-        scale,
-        out.display()
+        tile_name, w, h, scale, out.display()
     );
 }
 
@@ -777,36 +793,33 @@ fn cmd_atlas(
 ) {
     let (pax_file, palettes) = load_pax(file);
 
-    // Collect tiles with grid data (skip templates)
+    // Collect tiles using unified resolver (handles grid, RLE, compose, template, symmetry)
     let mut atlas_tiles = Vec::new();
-    for (name, tile_raw) in &pax_file.tile {
-        if tile_raw.template.is_some() || tile_raw.grid.is_none() {
-            continue;
+    for name in pax_file.tile.keys() {
+        let tile_raw = &pax_file.tile[name];
+        if tile_raw.template.is_some() {
+            continue; // template tiles use parent's grid
         }
-        let size_str = tile_raw.size.as_deref().unwrap_or("16x16");
-        let (w, h) = match pixl_core::types::parse_size(size_str) {
-            Ok(s) => s,
+        match pixl_core::resolve::resolve_tile_grid(
+            name,
+            &pax_file.tile,
+            &palettes,
+            &std::collections::HashMap::new(),
+        ) {
+            Ok((grid, w, h)) => {
+                atlas_tiles.push(pixl_render::atlas::AtlasTile {
+                    name: name.clone(),
+                    grid,
+                    width: w,
+                    height: h,
+                });
+            }
             Err(_) => continue,
-        };
-        let palette = match palettes.get(&tile_raw.palette) {
-            Some(p) => p,
-            None => continue,
-        };
-        let grid = match pixl_core::grid::parse_grid(tile_raw.grid.as_ref().unwrap(), w, h, palette)
-        {
-            Ok(g) => g,
-            Err(_) => continue,
-        };
-        atlas_tiles.push(pixl_render::atlas::AtlasTile {
-            name: name.clone(),
-            grid,
-            width: w,
-            height: h,
-        });
+        }
     }
 
     if atlas_tiles.is_empty() {
-        eprintln!("error: no tiles with grid data found");
+        eprintln!("error: no resolvable tiles found");
         process::exit(1);
     }
 
@@ -963,6 +976,83 @@ fn cmd_narrate(
         } else {
             tile_grids.push(vec![vec!['.'; w as usize]; h as usize]);
         }
+    }
+
+    // Expand auto-rotated tiles into the pool
+    let mut rotation_additions: Vec<(
+        pixl_wfc::adjacency::TileEdges,
+        pixl_wfc::semantic::TileAffordance,
+        String,
+        Vec<Vec<char>>,
+    )> = Vec::new();
+
+    for (name, tile_raw) in &pax_file.tile {
+        let rotate = tile_raw.auto_rotate.as_deref().unwrap_or("none");
+        if rotate == "none" {
+            continue;
+        }
+
+        // Find this tile's index in the edges list
+        let Some(idx) = tile_names_ordered.iter().position(|n| n == name) else {
+            continue;
+        };
+
+        // Build a minimal Tile for generate_variants
+        let source_tile = pixl_core::types::Tile {
+            name: name.clone(),
+            palette: tile_raw.palette.clone(),
+            width: 0,
+            height: 0,
+            encoding: pixl_core::types::Encoding::Grid,
+            symmetry: pixl_core::types::Symmetry::None,
+            auto_rotate: match rotate {
+                "4way" => pixl_core::types::AutoRotate::FourWay,
+                "flip" => pixl_core::types::AutoRotate::Flip,
+                "8way" => pixl_core::types::AutoRotate::EightWay,
+                _ => pixl_core::types::AutoRotate::None,
+            },
+            edge_class: pixl_core::types::EdgeClass {
+                n: tile_edges[idx].n.clone(),
+                e: tile_edges[idx].e.clone(),
+                s: tile_edges[idx].s.clone(),
+                w: tile_edges[idx].w.clone(),
+            },
+            tags: vec![],
+            weight: tile_raw.weight,
+            palette_swaps: vec![],
+            cycles: vec![],
+            nine_slice: None,
+            visual_height_extra: None,
+            semantic: None,
+            grid: tile_grids[idx].clone(),
+        };
+
+        let weight_mode = tile_raw.auto_rotate_weight.as_deref();
+        for (suffix, rotated_grid, rotated_ec, variant_weight) in
+            pixl_core::rotate::generate_variants(&source_tile, weight_mode)
+        {
+            let variant_name = format!("{}{}", name, suffix);
+            rotation_additions.push((
+                pixl_wfc::adjacency::TileEdges {
+                    name: variant_name.clone(),
+                    n: rotated_ec.n,
+                    e: rotated_ec.e,
+                    s: rotated_ec.s,
+                    w: rotated_ec.w,
+                    weight: variant_weight,
+                },
+                tile_affordances[idx].clone(),
+                variant_name,
+                rotated_grid,
+            ));
+        }
+    }
+
+    for (edges, affordance, name, grid) in rotation_additions {
+        tile_edges.push(edges);
+        tile_affordances.push(affordance);
+        tile_names_ordered.push(name);
+        tile_grids.push(grid);
     }
 
     if tile_edges.is_empty() {

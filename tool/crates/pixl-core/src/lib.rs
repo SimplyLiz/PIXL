@@ -10,6 +10,7 @@ pub mod symmetry;
 pub mod template;
 pub mod theme;
 pub mod types;
+pub mod resolve;
 pub mod stampgen;
 pub mod style;
 pub mod validate;

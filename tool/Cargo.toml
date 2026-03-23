@@ -44,6 +44,9 @@ tokio = { version = "1", features = ["full"] }
 # CLI
 clap = { version = "4", features = ["derive"] }
 
+# HTTP
+axum = "0.8"
+
 # Internal crates
 pixl-core = { path = "crates/pixl-core" }
 pixl-render = { path = "crates/pixl-render" }

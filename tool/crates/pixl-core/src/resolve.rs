@@ -1,0 +1,199 @@
+/// Unified tile grid resolver — resolves any TileRaw to a pixel grid
+/// regardless of encoding (grid, RLE, compose, template, symmetry).
+
+use crate::compose;
+use crate::grid;
+use crate::rle;
+use crate::symmetry;
+use crate::types::{Palette, Stamp, TileRaw, Symmetry, parse_size};
+use std::collections::HashMap;
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum ResolveError {
+    #[error("tile has no size and no template")]
+    NoSize,
+    #[error("tile has no pixel data (grid/rle/layout) and no template")]
+    NoPixelData,
+    #[error("template '{0}' not found")]
+    TemplateNotFound(String),
+    #[error("palette '{0}' not found")]
+    PaletteNotFound(String),
+    #[error("grid error: {0}")]
+    Grid(#[from] grid::GridError),
+    #[error("RLE error: {0}")]
+    Rle(#[from] rle::RleError),
+    #[error("compose error: {0}")]
+    Compose(#[from] compose::ComposeError),
+    #[error("symmetry error: {0}")]
+    Symmetry(#[from] symmetry::SymmetryError),
+    #[error("size parse error: {0}")]
+    Size(String),
+}
+
+/// Resolve a tile to its full pixel grid.
+pub fn resolve_tile_grid(
+    name: &str,
+    tiles: &HashMap<String, TileRaw>,
+    palettes: &HashMap<String, Palette>,
+    stamps: &HashMap<String, Stamp>,
+) -> Result<(Vec<Vec<char>>, u32, u32), ResolveError> {
+    let tile_raw = tiles.get(name).ok_or(ResolveError::NoPixelData)?;
+
+    // Handle template tiles
+    let effective = if let Some(ref template_name) = tile_raw.template {
+        tiles.get(template_name.as_str())
+            .ok_or_else(|| ResolveError::TemplateNotFound(template_name.clone()))?
+    } else {
+        tile_raw
+    };
+
+    let size_str = effective.size.as_deref()
+        .or(tile_raw.size.as_deref())
+        .ok_or(ResolveError::NoSize)?;
+    let (w, h) = parse_size(size_str).map_err(ResolveError::Size)?;
+
+    let palette = palettes.get(&tile_raw.palette)
+        .ok_or_else(|| ResolveError::PaletteNotFound(tile_raw.palette.clone()))?;
+
+    // Determine symmetry
+    let sym = match effective.symmetry.as_deref() {
+        Some("horizontal") => Symmetry::Horizontal,
+        Some("vertical") => Symmetry::Vertical,
+        Some("quad") => Symmetry::Quad,
+        _ => Symmetry::None,
+    };
+
+    // Grid dimensions accounting for symmetry
+    let (grid_w, grid_h) = match sym {
+        Symmetry::None => (w, h),
+        Symmetry::Horizontal => (w / 2, h),
+        Symmetry::Vertical => (w, h / 2),
+        Symmetry::Quad => (w / 2, h / 2),
+    };
+
+    // Resolve the grid based on encoding
+    let partial_grid = if let Some(ref grid_str) = effective.grid {
+        grid::parse_grid(grid_str, grid_w, grid_h, palette)?
+    } else if let Some(ref rle_str) = effective.rle {
+        rle::parse_rle(rle_str, grid_w, grid_h, palette)?
+    } else if let Some(ref layout_str) = effective.layout {
+        compose::resolve_compose(layout_str, stamps, w, h, '.')?
+    } else {
+        return Err(ResolveError::NoPixelData);
+    };
+
+    // Expand symmetry
+    let full_grid = symmetry::expand_symmetry(&partial_grid, w, h, sym)?;
+
+    Ok((full_grid, w, h))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::{Rgba, EdgeClassRaw};
+
+    fn test_palette() -> Palette {
+        let mut symbols = HashMap::new();
+        symbols.insert('.', Rgba { r: 0, g: 0, b: 0, a: 0 });
+        symbols.insert('#', Rgba { r: 42, g: 31, b: 61, a: 255 });
+        symbols.insert('+', Rgba { r: 74, g: 58, b: 109, a: 255 });
+        Palette { symbols }
+    }
+
+    fn make_tile(size: &str, grid: &str) -> TileRaw {
+        TileRaw {
+            palette: "test".to_string(),
+            size: Some(size.to_string()),
+            encoding: None,
+            symmetry: None,
+            auto_rotate: None,
+            auto_rotate_weight: None,
+            template: None,
+            edge_class: None,
+            tags: vec![],
+            weight: 1.0,
+            palette_swaps: vec![],
+            cycles: vec![],
+            nine_slice: None,
+            visual_height_extra: None,
+            semantic: None,
+            grid: Some(grid.to_string()),
+            rle: None,
+            layout: None,
+        }
+    }
+
+    #[test]
+    fn resolve_grid_tile() {
+        let mut tiles = HashMap::new();
+        tiles.insert("wall".to_string(), make_tile("4x2", "####\n++++"));
+        let mut palettes = HashMap::new();
+        palettes.insert("test".to_string(), test_palette());
+
+        let (grid, w, h) = resolve_tile_grid("wall", &tiles, &palettes, &HashMap::new()).unwrap();
+        assert_eq!(w, 4);
+        assert_eq!(h, 2);
+        assert_eq!(grid[0], vec!['#', '#', '#', '#']);
+        assert_eq!(grid[1], vec!['+', '+', '+', '+']);
+    }
+
+    #[test]
+    fn resolve_rle_tile() {
+        let mut tile = make_tile("4x2", "");
+        tile.grid = None;
+        tile.rle = Some("4#\n4+".to_string());
+
+        let mut tiles = HashMap::new();
+        tiles.insert("wall".to_string(), tile);
+        let mut palettes = HashMap::new();
+        palettes.insert("test".to_string(), test_palette());
+
+        let (grid, _, _) = resolve_tile_grid("wall", &tiles, &palettes, &HashMap::new()).unwrap();
+        assert_eq!(grid[0], vec!['#', '#', '#', '#']);
+        assert_eq!(grid[1], vec!['+', '+', '+', '+']);
+    }
+
+    #[test]
+    fn resolve_template_tile() {
+        let mut tiles = HashMap::new();
+        tiles.insert("base".to_string(), make_tile("4x2", "####\n++++"));
+
+        let mut child = TileRaw {
+            palette: "test".to_string(),
+            size: None,
+            template: Some("base".to_string()),
+            ..make_tile("", "")
+        };
+        child.grid = None;
+        tiles.insert("child".to_string(), child);
+
+        let mut palettes = HashMap::new();
+        palettes.insert("test".to_string(), test_palette());
+
+        let (grid, w, h) = resolve_tile_grid("child", &tiles, &palettes, &HashMap::new()).unwrap();
+        assert_eq!(w, 4);
+        assert_eq!(h, 2);
+        assert_eq!(grid[0], vec!['#', '#', '#', '#']);
+    }
+
+    #[test]
+    fn resolve_quad_symmetry() {
+        let mut tile = make_tile("4x4", "##\n#+");
+        tile.symmetry = Some("quad".to_string());
+
+        let mut tiles = HashMap::new();
+        tiles.insert("gem".to_string(), tile);
+        let mut palettes = HashMap::new();
+        palettes.insert("test".to_string(), test_palette());
+
+        let (grid, w, h) = resolve_tile_grid("gem", &tiles, &palettes, &HashMap::new()).unwrap();
+        assert_eq!(w, 4);
+        assert_eq!(h, 4);
+        assert_eq!(grid[0], vec!['#', '#', '#', '#']);
+        assert_eq!(grid[1], vec!['#', '+', '+', '#']);
+        assert_eq!(grid[2], vec!['#', '+', '+', '#']);
+        assert_eq!(grid[3], vec!['#', '#', '#', '#']);
+    }
+}
