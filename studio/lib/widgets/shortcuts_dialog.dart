@@ -100,7 +100,7 @@ class ShortcutsDialog extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF2a2a4e),
+                    color: StudioTheme.codeBg,
                     borderRadius: BorderRadius.circular(3),
                   ),
                   child: Text(

@@ -266,11 +266,11 @@ class _TilegroupDialogState extends ConsumerState<TilegroupDialog> {
                 Color borderColor = theme.dividerColor;
                 Color? bgColor;
                 if (status == _VariantStatus.done) {
-                  borderColor = const Color(0xFF4caf50);
-                  bgColor = const Color(0xFF4caf50).withValues(alpha: 0.15);
+                  borderColor = StudioTheme.success;
+                  bgColor = StudioTheme.success.withValues(alpha: 0.15);
                 } else if (status == _VariantStatus.failed) {
-                  borderColor = const Color(0xFFf44336);
-                  bgColor = const Color(0xFFf44336).withValues(alpha: 0.15);
+                  borderColor = StudioTheme.error;
+                  bgColor = StudioTheme.error.withValues(alpha: 0.15);
                 } else if (status == _VariantStatus.generating) {
                   borderColor = theme.colorScheme.primary;
                   bgColor = theme.colorScheme.primary.withValues(alpha: 0.15);

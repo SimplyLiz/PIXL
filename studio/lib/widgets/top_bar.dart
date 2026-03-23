@@ -281,7 +281,7 @@ class _ApiKeyBadge extends ConsumerWidget {
             const Icon(Icons.key, size: 12, color: Color(0xFF4caf50)),
             const SizedBox(width: 4),
             Text(providerShort, style: theme.textTheme.bodySmall!.copyWith(
-              fontSize: 10, color: const Color(0xFF4caf50),
+              fontSize: 10, color: StudioTheme.success,
             )),
           ],
         ),
@@ -294,10 +294,10 @@ class _ApiKeyBadge extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: const Color(0xFFffaa00)),
+          border: Border.all(color: StudioTheme.warning),
         ),
         child: Text('Add API Key', style: theme.textTheme.bodySmall!.copyWith(
-          fontSize: 9, color: const Color(0xFFffaa00),
+          fontSize: 9, color: StudioTheme.warning,
         )),
       ),
     );

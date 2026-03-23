@@ -391,12 +391,12 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
                 const Spacer(),
                 // Connection indicators
                 _StatusDot(
-                  color: backend.isConnected ? const Color(0xFF4caf50) : const Color(0xFF888888),
+                  color: backend.isConnected ? StudioTheme.success : StudioTheme.separatorColor,
                   tooltip: backend.isConnected ? 'Engine connected' : 'Engine offline',
                 ),
                 const SizedBox(width: 4),
                 _StatusDot(
-                  color: claude.hasApiKey ? const Color(0xFF4caf50) : const Color(0xFFffaa00),
+                  color: claude.hasApiKey ? StudioTheme.success : StudioTheme.warning,
                   tooltip: claude.hasApiKey ? 'API key set' : 'No API key',
                 ),
                 const SizedBox(width: 8),
@@ -445,10 +445,10 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
                           p: theme.textTheme.bodyMedium!.copyWith(fontSize: 12),
                           code: theme.textTheme.bodyMedium!.copyWith(
                             fontSize: 11,
-                            backgroundColor: const Color(0xFF2a2a4e),
+                            backgroundColor: StudioTheme.codeBg,
                           ),
                           codeblockDecoration: BoxDecoration(
-                            color: const Color(0xFF2a2a4e),
+                            color: StudioTheme.codeBg,
                             borderRadius: BorderRadius.circular(4),
                           ),
                         ),
@@ -466,7 +466,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
               padding: const EdgeInsets.all(8),
               decoration: const BoxDecoration(
                 border: Border(top: StudioTheme.panelBorder),
-                color: Color(0xFF1a1a30),
+                color: StudioTheme.recessedBg,
               ),
               child: Column(
                 children: [
@@ -495,7 +495,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
                       Expanded(
                         child: _ActionButton(
                           label: 'Accept',
-                          color: const Color(0xFF4caf50),
+                          color: StudioTheme.success,
                           onTap: _acceptTile,
                         ),
                       ),
@@ -503,7 +503,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
                       Expanded(
                         child: _ActionButton(
                           label: 'Reject',
-                          color: const Color(0xFFf44336),
+                          color: StudioTheme.error,
                           onTap: _rejectTile,
                         ),
                       ),

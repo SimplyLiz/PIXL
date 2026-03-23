@@ -20,8 +20,6 @@ class StudioTheme {
   // Accent — warm orange-amber (Aseprite-inspired)
   static const _accent = Color(0xFFe8a045);         // primary accent
   static const _accentLight = Color(0xFFf0b860);    // hover/light accent
-  static const _accentDim = Color(0xFFc07828);       // pressed/dim accent
-
   // Canvas background (neutral dark, no color cast)
   static const canvasBg = Color(0xFF181818);
 

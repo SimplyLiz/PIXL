@@ -70,7 +70,7 @@ class StatusBar extends ConsumerWidget {
 
   Widget _sep() => const Padding(
         padding: EdgeInsets.symmetric(horizontal: 8),
-        child: Text('|', style: TextStyle(color: Color(0xFF3a3a5e), fontSize: 11)),
+        child: Text('|', style: TextStyle(color: StudioTheme.separatorColor, fontSize: 11)),
       );
 }
 
@@ -84,7 +84,7 @@ class _PixelPosition extends ConsumerWidget {
       child: Text(
         hover.hasPosition ? '${hover.x}, ${hover.y}' : '--, --',
         style: style.copyWith(
-          color: hover.hasPosition ? null : const Color(0xFF555566),
+          color: hover.hasPosition ? null : StudioTheme.separatorColor,
         ),
       ),
     );
@@ -99,10 +99,10 @@ class _EngineIndicator extends ConsumerWidget {
     final style = Theme.of(context).textTheme.bodySmall!.copyWith(fontSize: 11);
 
     final (color, label) = switch (status) {
-      BackendStatus.connected => (const Color(0xFF4caf50), 'Engine OK ($tileCount tiles)'),
-      BackendStatus.connecting => (const Color(0xFFffaa00), 'Connecting...'),
-      BackendStatus.error => (const Color(0xFFf44336), 'Engine Error'),
-      BackendStatus.disconnected => (const Color(0xFF888888), 'Offline'),
+      BackendStatus.connected => (StudioTheme.success, 'Engine OK ($tileCount tiles)'),
+      BackendStatus.connecting => (StudioTheme.warning, 'Connecting...'),
+      BackendStatus.error => (StudioTheme.error, 'Engine Error'),
+      BackendStatus.disconnected => (StudioTheme.separatorColor, 'Offline'),
     };
 
     return Row(

@@ -68,7 +68,7 @@ class _VariantStripState extends ConsumerState<VariantStrip> {
     return Container(
       height: 72,
       decoration: const BoxDecoration(
-        color: Color(0xFF161628),
+        color: StudioTheme.canvasBg,
         border: Border(top: StudioTheme.panelBorder),
       ),
       child: Row(
@@ -107,7 +107,7 @@ class _VariantStripState extends ConsumerState<VariantStrip> {
                       child: Container(
                         width: 56,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF1a1a30),
+                          color: StudioTheme.recessedBg,
                           borderRadius: BorderRadius.circular(4),
                           border: Border.all(
                             color: isSelected
@@ -145,7 +145,7 @@ class _VariantStripState extends ConsumerState<VariantStrip> {
                               decoration: BoxDecoration(
                                 color: isSelected
                                     ? theme.colorScheme.primary.withValues(alpha: 0.2)
-                                    : const Color(0xFF121220),
+                                    : StudioTheme.canvasBg,
                                 borderRadius: const BorderRadius.only(
                                   bottomLeft: Radius.circular(3),
                                   bottomRight: Radius.circular(3),

@@ -295,7 +295,7 @@ class _PaletteSection extends ConsumerWidget {
         ),
         Text(
           'Click = FG  |  Shift/Right = BG',
-          style: theme.textTheme.bodySmall!.copyWith(fontSize: 8, color: const Color(0xFF555566)),
+          style: theme.textTheme.bodySmall!.copyWith(fontSize: 8, color: StudioTheme.separatorColor),
         ),
       ],
     );
@@ -377,7 +377,7 @@ class _TransparentPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final s = size.width / 2;
     final light = Paint()..color = const Color(0xFFcccccc);
-    final dark = Paint()..color = const Color(0xFF888888);
+    final dark = Paint()..color = StudioTheme.separatorColor;
     canvas.drawRect(Rect.fromLTWH(0, 0, s, s), light);
     canvas.drawRect(Rect.fromLTWH(s, 0, s, s), dark);
     canvas.drawRect(Rect.fromLTWH(0, s, s, s), dark);
@@ -572,7 +572,7 @@ class _StyleSection extends ConsumerWidget {
         Container(
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
-            color: const Color(0xFF1a1a30),
+            color: StudioTheme.recessedBg,
             borderRadius: BorderRadius.circular(4),
           ),
           child: Text(
@@ -777,10 +777,10 @@ class _BackendSection extends ConsumerWidget {
     final theme = Theme.of(context);
 
     final (icon, color, label) = switch (backend.status) {
-      BackendStatus.disconnected => (Icons.circle_outlined, const Color(0xFF888888), 'Disconnected'),
-      BackendStatus.connecting => (Icons.sync, const Color(0xFFffaa00), 'Connecting...'),
-      BackendStatus.connected => (Icons.check_circle, const Color(0xFF4caf50), 'Connected'),
-      BackendStatus.error => (Icons.error, const Color(0xFFf44336), 'Error'),
+      BackendStatus.disconnected => (Icons.circle_outlined, StudioTheme.separatorColor, 'Disconnected'),
+      BackendStatus.connecting => (Icons.sync, StudioTheme.warning, 'Connecting...'),
+      BackendStatus.connected => (Icons.check_circle, StudioTheme.success, 'Connected'),
+      BackendStatus.error => (Icons.error, StudioTheme.error, 'Error'),
     };
 
     return Column(
@@ -813,7 +813,7 @@ class _BackendSection extends ConsumerWidget {
             child: Text(
               backend.errorMessage!,
               style: theme.textTheme.bodySmall!.copyWith(
-                color: const Color(0xFFf44336),
+                color: StudioTheme.error,
                 fontSize: 10,
               ),
             ),
@@ -826,9 +826,9 @@ class _BackendSection extends ConsumerWidget {
             child: Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: const Color(0xFF1a1a30),
+                color: StudioTheme.recessedBg,
                 borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: const Color(0xFF3a3a5e)),
+                border: Border.all(color: StudioTheme.separatorColor),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -841,7 +841,7 @@ class _BackendSection extends ConsumerWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF2a2a4e),
+                      color: StudioTheme.codeBg,
                       borderRadius: BorderRadius.circular(3),
                     ),
                     child: SelectableText(
@@ -937,14 +937,14 @@ class _ValidationSectionState extends ConsumerState<_ValidationSection> {
             Padding(
               padding: const EdgeInsets.only(top: 2),
               child: Text(err, style: theme.textTheme.bodySmall!.copyWith(
-                color: const Color(0xFFf44336), fontSize: 10,
+                color: StudioTheme.error, fontSize: 10,
               )),
             ),
           for (final warn in _report!.warnings)
             Padding(
               padding: const EdgeInsets.only(top: 2),
               child: Text(warn, style: theme.textTheme.bodySmall!.copyWith(
-                color: const Color(0xFFffaa00), fontSize: 10,
+                color: StudioTheme.warning, fontSize: 10,
               )),
             ),
         ],
@@ -967,7 +967,7 @@ class _CheckRow extends StatelessWidget {
           Icon(
             passed ? Icons.check_circle : Icons.cancel,
             size: 12,
-            color: passed ? const Color(0xFF4caf50) : const Color(0xFFf44336),
+            color: passed ? StudioTheme.success : StudioTheme.error,
           ),
           const SizedBox(width: 6),
           Text(label, style: Theme.of(context).textTheme.bodySmall!.copyWith(fontSize: 11)),
@@ -1086,7 +1086,7 @@ class _TileListSectionState extends ConsumerState<_TileListSection> {
             width: double.infinity,
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFF121220),
+              color: StudioTheme.canvasBg,
               borderRadius: BorderRadius.circular(4),
               border: Border.all(color: theme.dividerColor),
             ),

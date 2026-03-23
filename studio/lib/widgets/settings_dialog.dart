@@ -214,13 +214,13 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> {
                       const Icon(Icons.check_circle, size: 12, color: Color(0xFF4caf50)),
                       const SizedBox(width: 4),
                       Text('Key configured', style: theme.textTheme.bodySmall!.copyWith(
-                        color: const Color(0xFF4caf50), fontSize: 10,
+                        color: StudioTheme.success, fontSize: 10,
                       )),
                       const Spacer(),
                       InkWell(
                         onTap: _clearApiKey,
                         child: Text('Clear', style: theme.textTheme.bodySmall!.copyWith(
-                          color: const Color(0xFFf44336), fontSize: 10,
+                          color: StudioTheme.error, fontSize: 10,
                           decoration: TextDecoration.underline,
                         )),
                       ),

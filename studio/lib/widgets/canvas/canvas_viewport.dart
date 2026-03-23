@@ -239,7 +239,7 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
                 },
                 onPointerUp: (event) => _handlePointerUp(event),
                 child: Container(
-                  color: const StudioTheme.canvasBg,
+                  color: StudioTheme.canvasBg,
                   child: Stack(
                     children: [
                       Positioned(

@@ -240,7 +240,7 @@ class _WfcDialogState extends ConsumerState<WfcDialog> {
             if (_error != null) ...[
               const SizedBox(height: 8),
               Text(_error!, style: theme.textTheme.bodySmall!.copyWith(
-                color: const Color(0xFFf44336), fontSize: 11,
+                color: StudioTheme.error, fontSize: 11,
               )),
             ],
 
@@ -252,7 +252,7 @@ class _WfcDialogState extends ConsumerState<WfcDialog> {
               children: [
                 if (!backend.isConnected)
                   Text('Engine offline', style: theme.textTheme.bodySmall!.copyWith(
-                    color: const Color(0xFFf44336),
+                    color: StudioTheme.error,
                   ))
                 else if (_generating)
                   const Row(
