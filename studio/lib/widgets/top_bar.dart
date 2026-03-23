@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/backend_provider.dart';
 import '../providers/canvas_provider.dart';
 import '../providers/claude_provider.dart';
+import '../services/llm_provider.dart';
 import '../services/export_service.dart';
 import '../theme/studio_theme.dart';
 import 'settings_dialog.dart';
@@ -261,18 +262,29 @@ class _ExportMenu extends ConsumerWidget {
 class _ApiKeyBadge extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final hasKey = ref.watch(claudeProvider.select((s) => s.hasApiKey));
+    final llm = ref.watch(claudeProvider);
     final theme = Theme.of(context);
-    if (hasKey) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.key, size: 12, color: Color(0xFF4caf50)),
-          const SizedBox(width: 4),
-          Text('AI', style: theme.textTheme.bodySmall!.copyWith(
-            fontSize: 10, color: const Color(0xFF4caf50),
-          )),
-        ],
+    if (llm.hasApiKey) {
+      // Show active provider name
+      final providerShort = switch (llm.provider) {
+        LlmProviderType.anthropic => 'Claude',
+        LlmProviderType.openai => 'GPT',
+        LlmProviderType.gemini => 'Gemini',
+        LlmProviderType.ollama => 'Ollama',
+      };
+      return InkWell(
+        onTap: () => SettingsDialog.show(context),
+        borderRadius: BorderRadius.circular(4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.key, size: 12, color: Color(0xFF4caf50)),
+            const SizedBox(width: 4),
+            Text(providerShort, style: theme.textTheme.bodySmall!.copyWith(
+              fontSize: 10, color: const Color(0xFF4caf50),
+            )),
+          ],
+        ),
       );
     }
     return InkWell(
