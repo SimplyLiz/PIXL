@@ -9,7 +9,7 @@ import '../../providers/canvas_provider.dart';
 import '../../providers/chat_provider.dart';
 import '../../providers/claude_provider.dart';
 import '../../providers/style_provider.dart';
-import '../../services/claude_api.dart';
+import '../../services/llm_provider.dart';
 import '../../services/knowledge_base.dart';
 import '../../theme/studio_theme.dart';
 import '../../utils/grid_parser.dart';
@@ -327,7 +327,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
       // Filter out status messages — they waste tokens in Claude's context.
       final messages = ref.read(chatProvider)
           .where((m) => !m.isStatus && (m.role == 'user' || m.role == 'assistant'))
-          .map((m) => ClaudeMessage(role: m.role, content: m.content))
+          .map((m) => LlmMessage(role: m.role, content: m.content))
           .toList();
 
       // Keep last 10 messages for context

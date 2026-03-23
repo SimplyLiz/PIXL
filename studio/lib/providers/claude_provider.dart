@@ -1,28 +1,32 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../services/claude_api.dart';
+import '../services/llm_provider.dart';
 
-/// State for the Claude API connection.
-class ClaudeState {
-  const ClaudeState({
+/// State for the LLM connection (multi-provider).
+class LlmState {
+  const LlmState({
+    this.provider = LlmProviderType.anthropic,
     this.hasApiKey = false,
     this.model = 'claude-sonnet-4-20250514',
     this.isGenerating = false,
     this.lastTokenUsage = 0,
   });
 
+  final LlmProviderType provider;
   final bool hasApiKey;
   final String model;
   final bool isGenerating;
   final int lastTokenUsage;
 
-  ClaudeState copyWith({
+  LlmState copyWith({
+    LlmProviderType? provider,
     bool? hasApiKey,
     String? model,
     bool? isGenerating,
     int? lastTokenUsage,
   }) {
-    return ClaudeState(
+    return LlmState(
+      provider: provider ?? this.provider,
       hasApiKey: hasApiKey ?? this.hasApiKey,
       model: model ?? this.model,
       isGenerating: isGenerating ?? this.isGenerating,
@@ -31,43 +35,57 @@ class ClaudeState {
   }
 }
 
-class ClaudeNotifier extends StateNotifier<ClaudeState> {
-  ClaudeNotifier() : super(const ClaudeState());
+class LlmNotifier extends StateNotifier<LlmState> {
+  LlmNotifier() : super(const LlmState());
 
-  final ClaudeApi _api = ClaudeApi();
-  ClaudeApi get api => _api;
+  final LlmService _service = LlmService();
+  LlmService get service => _service;
 
   Future<void> init() async {
-    await _api.init();
+    await _service.init();
     state = state.copyWith(
-      hasApiKey: _api.hasApiKey,
-      model: _api.model,
+      provider: _service.provider,
+      hasApiKey: _service.hasApiKey,
+      model: _service.model,
     );
   }
 
-  Future<void> setApiKey(String key) async {
-    await _api.setApiKey(key);
-    state = state.copyWith(hasApiKey: _api.hasApiKey);
+  Future<void> setProvider(LlmProviderType provider) async {
+    await _service.setProvider(provider);
+    state = state.copyWith(
+      provider: provider,
+      hasApiKey: _service.hasApiKey,
+      model: _service.model,
+    );
   }
 
-  Future<void> clearApiKey() async {
-    await _api.clearApiKey();
-    state = state.copyWith(hasApiKey: false);
+  Future<void> setApiKey(LlmProviderType provider, String key) async {
+    await _service.setApiKey(provider, key);
+    state = state.copyWith(hasApiKey: _service.hasApiKey);
+  }
+
+  Future<void> clearApiKey(LlmProviderType provider) async {
+    await _service.clearApiKey(provider);
+    state = state.copyWith(hasApiKey: _service.hasApiKey);
   }
 
   Future<void> setModel(String model) async {
-    await _api.setModel(model);
+    await _service.setModel(model);
     state = state.copyWith(model: model);
   }
 
-  /// Generate a tile via Claude.
-  Future<ClaudeResponse> generateTile({
+  Future<void> setOllamaUrl(String url) async {
+    await _service.setOllamaUrl(url);
+  }
+
+  /// Generate a tile.
+  Future<LlmResponse> generateTile({
     required String systemPrompt,
     required String userPrompt,
   }) async {
     state = state.copyWith(isGenerating: true);
     try {
-      final resp = await _api.generateTile(
+      final resp = await _service.generate(
         systemPrompt: systemPrompt,
         userPrompt: userPrompt,
       );
@@ -78,18 +96,18 @@ class ClaudeNotifier extends StateNotifier<ClaudeState> {
       return resp;
     } catch (e) {
       state = state.copyWith(isGenerating: false);
-      return ClaudeResponse.error('$e');
+      return LlmResponse.error('$e');
     }
   }
 
   /// Chat with the AI expert.
-  Future<ClaudeResponse> chat({
+  Future<LlmResponse> chat({
     required String systemPrompt,
-    required List<ClaudeMessage> messages,
+    required List<LlmMessage> messages,
   }) async {
     state = state.copyWith(isGenerating: true);
     try {
-      final resp = await _api.chat(
+      final resp = await _service.chat(
         systemPrompt: systemPrompt,
         messages: messages,
       );
@@ -100,11 +118,12 @@ class ClaudeNotifier extends StateNotifier<ClaudeState> {
       return resp;
     } catch (e) {
       state = state.copyWith(isGenerating: false);
-      return ClaudeResponse.error('$e');
+      return LlmResponse.error('$e');
     }
   }
 }
 
-final claudeProvider = StateNotifierProvider<ClaudeNotifier, ClaudeState>(
-  (ref) => ClaudeNotifier(),
+/// Backwards-compatible provider name — used everywhere in the app.
+final claudeProvider = StateNotifierProvider<LlmNotifier, LlmState>(
+  (ref) => LlmNotifier(),
 );

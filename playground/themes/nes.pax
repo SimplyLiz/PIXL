@@ -1,0 +1,45 @@
+[pax]
+version = "2.0"
+name    = "nes"
+theme   = "nes"
+
+[theme.nes]
+palette          = "nes"
+scale            = 4
+canvas           = 8
+max_palette_size = 4
+
+[theme.nes.roles]
+void   = "."
+bg     = "#"
+fg     = "+"
+accent = "w"
+
+[theme.nes.constraints]
+max_colors_per_tile = 4
+
+[palette.nes]
+"." = "#000000"
+"#" = "#7c3f00"
+"+" = "#bcbcbc"
+"w" = "#fcfcfc"
+
+[stamp.brick_nes_4x4]
+palette = "nes"
+size    = "4x4"
+grid = '''
+.#.#
+#++#
+.#.#
+#++#
+'''
+
+[stamp.block_nes_4x4]
+palette = "nes"
+size    = "4x4"
+grid = '''
+w+++
+++++
+++++
++++.
+'''

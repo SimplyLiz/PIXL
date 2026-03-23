@@ -1,0 +1,55 @@
+[pax]
+version = "2.0"
+name    = "gameboy"
+theme   = "gameboy"
+
+[theme.gameboy]
+palette          = "gb"
+scale            = 4
+canvas           = 8
+max_palette_size = 4
+
+[theme.gameboy.roles]
+void   = "."
+bg     = "1"
+fg     = "2"
+accent = "3"
+
+[theme.gameboy.constraints]
+max_colors_per_tile = 4
+
+[palette.gb]
+"." = "#0f380f"
+"1" = "#306230"
+"2" = "#8bac0f"
+"3" = "#9bbc0f"
+
+[palette_swap.pocket]
+base    = "gb"
+partial = true
+map     = { "." = "#000000", "1" = "#545454", "2" = "#a8a8a8", "3" = "#ffffff" }
+
+[palette_swap.dmg]
+base    = "gb"
+partial = true
+map     = { "." = "#1b1b0e", "1" = "#3a3a26", "2" = "#8b8b56", "3" = "#c4c48e" }
+
+[stamp.brick_gb_4x4]
+palette = "gb"
+size    = "4x4"
+grid = '''
+.1.1
+1221
+.1.1
+1221
+'''
+
+[stamp.dot_gb_4x4]
+palette = "gb"
+size    = "4x4"
+grid = '''
+2232
+2222
+2322
+2222
+'''

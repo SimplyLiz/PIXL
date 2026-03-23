@@ -1,0 +1,77 @@
+[pax]
+version = "2.0"
+name    = "sci_fi"
+theme   = "sci_fi"
+
+[theme.sci_fi]
+palette          = "neon"
+scale            = 2
+canvas           = 16
+max_palette_size = 12
+light_source     = "top"
+
+[theme.sci_fi.roles]
+void   = "."
+bg     = "#"
+fg     = "+"
+accent = "c"
+danger = "r"
+shadow = "s"
+life   = "g"
+hi     = "h"
+
+[theme.sci_fi.constraints]
+fg_brighter_than_bg         = true
+shadow_darker_than_bg       = true
+max_colors_per_tile         = 12
+
+[palette.neon]
+"." = "#00000000"
+"#" = "#1a1a2e"
+"+" = "#2a2a4e"
+"s" = "#0a0a1e"
+"c" = "#00d4ff"
+"g" = "#00ff88"
+"r" = "#ff2244"
+"h" = "#4a4a6e"
+"w" = "#e0e0f0"
+
+[stamp.panel_4x4]
+palette = "neon"
+size    = "4x4"
+grid = '''
+cccc
+c++c
+c++c
+cccc
+'''
+
+[stamp.circuit_4x4]
+palette = "neon"
+size    = "4x4"
+grid = '''
++c++
+cccc
+++c+
++c++
+'''
+
+[stamp.vent_4x4]
+palette = "neon"
+size    = "4x4"
+grid = '''
+####
++##s
++##s
+####
+'''
+
+[stamp.glow_4x4]
+palette = "neon"
+size    = "4x4"
+grid = '''
+.cc.
+c++c
+c++c
+.cc.
+'''

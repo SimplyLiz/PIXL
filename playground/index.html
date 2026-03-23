@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PIXL Playground</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  background: #0d0b14;
+  color: #c8c0e0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+header {
+  padding: 12px 20px;
+  background: #13111e;
+  border-bottom: 1px solid #2a2438;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+header h1 {
+  font-size: 14px;
+  color: #c8a035;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+header .status {
+  font-size: 11px;
+  color: #5a4a7a;
+}
+header .status.ok { color: #5ac84a; }
+.main {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+.editor-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #2a2438;
+}
+.editor-pane .toolbar {
+  padding: 8px 12px;
+  background: #13111e;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 11px;
+}
+.editor-pane textarea {
+  flex: 1;
+  background: #0a0818;
+  color: #c8c0e0;
+  border: none;
+  padding: 12px;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: none;
+  tab-size: 2;
+}
+.editor-pane textarea:focus { outline: none; }
+.preview-pane {
+  width: 400px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.preview-pane .toolbar {
+  padding: 8px 12px;
+  background: #13111e;
+  font-size: 11px;
+  border-bottom: 1px solid #2a2438;
+}
+.tile-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+}
+.tile-card {
+  background: #13111e;
+  border: 1px solid #2a2438;
+  border-radius: 6px;
+  padding: 8px;
+  text-align: center;
+}
+.tile-card img {
+  image-rendering: pixelated;
+  width: 128px;
+  height: 128px;
+}
+.tile-card .name {
+  font-size: 10px;
+  color: #7a6a9a;
+  margin-top: 4px;
+}
+.tile-card .edges {
+  font-size: 9px;
+  color: #5a4a7a;
+}
+.validation {
+  padding: 12px;
+  font-size: 11px;
+  border-top: 1px solid #2a2438;
+}
+.validation .error { color: #c84a4a; }
+.validation .ok { color: #5ac84a; }
+.validation .warn { color: #c8a035; }
+button {
+  background: #2a1f3d;
+  color: #c8c0e0;
+  border: 1px solid #4a3a6d;
+  border-radius: 4px;
+  padding: 4px 12px;
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+button:hover { background: #3a2f4d; }
+button.primary { background: #4a3a6d; border-color: #6a5a9d; }
+select {
+  background: #1a1828;
+  color: #c8c0e0;
+  border: 1px solid #2a2438;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-family: inherit;
+  font-size: 11px;
+}
+footer {
+  padding: 6px 20px;
+  background: #13111e;
+  border-top: 1px solid #2a2438;
+  font-size: 10px;
+  color: #5a4a7a;
+  display: flex;
+  justify-content: space-between;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>PIXL Playground</h1>
+  <span class="status" id="status">loading wasm...</span>
+  <button class="primary" id="btn-render" disabled>Render All</button>
+  <button id="btn-validate">Validate</button>
+  <select id="theme-select">
+    <option value="">Load theme...</option>
+    <option value="dark_fantasy">Dark Fantasy</option>
+    <option value="light_fantasy">Light Fantasy</option>
+    <option value="sci_fi">Sci-Fi</option>
+    <option value="nature">Nature</option>
+    <option value="gameboy">Game Boy</option>
+    <option value="nes">NES</option>
+  </select>
+</header>
+
+<div class="main">
+  <div class="editor-pane">
+    <div class="toolbar">
+      <span>PAX Source</span>
+    </div>
+    <textarea id="editor" spellcheck="false"></textarea>
+  </div>
+  <div class="preview-pane">
+    <div class="toolbar">Preview</div>
+    <div class="tile-grid" id="tile-grid"></div>
+    <div class="validation" id="validation"></div>
+  </div>
+</div>
+
+<footer>
+  <span id="info">PIXL v0.1.0 — WASM Playground</span>
+  <span id="wasm-size"></span>
+</footer>
+
+<script type="module">
+import init, {
+  load_pax, validate, list_tiles, render_tile,
+  get_palette, classify_edges, blueprint, extract_style
+} from './pkg/pixl_wasm.js';
+
+const editor = document.getElementById('editor');
+const tileGrid = document.getElementById('tile-grid');
+const validationDiv = document.getElementById('validation');
+const statusEl = document.getElementById('status');
+const btnRender = document.getElementById('btn-render');
+const btnValidate = document.getElementById('btn-validate');
+const themeSelect = document.getElementById('theme-select');
+
+// Built-in themes (embedded)
+const THEMES = {};
+
+async function loadThemes() {
+  for (const name of ['dark_fantasy', 'light_fantasy', 'sci_fi', 'nature', 'gameboy', 'nes']) {
+    try {
+      const resp = await fetch(`themes/${name}.pax`);
+      if (resp.ok) THEMES[name] = await resp.text();
+    } catch (e) {}
+  }
+}
+
+async function start() {
+  await init();
+  await loadThemes();
+
+  statusEl.textContent = 'ready';
+  statusEl.className = 'status ok';
+  btnRender.disabled = false;
+
+  // Load default example
+  if (THEMES.dark_fantasy) {
+    editor.value = THEMES.dark_fantasy;
+    doLoad();
+  }
+}
+
+function doLoad() {
+  try {
+    const result = load_pax(editor.value);
+    statusEl.textContent = `loaded: ${result.tiles} tiles, ${result.themes} themes`;
+    statusEl.className = 'status ok';
+    renderAll();
+  } catch (e) {
+    statusEl.textContent = `error: ${e}`;
+    statusEl.className = 'status';
+    validationDiv.innerHTML = `<div class="error">${e}</div>`;
+  }
+}
+
+function renderAll() {
+  tileGrid.innerHTML = '';
+  try {
+    const tiles = list_tiles();
+    for (const name of tiles) {
+      try {
+        const b64 = render_tile(name, 8);
+        const card = document.createElement('div');
+        card.className = 'tile-card';
+        card.innerHTML = `
+          <img src="data:image/png;base64,${b64}" alt="${name}">
+          <div class="name">${name}</div>
+        `;
+        tileGrid.appendChild(card);
+      } catch (e) {
+        const card = document.createElement('div');
+        card.className = 'tile-card';
+        card.innerHTML = `<div class="name" style="color:#c84a4a">${name}: ${e}</div>`;
+        tileGrid.appendChild(card);
+      }
+    }
+  } catch (e) {
+    tileGrid.innerHTML = `<div class="error">${e}</div>`;
+  }
+}
+
+function doValidate() {
+  try {
+    load_pax(editor.value);
+    const result = validate(true);
+    let html = '';
+    if (result.errors.length === 0) {
+      html = `<div class="ok">✓ Valid — ${result.stats.tiles} tiles, ${result.stats.stamps} stamps</div>`;
+    }
+    for (const e of result.errors) {
+      html += `<div class="error">✗ ${e}</div>`;
+    }
+    for (const w of result.warnings) {
+      html += `<div class="warn">⚠ ${w}</div>`;
+    }
+    validationDiv.innerHTML = html;
+  } catch (e) {
+    validationDiv.innerHTML = `<div class="error">${e}</div>`;
+  }
+}
+
+btnRender.addEventListener('click', () => { doLoad(); });
+btnValidate.addEventListener('click', () => { doValidate(); });
+
+themeSelect.addEventListener('change', () => {
+  const name = themeSelect.value;
+  if (THEMES[name]) {
+    editor.value = THEMES[name];
+    doLoad();
+  }
+  themeSelect.value = '';
+});
+
+// Auto-render on ctrl+enter
+editor.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    doLoad();
+  }
+});
+
+start();
+</script>
+</body>
+</html>
