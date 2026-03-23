@@ -26,12 +26,10 @@ def main():
     from mlx_lm import load, generate
 
     print(f"Loading model: {MODEL}")
-    print(f"Adapter: {ADAPTER_PATH}")
+    adapter = ADAPTER_PATH if os.path.exists(ADAPTER_PATH) else None
+    print(f"Adapter: {adapter}")
 
-    model, tokenizer = load(
-        MODEL,
-        adapter_path=ADAPTER_PATH if os.path.exists(ADAPTER_PATH) else None,
-    )
+    model, tokenizer = load(MODEL, adapter_path=adapter)
 
     for prompt in TEST_PROMPTS:
         print(f"\n{'='*60}")
@@ -52,7 +50,7 @@ def main():
             tokenizer,
             prompt=formatted,
             max_tokens=512,
-            temp=0.3,
+            verbose=False,
         )
 
         print(response)

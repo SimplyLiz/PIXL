@@ -1314,6 +1314,103 @@ WFC contradiction rate with semantic constraints on sparse tilesets (<15 tiles
 fewer `forbids` rules, sparse constraint zones. WFC with strong constraints on
 small tilesets is NP-hard in the general case.
 
+## 21. Tile Design Guide — Edge Rules for Seamless Tiling
+
+Tiles must be designed so that adjacent tiles blend visually at their shared
+edge. The single most important rule: **the 1px border of every tile must use a
+consistent character for each terrain type.**
+
+### Edge character conventions
+
+| Terrain type | Border character | Palette role | Why |
+|---|---|---|---|
+| Wall / obstacle | `#` (bg, dark) | darkest stone | Wall-to-wall: dark meets dark = invisible seam |
+| Floor / walkable | `+` (fg, mortar) | mid-tone | Floor-to-floor: mortar meets mortar = subtle grid |
+| Water / hazard | `+` (fg) | matches floor border | Clean shore transition |
+
+### Wall tile rules
+
+Wall tiles (e.g. `wall_solid`) use `#` at all 4 edge rows/columns. The brick
+or stone pattern is inset by 1px:
+
+```
+################
+##++##++##++####     ← bricks live inside the # border
+#++#+++#+++#++##
+################
+...
+################     ← bottom edge also all #
+```
+
+This gives `edge_class = { n = "solid_#", e = "solid_#", ... }`. Adjacent wall
+tiles share the same edge class and the dark border pixels merge into a
+continuous wall mass.
+
+### Floor tile rules
+
+Floor tiles use `+` at all 4 edges. Interior detail (shadow dots, moss,
+cracks) stays 1px away from the border:
+
+```
+++++++++++++++++
+++++++++++++++++
+++s+++s+++s+++s+     ← detail inset by 2px
+...
+++++++++++++++++
+```
+
+### Transition tile rules
+
+Tiles that bridge wall and floor have different edge classes per direction:
+
+- **wall_top**: `n = "solid_#"` (connects to wall above), `s = "solid_#"` or
+  `"solid_+"` (connects to floor or wall below)
+- **wall_left / wall_right**: `#` on wall side, `+` on floor side
+- **Corners**: `#` on wall-facing edges, `+` on floor-facing edges
+
+### Using auto_rotate
+
+Instead of hand-authoring `corner_nw`, `corner_ne`, `corner_sw`, `corner_se`,
+author one corner tile and set `auto_rotate = "4way"`. PIXL generates all 4
+rotations automatically with correct edge classes:
+
+```toml
+[tile.corner]
+auto_rotate = "4way"
+edge_class = { n = "solid_#", e = "solid_+", s = "solid_+", w = "solid_#" }
+```
+
+### Minimum dungeon tileset (12 authored tiles)
+
+| Tile | Edges (N/E/S/W) | Affordance |
+|---|---|---|
+| wall_solid | #/#/#/# | obstacle |
+| wall_top | #/+/+/+ or #/#/#/# | obstacle |
+| wall_base | #/+/+/+ | obstacle |
+| wall_left | +/+/+/# | obstacle |
+| wall_right | +/#/+/+ | obstacle |
+| corner (auto_rotate=4way) | #/+/+/# | obstacle |
+| floor_stone | +/+/+/+ | walkable |
+| floor_moss | +/+/+/+ | walkable |
+| door | #/+/+/+ | portal |
+| stairs_down | +/+/+/+ | portal |
+| chest | +/+/+/+ | interactive |
+| water | +/+/+/+ | hazard |
+
+With `auto_rotate` on the corner, this produces 15 effective tiles.
+
+### Common mistakes
+
+1. **Bright borders on wall tiles.** Creates visible grid lines between
+   adjacent walls. Use `#` (dark), not `+` (bright).
+
+2. **Not re-running `pixl check --fix` after editing grids.** Edge classes
+   become stale. Always re-run after changing tile content.
+
+3. **50/50 character edges.** Edges with exactly equal character counts (e.g.
+   `##++##++##++##++`) produce hash-based edge classes that match nothing.
+   Design edges with a clear majority character.
+
 ---
 
 *PAX 2.0 - End of specification*
