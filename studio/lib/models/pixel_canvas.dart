@@ -44,27 +44,30 @@ class PixelLayer {
     this.visible = true,
   }) : pixels = List.filled(width * height, null);
 
+  PixelLayer._fromPixels({
+    required this.name,
+    required List<Color?> source,
+    this.visible = true,
+  }) : pixels = List<Color?>.from(source);
+
   final String name;
   final List<Color?> pixels;
   bool visible;
 
   PixelLayer copyWith({String? name, bool? visible}) {
-    final copy = PixelLayer(
+    return PixelLayer._fromPixels(
       name: name ?? this.name,
-      width: 0, // unused, we copy pixels directly
-      height: 0,
+      source: pixels,
       visible: visible ?? this.visible,
     );
-    copy.pixels.clear();
-    copy.pixels.addAll(pixels);
-    return copy;
   }
 
   PixelLayer deepCopy() {
-    final copy = PixelLayer(name: name, width: 0, height: 0, visible: visible);
-    copy.pixels.clear();
-    copy.pixels.addAll(pixels);
-    return copy;
+    return PixelLayer._fromPixels(
+      name: name,
+      source: pixels,
+      visible: visible,
+    );
   }
 }
 

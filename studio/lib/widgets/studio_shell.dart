@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/backend_provider.dart';
 import '../providers/claude_provider.dart';
 import 'canvas/canvas_viewport.dart';
+import 'canvas/variant_strip.dart';
 import 'panels/chat_panel.dart';
 import 'panels/tools_panel.dart';
 import 'status_bar.dart';
@@ -28,12 +29,9 @@ class _StudioShellState extends ConsumerState<StudioShell> {
     });
   }
 
-  @override
-  void deactivate() {
-    // Use deactivate instead of dispose — ref is still valid here
-    ref.read(backendProvider.notifier).disconnect();
-    super.deactivate();
-  }
+  // Backend cleanup is handled by BackendNotifier.dispose() when the
+  // ProviderScope is torn down — no need to disconnect in deactivate/dispose
+  // here, which would fire too eagerly on dialog navigation.
 
   @override
   Widget build(BuildContext context) {
@@ -45,7 +43,14 @@ class _StudioShellState extends ConsumerState<StudioShell> {
             child: Row(
               children: [
                 ChatPanel(),
-                Expanded(child: CanvasViewport()),
+                Expanded(
+                  child: Column(
+                    children: [
+                      Expanded(child: CanvasViewport()),
+                      VariantStrip(),
+                    ],
+                  ),
+                ),
                 ToolsPanel(),
               ],
             ),

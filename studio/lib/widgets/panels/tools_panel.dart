@@ -185,7 +185,11 @@ class _PaletteSection extends ConsumerWidget {
               tooltip: 'Switch palette',
               iconSize: 16,
               icon: const Icon(Icons.palette, size: 14),
-              onSelected: (name) => ref.read(paletteProvider.notifier).selectBuiltIn(name),
+              onSelected: (name) {
+                ref.read(paletteProvider.notifier).selectBuiltIn(name);
+                final newPalette = ref.read(paletteProvider);
+                ref.read(canvasProvider.notifier).clampColorIndices(newPalette.length);
+              },
               itemBuilder: (_) => BuiltInPalettes.all
                   .map((p) => PopupMenuItem(value: p.name, child: Text(p.name, style: const TextStyle(fontSize: 12))))
                   .toList(),

@@ -33,9 +33,12 @@ class BackendState {
 
   bool get isConnected => status == BackendStatus.connected;
 
+  /// Copy with new values. Pass [clearError] = true to explicitly clear
+  /// errorMessage; otherwise it is preserved from the current state.
   BackendState copyWith({
     BackendStatus? status,
     String? errorMessage,
+    bool clearError = false,
     String? sessionTheme,
     String? sessionPalette,
     List<TileInfo>? tiles,
@@ -43,7 +46,7 @@ class BackendState {
   }) {
     return BackendState(
       status: status ?? this.status,
-      errorMessage: errorMessage,
+      errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       sessionTheme: sessionTheme ?? this.sessionTheme,
       sessionPalette: sessionPalette ?? this.sessionPalette,
       tiles: tiles ?? this.tiles,
@@ -115,9 +118,15 @@ class BackendNotifier extends StateNotifier<BackendState> {
 
   PixlBackend get backend => _backend;
 
+  @override
+  void dispose() {
+    _backend.stop();
+    super.dispose();
+  }
+
   /// Start the backend server and initialize session.
   Future<void> connect({String? paxFile}) async {
-    state = state.copyWith(status: BackendStatus.connecting);
+    state = state.copyWith(status: BackendStatus.connecting, clearError: true);
 
     final started = await _backend.start(paxFile: paxFile);
     if (!started) {
@@ -145,6 +154,7 @@ class BackendNotifier extends StateNotifier<BackendState> {
 
       state = state.copyWith(
         status: BackendStatus.connected,
+        clearError: true,
         sessionTheme: session['theme'] as String?,
         sessionPalette: session['palette'] as String?,
       );

@@ -44,6 +44,10 @@ class CanvasNotifier extends StateNotifier<CanvasState> {
   }
 
   void _restoreSnapshot(CanvasSnapshot snapshot) {
+    // Guard against layer count mismatch (e.g. canvas resize between pushes).
+    if (snapshot.layerPixels.length != state.layers.length) {
+      return;
+    }
     final newLayers = <PixelLayer>[];
     for (var i = 0; i < state.layers.length; i++) {
       final layer = state.layers[i].deepCopy();
@@ -58,16 +62,6 @@ class CanvasNotifier extends StateNotifier<CanvasState> {
   bool get canRedo => _redoStack.isNotEmpty;
 
   // -- Drawing --
-
-  void drawPixel(int x, int y, Color? color) {
-    if (x < 0 || x >= state.width || y < 0 || y >= state.height) return;
-    final layer = state.activeLayer;
-    if (!layer.visible) return;
-
-    _pushSnapshot();
-    _setPixelWithSymmetry(x, y, color);
-    state = state.copyWith(layers: List.from(state.layers));
-  }
 
   void _setPixelWithSymmetry(int x, int y, Color? color) {
     final layer = state.activeLayer;
@@ -117,7 +111,7 @@ class CanvasNotifier extends StateNotifier<CanvasState> {
     _inStroke = false;
   }
 
-  /// Flood fill from (x, y) with [fillColor].
+  /// Flood fill from (x, y) with [fillColor]. Respects symmetry mode.
   void bucketFill(int x, int y, Color? fillColor) {
     if (x < 0 || x >= state.width || y < 0 || y >= state.height) return;
     final layer = state.activeLayer;
@@ -125,29 +119,50 @@ class CanvasNotifier extends StateNotifier<CanvasState> {
 
     final w = state.width;
     final h = state.height;
-    final targetColor = layer.pixels[y * w + x];
-
-    if (targetColor == fillColor) return;
 
     _pushSnapshot();
 
-    final stack = <(int, int)>[(x, y)];
-    final visited = <int>{};
+    // Fill at the clicked point and all symmetry mirrors.
+    final origins = <(int, int)>[(x, y)];
+    switch (state.symmetryMode) {
+      case SymmetryMode.horizontal:
+        origins.add((w - 1 - x, y));
+        break;
+      case SymmetryMode.vertical:
+        origins.add((x, h - 1 - y));
+        break;
+      case SymmetryMode.both:
+        origins.add((w - 1 - x, y));
+        origins.add((x, h - 1 - y));
+        origins.add((w - 1 - x, h - 1 - y));
+        break;
+      case SymmetryMode.none:
+        break;
+    }
 
-    while (stack.isNotEmpty) {
-      final (cx, cy) = stack.removeLast();
-      final idx = cy * w + cx;
-      if (visited.contains(idx)) continue;
-      if (cx < 0 || cx >= w || cy < 0 || cy >= h) continue;
-      if (layer.pixels[idx] != targetColor) continue;
+    for (final (ox, oy) in origins) {
+      if (ox < 0 || ox >= w || oy < 0 || oy >= h) continue;
+      final targetColor = layer.pixels[oy * w + ox];
+      if (targetColor == fillColor) continue;
 
-      visited.add(idx);
-      layer.pixels[idx] = fillColor;
+      final stack = <(int, int)>[(ox, oy)];
+      final visited = <int>{};
 
-      stack.add((cx + 1, cy));
-      stack.add((cx - 1, cy));
-      stack.add((cx, cy + 1));
-      stack.add((cx, cy - 1));
+      while (stack.isNotEmpty) {
+        final (cx, cy) = stack.removeLast();
+        final idx = cy * w + cx;
+        if (visited.contains(idx)) continue;
+        if (cx < 0 || cx >= w || cy < 0 || cy >= h) continue;
+        if (layer.pixels[idx] != targetColor) continue;
+
+        visited.add(idx);
+        layer.pixels[idx] = fillColor;
+
+        stack.add((cx + 1, cy));
+        stack.add((cx - 1, cy));
+        stack.add((cx, cy + 1));
+        stack.add((cx, cy - 1));
+      }
     }
 
     state = state.copyWith(layers: List.from(state.layers));
@@ -205,6 +220,18 @@ class CanvasNotifier extends StateNotifier<CanvasState> {
 
   void setBackgroundColor(int index) {
     state = state.copyWith(backgroundColorIndex: index);
+  }
+
+  /// Clamp color indices to [maxIndex]. Call when palette changes.
+  void clampColorIndices(int maxIndex) {
+    final lastValid = maxIndex - 1;
+    if (state.foregroundColorIndex > lastValid ||
+        state.backgroundColorIndex > lastValid) {
+      state = state.copyWith(
+        foregroundColorIndex: state.foregroundColorIndex.clamp(0, lastValid),
+        backgroundColorIndex: state.backgroundColorIndex.clamp(0, lastValid),
+      );
+    }
   }
 
   void setCanvasSize(CanvasSize size) {

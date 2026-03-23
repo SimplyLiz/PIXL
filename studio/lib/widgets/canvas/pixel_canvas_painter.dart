@@ -93,5 +93,8 @@ class PixelCanvasPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(PixelCanvasPainter oldDelegate) => true;
+  bool shouldRepaint(PixelCanvasPainter oldDelegate) =>
+      !identical(canvasState, oldDelegate.canvasState) ||
+      pixelSize != oldDelegate.pixelSize ||
+      hoverPixel != oldDelegate.hoverPixel;
 }

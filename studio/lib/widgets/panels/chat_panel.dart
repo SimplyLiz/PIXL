@@ -10,6 +10,7 @@ import '../../providers/chat_provider.dart';
 import '../../providers/claude_provider.dart';
 import '../../services/claude_api.dart';
 import '../../theme/studio_theme.dart';
+import '../../utils/grid_parser.dart';
 
 /// Left panel — AI expert chat with Claude generation pipeline.
 ///
@@ -101,7 +102,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     }
 
     // Step 2: Get enriched context from backend
-    chat.addAssistantMessage('Getting generation context...');
+    chat.addAssistantMessage('Getting generation context...', isStatus: true);
     _scrollToBottom();
 
     final ctx = await ref.read(backendProvider.notifier).getGenerationContext(
@@ -122,6 +123,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     chat.addAssistantMessage(
       'Generating $sizeStr tile with **${claude.model.split('-').take(2).join(' ')}**...'
       '${themeName.isNotEmpty ? ' (theme: $themeName)' : ''}',
+      isStatus: true,
     );
     _scrollToBottom();
 
@@ -136,7 +138,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     }
 
     // Step 4: Extract PAX grid from response
-    final grid = _extractGrid(resp.content);
+    final grid = extractGrid(resp.content);
     if (grid == null) {
       chat.addAssistantMessage(
         'Claude responded but I couldn\'t extract a valid grid.\n\n'
@@ -147,7 +149,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     }
 
     // Step 5: Create tile via backend → validate + render
-    final tileName = _generateTileName(prompt);
+    final tileName = generateTileName(prompt);
     final createResp = await ref.read(backendProvider.notifier).createTile(
       name: tileName,
       palette: ctx['palette'] as String? ?? 'default',
@@ -245,7 +247,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
         chat.addAssistantMessage('Engine not connected.');
         return;
       }
-      chat.addAssistantMessage('Running validation...');
+      chat.addAssistantMessage('Running validation...', isStatus: true);
       _scrollToBottom();
       final report = await ref.read(backendProvider.notifier).validate(checkEdges: true);
       if (report.valid) {
@@ -311,8 +313,9 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
           'palette design, tiling, and the PAX format.';
 
       // Build message history from chat
+      // Filter out status messages — they waste tokens in Claude's context.
       final messages = ref.read(chatProvider)
-          .where((m) => m.role == 'user' || m.role == 'assistant')
+          .where((m) => !m.isStatus && (m.role == 'user' || m.role == 'assistant'))
           .map((m) => ClaudeMessage(role: m.role, content: m.content))
           .toList();
 
@@ -344,60 +347,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     }
   }
 
-  // ── Helpers ──────────────────────────────────────────────
-
-  /// Extract a grid block from Claude's response.
-  /// Looks for content between ``` markers or a raw grid block.
-  String? _extractGrid(String response) {
-    // Try to find a code block
-    final codeBlockRegex = RegExp(r'```(?:\w*\n)?([\s\S]*?)```');
-    final match = codeBlockRegex.firstMatch(response);
-    if (match != null) {
-      final block = match.group(1)!.trim();
-      // Verify it looks like a grid (lines of similar length with symbols)
-      final lines = block.split('\n').where((l) => l.trim().isNotEmpty).toList();
-      if (lines.length >= 4 && lines.every((l) => l.length >= 4)) {
-        return block;
-      }
-    }
-
-    // Try to find raw grid lines (consecutive lines of similar-length symbol chars)
-    final lines = response.split('\n');
-    final gridLines = <String>[];
-    for (final line in lines) {
-      final trimmed = line.trim();
-      if (trimmed.isNotEmpty &&
-          trimmed.length >= 4 &&
-          !trimmed.startsWith('*') &&
-          !trimmed.startsWith('#') &&
-          !trimmed.startsWith('-') &&
-          !trimmed.contains(' ')) {
-        gridLines.add(trimmed);
-      } else if (gridLines.isNotEmpty) {
-        break; // End of grid block
-      }
-    }
-    if (gridLines.length >= 4) {
-      return gridLines.join('\n');
-    }
-
-    return null;
-  }
-
-  /// Generate a tile name from the prompt.
-  String _generateTileName(String prompt) {
-    final words = prompt.toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9\s]'), '')
-        .split(RegExp(r'\s+'))
-        .where((w) => !{'generate', 'create', 'make', 'draw', 'me', 'a', 'an', 'the', 'tile', 'pixel'}.contains(w))
-        .take(3)
-        .toList();
-    if (words.isEmpty) words.add('tile');
-    final name = words.join('_');
-    // Add timestamp suffix to avoid collisions
-    final suffix = DateTime.now().millisecondsSinceEpoch % 10000;
-    return '${name}_$suffix';
-  }
+  // Helpers moved to lib/utils/grid_parser.dart
 
   @override
   void dispose() {
@@ -446,7 +396,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
                     setState(() {
                       _pendingTileName = null;
                       _pendingPreviewB64 = null;
-                
+                      _lastGenerationPrompt = null;
                     });
                   },
                   tooltip: 'Clear chat',

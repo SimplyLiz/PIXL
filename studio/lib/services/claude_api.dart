@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -10,8 +11,11 @@ class ClaudeApi {
 
   static const _apiUrl = 'https://api.anthropic.com/v1/messages';
   static const _apiVersion = '2023-06-01';
-  static const _prefKeyApiKey = 'anthropic_api_key';
+  static const _secureKeyApiKey = 'anthropic_api_key';
   static const _prefKeyModel = 'claude_model';
+  static const _timeout = Duration(seconds: 120);
+
+  final _secureStorage = const FlutterSecureStorage();
 
   String? _apiKey;
   String _model = 'claude-sonnet-4-20250514';
@@ -19,18 +23,17 @@ class ClaudeApi {
   String get model => _model;
   bool get hasApiKey => _apiKey != null && _apiKey!.isNotEmpty;
 
-  /// Load API key and model preference from SharedPreferences.
+  /// Load API key from secure storage and model from SharedPreferences.
   Future<void> init() async {
+    _apiKey = await _secureStorage.read(key: _secureKeyApiKey);
     final prefs = await SharedPreferences.getInstance();
-    _apiKey = prefs.getString(_prefKeyApiKey);
     _model = prefs.getString(_prefKeyModel) ?? _model;
   }
 
-  /// Save API key.
+  /// Save API key to OS keychain via flutter_secure_storage.
   Future<void> setApiKey(String key) async {
     _apiKey = key;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_prefKeyApiKey, key);
+    await _secureStorage.write(key: _secureKeyApiKey, value: key);
   }
 
   /// Save model preference.
@@ -43,8 +46,7 @@ class ClaudeApi {
   /// Clear stored API key.
   Future<void> clearApiKey() async {
     _apiKey = null;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_prefKeyApiKey);
+    await _secureStorage.delete(key: _secureKeyApiKey);
   }
 
   /// Send a message to Claude and return the full response.
@@ -77,7 +79,9 @@ class ClaudeApi {
           'anthropic-version': _apiVersion,
         },
         body: body,
-      );
+      ).timeout(_timeout, onTimeout: () {
+        throw TimeoutException('Claude API request timed out after ${_timeout.inSeconds}s');
+      });
 
       if (resp.statusCode != 200) {
         final errBody = jsonDecode(resp.body) as Map<String, dynamic>;

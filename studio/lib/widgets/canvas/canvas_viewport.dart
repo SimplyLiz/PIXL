@@ -24,6 +24,8 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
   // Centering offset — updated each build from LayoutBuilder constraints.
   double _centerX = 0;
   double _centerY = 0;
+  // Space key held = pan mode (overrides drawing).
+  bool _spaceHeld = false;
 
   (int, int)? _pixelFromLocal(Offset localPos, CanvasState cs) {
     final ps = cs.zoomLevel;
@@ -139,6 +141,15 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
         return Focus(
           autofocus: true,
           onKeyEvent: (node, event) {
+            // Track space for pan mode
+            if (event.logicalKey == LogicalKeyboardKey.space) {
+              final isDown = event is KeyDownEvent || event is KeyRepeatEvent;
+              if (_spaceHeld != isDown) {
+                setState(() => _spaceHeld = isDown);
+              }
+              return KeyEventResult.handled;
+            }
+
             if (event is! KeyDownEvent) return KeyEventResult.ignored;
             final notifier = ref.read(canvasProvider.notifier);
             final meta = HardwareKeyboard.instance.isMetaPressed;
@@ -174,37 +185,39 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
           child: Listener(
             onPointerSignal: (event) => _handleScroll(event, cs),
             child: MouseRegion(
-              cursor: _cursorForTool(cs.activeTool),
+              cursor: _spaceHeld ? SystemMouseCursors.grab : _cursorForTool(cs.activeTool),
               onHover: (event) => _handlePointerHover(event, cs),
               onExit: (_) => setState(() => _hoverPixel = null),
-              child: GestureDetector(
-                onPanUpdate: (details) {
-                  setState(() {
-                    _panOffset += details.delta;
-                  });
+              child: Listener(
+                onPointerDown: _isPanMode(cs) ? null : (event) => _handlePointerDown(event, cs, palette),
+                onPointerMove: (event) {
+                  if (_isPanMode(cs) && event.buttons != 0) {
+                    // Pan mode: drag to pan
+                    setState(() {
+                      _panOffset += event.delta;
+                    });
+                  } else {
+                    _handlePointerMove(event, cs, palette);
+                  }
                 },
-                child: Listener(
-                  onPointerDown: (event) => _handlePointerDown(event, cs, palette),
-                  onPointerMove: (event) => _handlePointerMove(event, cs, palette),
-                  onPointerUp: (event) => _handlePointerUp(event),
-                  child: Container(
-                    color: const Color(0xFF121220),
-                    child: Stack(
-                      children: [
-                        Positioned(
-                          left: _centerX + _panOffset.dx,
-                          top: _centerY + _panOffset.dy,
-                          child: CustomPaint(
-                            size: Size(canvasW, canvasH),
-                            painter: PixelCanvasPainter(
-                              canvasState: cs,
-                              pixelSize: ps,
-                              hoverPixel: _hoverPixel,
-                            ),
+                onPointerUp: (event) => _handlePointerUp(event),
+                child: Container(
+                  color: const Color(0xFF121220),
+                  child: Stack(
+                    children: [
+                      Positioned(
+                        left: _centerX + _panOffset.dx,
+                        top: _centerY + _panOffset.dy,
+                        child: CustomPaint(
+                          size: Size(canvasW, canvasH),
+                          painter: PixelCanvasPainter(
+                            canvasState: cs,
+                            pixelSize: ps,
+                            hoverPixel: _hoverPixel,
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -214,6 +227,9 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
       },
     );
   }
+
+  bool _isPanMode(CanvasState cs) =>
+      _spaceHeld || cs.activeTool == DrawingTool.move;
 
   MouseCursor _cursorForTool(DrawingTool tool) {
     return switch (tool) {

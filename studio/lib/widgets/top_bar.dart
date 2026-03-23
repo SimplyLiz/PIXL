@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,6 +10,36 @@ import '../providers/claude_provider.dart';
 import '../services/export_service.dart';
 import '../theme/studio_theme.dart';
 import 'settings_dialog.dart';
+import 'tilegroup_dialog.dart';
+import 'wfc_dialog.dart';
+
+Future<void> _openPaxFile(BuildContext context, WidgetRef ref) async {
+  final messenger = ScaffoldMessenger.of(context);
+
+  final result = await FilePicker.platform.pickFiles(
+    dialogTitle: 'Open PAX File',
+    type: FileType.custom,
+    allowedExtensions: ['pax', 'pixl'],
+  );
+  if (result == null || result.files.isEmpty) return;
+
+  final path = result.files.single.path;
+  if (path == null) return;
+
+  final source = await File(path).readAsString();
+
+  final resp = await ref.read(backendProvider.notifier).loadSource(source);
+  if (resp.containsKey('error')) {
+    messenger.showSnackBar(SnackBar(
+      content: Text('Failed to load: ${resp['error']}'),
+    ));
+  } else {
+    messenger.showSnackBar(SnackBar(
+      content: Text('Loaded ${path.split('/').last}'),
+      duration: const Duration(seconds: 2),
+    ));
+  }
+}
 
 /// Top menu bar with logo, actions, and canvas controls.
 class TopBar extends ConsumerWidget {
@@ -45,7 +78,19 @@ class TopBar extends ConsumerWidget {
 
           // File actions
           _BarButton(label: 'New', icon: Icons.add, onTap: () => notifier.clearCanvas()),
+          _BarButton(label: 'Open PAX', icon: Icons.folder_open, onTap: () => _openPaxFile(context, ref)),
           _ExportMenu(),
+          const SizedBox(width: 8),
+          _BarButton(
+            label: 'Generate Tilegroup',
+            icon: Icons.grid_view,
+            onTap: () => TilegroupDialog.show(context),
+          ),
+          _BarButton(
+            label: 'WFC Map',
+            icon: Icons.auto_awesome_mosaic,
+            onTap: () => WfcDialog.show(context),
+          ),
           _BarButton(
             label: 'Settings',
             icon: Icons.settings,

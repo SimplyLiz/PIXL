@@ -259,9 +259,13 @@ class PixlBackend {
 
   // ── HTTP helpers ───────────────────────────────────────
 
+  static const _timeout = Duration(seconds: 30);
+
   Future<Map<String, dynamic>> _get(String path) async {
     try {
-      final resp = await http.get(Uri.parse('$_baseUrl$path'));
+      final resp = await http
+          .get(Uri.parse('$_baseUrl$path'))
+          .timeout(_timeout);
       return jsonDecode(resp.body) as Map<String, dynamic>;
     } catch (e) {
       return {'error': 'HTTP error: $e'};
@@ -273,11 +277,13 @@ class PixlBackend {
     Map<String, dynamic> body,
   ) async {
     try {
-      final resp = await http.post(
-        Uri.parse('$_baseUrl$path'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(body),
-      );
+      final resp = await http
+          .post(
+            Uri.parse('$_baseUrl$path'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(body),
+          )
+          .timeout(_timeout);
       return jsonDecode(resp.body) as Map<String, dynamic>;
     } catch (e) {
       return {'error': 'HTTP error: $e'};

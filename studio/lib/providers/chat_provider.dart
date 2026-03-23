@@ -6,11 +6,15 @@ class ChatMessage {
     required this.role,
     required this.content,
     this.timestamp,
+    this.isStatus = false,
   });
 
   final String role; // 'user' or 'assistant'
   final String content;
   final DateTime? timestamp;
+  /// Status messages (e.g. "Generating...") are shown in UI but excluded
+  /// from the context window sent to Claude.
+  final bool isStatus;
 }
 
 class ChatNotifier extends StateNotifier<List<ChatMessage>> {
@@ -37,13 +41,14 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
     ];
   }
 
-  void addAssistantMessage(String content) {
+  void addAssistantMessage(String content, {bool isStatus = false}) {
     state = [
       ...state,
       ChatMessage(
         role: 'assistant',
         content: content,
         timestamp: DateTime.now(),
+        isStatus: isStatus,
       ),
     ];
   }

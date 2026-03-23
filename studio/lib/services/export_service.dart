@@ -44,17 +44,21 @@ class ExportService {
 
         if (color != null) {
           final argb = color.toARGB32();
-          // Convert ARGB to ABGR for image encoding
+          // Convert ARGB → RGBA byte order for PixelFormat.rgba8888
+          // Uint32 is stored in native byte order; rgba8888 expects
+          // the 32-bit value as 0xRRGGBBAA on big-endian conceptual layout,
+          // but Uint32List on little-endian stores bytes as AA BB GG RR.
+          // So we pack as ABGR in the Uint32 to get RGBA bytes in memory.
           final a = (argb >> 24) & 0xFF;
           final r = (argb >> 16) & 0xFF;
           final g = (argb >> 8) & 0xFF;
           final b = argb & 0xFF;
-          final abgr = (a << 24) | (b << 16) | (g << 8) | r;
+          final rgba = (a << 24) | (b << 16) | (g << 8) | r;
 
           // Fill scaled block
           for (var sy = 0; sy < scale; sy++) {
             for (var sx = 0; sx < scale; sx++) {
-              pixels[(y * scale + sy) * scaledW + (x * scale + sx)] = abgr;
+              pixels[(y * scale + sy) * scaledW + (x * scale + sx)] = rgba;
             }
           }
         }
