@@ -40,6 +40,7 @@ impl Direction {
 }
 
 /// Edge class for a single tile.
+#[derive(Debug, Clone)]
 pub struct TileEdges {
     pub name: String,
     pub n: String,

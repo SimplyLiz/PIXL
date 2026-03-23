@@ -839,6 +839,17 @@ fn cmd_export(file: &PathBuf, format: &str, out_dir: &PathBuf) {
         }
     }
 
+    // Sort tiles alphabetically by name for deterministic GID assignment
+    {
+        let mut order: Vec<usize> = (0..tile_names.len()).collect();
+        order.sort_by(|&a, &b| tile_names[a].cmp(&tile_names[b]));
+        let sorted_names: Vec<String> = order.iter().map(|&i| tile_names[i].clone()).collect();
+        let sorted_grids: Vec<Vec<Vec<char>>> = order.iter().map(|&i| tile_grids[i].clone()).collect();
+        tile_names = sorted_names;
+        tile_grids = sorted_grids;
+        // collision_map is keyed by name so it doesn't need reordering
+    }
+
     if tile_names.is_empty() {
         eprintln!("error: no tiles found");
         process::exit(1);
@@ -1239,6 +1250,20 @@ fn cmd_narrate(
         } else {
             tile_grids.push(vec![vec!['.'; w as usize]; h as usize]);
         }
+    }
+
+    // Sort tiles alphabetically by name for deterministic ordering
+    {
+        let mut order: Vec<usize> = (0..tile_names_ordered.len()).collect();
+        order.sort_by(|&a, &b| tile_names_ordered[a].cmp(&tile_names_ordered[b]));
+        let sorted_names: Vec<String> = order.iter().map(|&i| tile_names_ordered[i].clone()).collect();
+        let sorted_edges: Vec<_> = order.iter().map(|&i| tile_edges[i].clone()).collect();
+        let sorted_affordances: Vec<_> = order.iter().map(|&i| tile_affordances[i].clone()).collect();
+        let sorted_grids: Vec<Vec<Vec<char>>> = order.iter().map(|&i| tile_grids[i].clone()).collect();
+        tile_names_ordered = sorted_names;
+        tile_edges = sorted_edges;
+        tile_affordances = sorted_affordances;
+        tile_grids = sorted_grids;
     }
 
     // Expand auto-rotated tiles into the pool

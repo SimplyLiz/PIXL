@@ -1,5 +1,6 @@
 pub mod blueprint;
 pub mod compose;
+pub mod corpus;
 pub mod cycle;
 pub mod edges;
 pub mod grid;
@@ -12,6 +13,7 @@ pub mod theme;
 pub mod types;
 pub mod project;
 pub mod resolve;
+pub mod skeleton;
 pub mod stampgen;
 pub mod style;
 pub mod validate;
