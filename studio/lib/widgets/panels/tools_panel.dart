@@ -818,6 +818,41 @@ class _BackendSection extends ConsumerWidget {
               ),
             ),
           ),
+        // Actionable guidance when not connected
+        if (backend.status == BackendStatus.disconnected ||
+            backend.status == BackendStatus.error)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1a1a30),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: const Color(0xFF3a3a5e)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Open a .pax file to auto-start the engine, or run manually:',
+                    style: theme.textTheme.bodySmall!.copyWith(fontSize: 9),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2a2a4e),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: SelectableText(
+                      'cd tool && cargo run -- serve --port 3742',
+                      style: theme.textTheme.bodySmall!.copyWith(fontSize: 9),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         if (backend.sessionTheme != null)
           Padding(
             padding: const EdgeInsets.only(top: 4),

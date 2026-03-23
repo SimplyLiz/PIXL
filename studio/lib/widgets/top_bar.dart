@@ -17,18 +17,54 @@ import 'wfc_dialog.dart';
 Future<void> _openPaxFile(BuildContext context, WidgetRef ref) async {
   final messenger = ScaffoldMessenger.of(context);
 
+  // Use FileType.any because .pax isn't a registered UTI on macOS —
+  // FileType.custom with allowedExtensions silently shows no files.
   final result = await FilePicker.platform.pickFiles(
     dialogTitle: 'Open PAX File',
-    type: FileType.custom,
-    allowedExtensions: ['pax', 'pixl'],
+    type: FileType.any,
   );
   if (result == null || result.files.isEmpty) return;
 
   final path = result.files.single.path;
   if (path == null) return;
 
-  final source = await File(path).readAsString();
+  if (!path.endsWith('.pax') && !path.endsWith('.pixl')) {
+    messenger.showSnackBar(const SnackBar(
+      content: Text('Please select a .pax or .pixl file'),
+    ));
+    return;
+  }
 
+  final source = await File(path).readAsString();
+  final backend = ref.read(backendProvider);
+
+  // If engine isn't connected, start it with this file
+  if (!backend.isConnected) {
+    messenger.showSnackBar(SnackBar(
+      content: Text('Starting engine with ${path.split('/').last}...'),
+      duration: const Duration(seconds: 4),
+    ));
+    await ref.read(backendProvider.notifier).connect(paxFile: path);
+
+    if (!ref.read(backendProvider).isConnected) {
+      messenger.showSnackBar(const SnackBar(
+        content: Text(
+          'Could not start engine. Make sure pixl is built:\n'
+          'cd tool && cargo build --release',
+        ),
+        duration: Duration(seconds: 6),
+      ));
+      return;
+    }
+
+    messenger.showSnackBar(SnackBar(
+      content: Text('Loaded ${path.split('/').last}'),
+      duration: const Duration(seconds: 2),
+    ));
+    return;
+  }
+
+  // Engine already running — load source into session
   final resp = await ref.read(backendProvider.notifier).loadSource(source);
   if (resp.containsKey('error')) {
     messenger.showSnackBar(SnackBar(

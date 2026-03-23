@@ -23,10 +23,13 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
           const ChatMessage(
             role: 'assistant',
             content:
-                'Welcome to PIXL Studio! I\'m your pixel art expert. '
-                'Ask me about techniques, request tile generation, '
-                'or get help with your palette and style.\n\n'
-                'Try: *"Generate a 16×16 dungeon wall tile"*',
+                'Welcome to PIXL Studio!\n\n'
+                '**To get started:**\n'
+                '1. Open a `.pax` file (top bar) — this starts the engine automatically\n'
+                '2. Add your Anthropic API key in **Settings** for AI generation\n\n'
+                'Then try: *"Generate a 16×16 dungeon wall tile"*\n\n'
+                'I can help with pixel art techniques, palette design, '
+                'tileability, and the PAX format. Press **Cmd+/** for shortcuts.',
           ),
         ]);
 
