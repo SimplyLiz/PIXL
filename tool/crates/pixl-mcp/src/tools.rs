@@ -34,6 +34,8 @@ pub fn tool_definitions() -> Vec<Tool> {
             "Get the .pax source of the current session.",
         ),
         tool("pixl_delete_tile", "Delete a tile from the session."),
+        tool("pixl_learn_style", "Extract style latent from reference tiles. Returns style description for prompt injection."),
+        tool("pixl_check_style", "Score a tile against the session style latent. Returns 0-1 match score."),
         tool(
             "pixl_get_blueprint",
             "Get anatomy blueprint for a canvas size.",

@@ -1,4 +1,5 @@
 use pixl_core::parser::{parse_pax, resolve_all_palettes};
+use pixl_core::style::StyleLatent;
 use pixl_core::types::{Palette, PaxFile};
 use std::collections::HashMap;
 
@@ -8,6 +9,7 @@ pub struct McpState {
     pub file: PaxFile,
     pub palettes: HashMap<String, Palette>,
     pub refinement_count: HashMap<String, u32>,
+    pub style_latent: Option<StyleLatent>,
 }
 
 impl McpState {
@@ -19,6 +21,7 @@ impl McpState {
             file,
             palettes: HashMap::new(),
             refinement_count: HashMap::new(),
+            style_latent: None,
         }
     }
 
@@ -30,6 +33,7 @@ impl McpState {
             file,
             palettes,
             refinement_count: HashMap::new(),
+            style_latent: None,
         })
     }
 

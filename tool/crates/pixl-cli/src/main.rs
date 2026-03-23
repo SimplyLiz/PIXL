@@ -107,6 +107,16 @@ enum Commands {
         model: String,
     },
 
+    /// Extract style latent from reference tiles
+    Style {
+        /// Path to the .pax file
+        file: PathBuf,
+
+        /// Tile names to use as reference (comma-separated). Omit for all tiles.
+        #[arg(long)]
+        tiles: Option<String>,
+    },
+
     /// Import a reference image into PAX format (diffusion bridge)
     Import {
         /// Reference image path (PNG, JPG, etc.)
@@ -182,6 +192,9 @@ fn main() {
         }
         Commands::Blueprint { size, model } => {
             cmd_blueprint(&size, &model);
+        }
+        Commands::Style { file, tiles } => {
+            cmd_style(&file, tiles.as_deref());
         }
         Commands::Import {
             image,
@@ -516,6 +529,70 @@ fn cmd_preview(file: &PathBuf, tile_name: &str, out: &PathBuf, show_grid: bool) 
         if show_grid { " +grid" } else { "" },
         out.display()
     );
+}
+
+fn cmd_style(file: &PathBuf, tiles_filter: Option<&str>) {
+    let (pax_file, palettes) = load_pax(file);
+
+    // Get first palette
+    let palette_name = pax_file
+        .tile
+        .values()
+        .next()
+        .map(|t| t.palette.as_str())
+        .unwrap_or("");
+    let palette = match palettes.get(palette_name) {
+        Some(p) => p,
+        None => {
+            eprintln!("error: no palette found");
+            process::exit(1);
+        }
+    };
+
+    // Collect grids from selected tiles
+    let tile_names: Option<Vec<&str>> = tiles_filter.map(|s| s.split(',').map(|t| t.trim()).collect());
+
+    let mut grids: Vec<Vec<Vec<char>>> = Vec::new();
+    let mut used_names: Vec<String> = Vec::new();
+
+    for (name, tile_raw) in &pax_file.tile {
+        if tile_raw.template.is_some() || tile_raw.grid.is_none() {
+            continue;
+        }
+        if let Some(ref filter) = tile_names {
+            if !filter.contains(&name.as_str()) {
+                continue;
+            }
+        }
+        let size_str = tile_raw.size.as_deref().unwrap_or("16x16");
+        let (w, h) = match pixl_core::types::parse_size(size_str) {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+        if let Some(ref grid_str) = tile_raw.grid {
+            if let Ok(grid) = pixl_core::grid::parse_grid(grid_str, w, h, palette) {
+                grids.push(grid);
+                used_names.push(name.clone());
+            }
+        }
+    }
+
+    if grids.is_empty() {
+        eprintln!("error: no valid tiles found for style extraction");
+        process::exit(1);
+    }
+
+    let grid_refs: Vec<&Vec<Vec<char>>> = grids.iter().collect();
+    let latent = pixl_core::style::StyleLatent::extract(&grid_refs, palette, '.');
+
+    println!("{}", latent.describe());
+    println!();
+    println!("Reference tiles: {}", used_names.join(", "));
+    println!();
+
+    // Output TOML for embedding in project file
+    println!("# TOML for .pixlproject [style_latent] section:");
+    println!("{}", toml::to_string_pretty(&latent).unwrap());
 }
 
 fn cmd_import(

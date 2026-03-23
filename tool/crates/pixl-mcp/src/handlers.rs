@@ -1,5 +1,5 @@
 use crate::state::McpState;
-use pixl_core::{blueprint, edges, grid, types::parse_size, validate};
+use pixl_core::{blueprint, edges, grid, style::StyleLatent, types::parse_size, validate};
 use pixl_render::renderer;
 use serde_json::{Value, json};
 use std::sync::Mutex;
@@ -17,6 +17,8 @@ pub fn handle_tool(state: &Mutex<McpState>, tool_name: &str, args: &Value) -> Va
         "pixl_get_file" => handle_get_file(state, args),
         "pixl_delete_tile" => handle_delete_tile(state, args),
         "pixl_get_blueprint" => handle_get_blueprint(args),
+        "pixl_learn_style" => handle_learn_style(state, args),
+        "pixl_check_style" => handle_check_style(state, args),
         _ => json!({"error": format!("unknown tool: {}", tool_name)}),
     }
 }
@@ -361,6 +363,128 @@ fn handle_delete_tile(state: &Mutex<McpState>, args: &Value) -> Value {
         "ok": deleted,
         "name": name,
         "message": if deleted { "tile deleted" } else { "tile not found" },
+    })
+}
+
+fn handle_learn_style(state: &Mutex<McpState>, args: &Value) -> Value {
+    let mut st = state.lock().unwrap();
+
+    // Collect reference tile names (or use all)
+    let tile_filter: Option<Vec<String>> = args
+        .get("tiles")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect());
+
+    // Get first palette
+    let palette_name = st
+        .file
+        .tile
+        .values()
+        .next()
+        .map(|t| t.palette.clone())
+        .unwrap_or_default();
+    let palette = match st.palettes.get(&palette_name) {
+        Some(p) => p.clone(),
+        None => return json!({"error": "no palette found"}),
+    };
+
+    // Collect grids
+    let mut grids: Vec<Vec<Vec<char>>> = Vec::new();
+    let mut used_names: Vec<String> = Vec::new();
+
+    for (name, tile_raw) in &st.file.tile {
+        if tile_raw.template.is_some() || tile_raw.grid.is_none() {
+            continue;
+        }
+        if let Some(ref filter) = tile_filter {
+            if !filter.contains(name) {
+                continue;
+            }
+        }
+        let size_str = tile_raw.size.as_deref().unwrap_or("16x16");
+        let (w, h) = match parse_size(size_str) {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+        if let Some(ref grid_str) = tile_raw.grid {
+            if let Ok(g) = grid::parse_grid(grid_str, w, h, &palette) {
+                grids.push(g);
+                used_names.push(name.clone());
+            }
+        }
+    }
+
+    if grids.is_empty() {
+        return json!({"error": "no valid tiles found for style extraction"});
+    }
+
+    let grid_refs: Vec<&Vec<Vec<char>>> = grids.iter().collect();
+    let latent = StyleLatent::extract(&grid_refs, &palette, '.');
+
+    // Store in session state
+    let description = latent.describe();
+    st.style_latent = Some(latent);
+
+    json!({
+        "ok": true,
+        "description": description,
+        "reference_tiles": used_names,
+        "sample_count": grids.len(),
+    })
+}
+
+fn handle_check_style(state: &Mutex<McpState>, args: &Value) -> Value {
+    let st = state.lock().unwrap();
+
+    let name = args["name"].as_str().unwrap_or("");
+
+    let latent = match &st.style_latent {
+        Some(l) => l,
+        None => return json!({"error": "no style latent — call pixl_learn_style first"}),
+    };
+
+    let tile_raw = match st.file.tile.get(name) {
+        Some(t) => t,
+        None => return json!({"error": format!("tile '{}' not found", name)}),
+    };
+
+    let palette = match st.palettes.get(&tile_raw.palette) {
+        Some(p) => p,
+        None => return json!({"error": "palette not found"}),
+    };
+
+    let size_str = tile_raw.size.as_deref().unwrap_or("16x16");
+    let (w, h) = match parse_size(size_str) {
+        Ok(s) => s,
+        Err(e) => return json!({"error": e}),
+    };
+
+    let grid_str = match &tile_raw.grid {
+        Some(g) => g,
+        None => return json!({"error": "tile has no grid data"}),
+    };
+
+    let parsed = match grid::parse_grid(grid_str, w, h, palette) {
+        Ok(g) => g,
+        Err(e) => return json!({"error": format!("{}", e)}),
+    };
+
+    let score = latent.score_tile(&parsed, palette, '.');
+    let assessment = if score > 0.85 {
+        "excellent match"
+    } else if score > 0.7 {
+        "good match"
+    } else if score > 0.5 {
+        "moderate match — may need refinement"
+    } else {
+        "poor match — consider adjusting to match reference style"
+    };
+
+    json!({
+        "name": name,
+        "score": (score * 100.0).round() / 100.0,
+        "assessment": assessment,
+        "style_description": latent.describe(),
     })
 }
 
