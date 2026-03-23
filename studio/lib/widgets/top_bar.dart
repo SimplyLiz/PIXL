@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../providers/backend_provider.dart';
 import '../providers/canvas_provider.dart';
+import '../providers/claude_provider.dart';
+import '../services/export_service.dart';
 import '../theme/studio_theme.dart';
+import 'settings_dialog.dart';
 
 /// Top menu bar with logo, actions, and canvas controls.
 class TopBar extends ConsumerWidget {
@@ -41,10 +45,18 @@ class TopBar extends ConsumerWidget {
 
           // File actions
           _BarButton(label: 'New', icon: Icons.add, onTap: () => notifier.clearCanvas()),
-          _BarButton(label: 'Export PNG', icon: Icons.image, onTap: () {}),
+          _ExportMenu(),
+          _BarButton(
+            label: 'Settings',
+            icon: Icons.settings,
+            onTap: () => SettingsDialog.show(context),
+          ),
 
           const Spacer(),
 
+          // API key status
+          _ApiKeyBadge(),
+          const SizedBox(width: 12),
           // Canvas controls
           _BarButton(
             label: 'Grid',
@@ -85,6 +97,40 @@ class TopBar extends ConsumerWidget {
             onTap: notifier.canRedo ? () => notifier.redo() : null,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ApiKeyBadge extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hasKey = ref.watch(claudeProvider.select((s) => s.hasApiKey));
+    final theme = Theme.of(context);
+    if (hasKey) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.key, size: 12, color: Color(0xFF4caf50)),
+          const SizedBox(width: 4),
+          Text('AI', style: theme.textTheme.bodySmall!.copyWith(
+            fontSize: 10, color: const Color(0xFF4caf50),
+          )),
+        ],
+      );
+    }
+    return InkWell(
+      onTap: () => SettingsDialog.show(context),
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: const Color(0xFFffaa00)),
+        ),
+        child: Text('Add API Key', style: theme.textTheme.bodySmall!.copyWith(
+          fontSize: 9, color: const Color(0xFFffaa00),
+        )),
       ),
     );
   }

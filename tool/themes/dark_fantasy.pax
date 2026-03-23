@@ -1,0 +1,90 @@
+[pax]
+version = "2.0"
+name    = "dark_fantasy"
+theme   = "dark_fantasy"
+
+[theme.dark_fantasy]
+palette          = "dungeon"
+scale            = 2
+canvas           = 16
+max_palette_size = 16
+light_source     = "top-left"
+
+[theme.dark_fantasy.roles]
+void   = "."
+bg     = "#"
+fg     = "+"
+accent = "o"
+danger = "r"
+shadow = "s"
+life   = "g"
+hi     = "h"
+bone   = "w"
+
+[theme.dark_fantasy.constraints]
+fg_brighter_than_bg         = true
+shadow_darker_than_bg       = true
+accent_hue_distinct_from_bg = true
+max_colors_per_tile         = 16
+
+[palette.dungeon]
+"." = "#00000000"
+"#" = "#2a1f3d"
+"+" = "#4a3a6d"
+"s" = "#1a0f2e"
+"~" = "#1a3a5c"
+"g" = "#2d5a27"
+"o" = "#c8a035"
+"r" = "#8b1a1a"
+"h" = "#6a5a9d"
+"w" = "#e8e0d4"
+
+[stamp.brick_4x4]
+palette = "dungeon"
+size    = "4x4"
+grid = '''
+##++
+#+++
+++##
++##s
+'''
+
+[stamp.stone_flat_4x4]
+palette = "dungeon"
+size    = "4x4"
+grid = '''
+++++
+++++
+++++
+++++
+'''
+
+[stamp.shadow_4x4]
+palette = "dungeon"
+size    = "4x4"
+grid = '''
+ssss
+s##s
+s##s
+ssss
+'''
+
+[stamp.moss_4x4]
+palette = "dungeon"
+size    = "4x4"
+grid = '''
+.g..
+gg+.
+.g+.
+..+.
+'''
+
+[stamp.crack_4x4]
+palette = "dungeon"
+size    = "4x4"
+grid = '''
++s++
+++s+
++s++
+++s+
+'''

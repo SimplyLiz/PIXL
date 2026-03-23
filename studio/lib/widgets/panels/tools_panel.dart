@@ -9,6 +9,7 @@ import '../../models/pixel_canvas.dart';
 import '../../providers/backend_provider.dart';
 import '../../providers/canvas_provider.dart';
 import '../../providers/palette_provider.dart';
+import '../../providers/style_provider.dart';
 import '../../theme/studio_theme.dart';
 
 /// Right panel — tools, palette, layers, tile info, validation.
@@ -34,6 +35,8 @@ class ToolsPanel extends ConsumerWidget {
             _LayersSection(),
             SizedBox(height: StudioTheme.sectionSpacing),
             _CanvasSizeSection(),
+            SizedBox(height: StudioTheme.sectionSpacing),
+            _StyleSection(),
             SizedBox(height: StudioTheme.sectionSpacing),
             _BackendSection(),
             SizedBox(height: StudioTheme.sectionSpacing),
@@ -341,6 +344,140 @@ class _CanvasSizeSection extends ConsumerWidget {
           }).toList(),
         ),
       ],
+    );
+  }
+}
+
+// ── Style System ───────────────────────────────────────────
+
+class _StyleSection extends ConsumerWidget {
+  const _StyleSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final style = ref.watch(styleProvider);
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('STYLE', style: theme.textTheme.titleSmall),
+        const SizedBox(height: 6),
+
+        // Theme selector
+        Text('Theme', style: theme.textTheme.bodySmall!.copyWith(fontSize: 10)),
+        const SizedBox(height: 4),
+        Wrap(
+          spacing: 4,
+          runSpacing: 4,
+          children: AvailableThemes.themes.map((entry) {
+            final (id, label) = entry;
+            final isActive = style.theme == id;
+            return _Chip(
+              label: label,
+              active: isActive,
+              onTap: () => ref.read(styleProvider.notifier).setTheme(id),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 8),
+
+        // Mood chips
+        Text('Mood', style: theme.textTheme.bodySmall!.copyWith(fontSize: 10)),
+        const SizedBox(height: 4),
+        Wrap(
+          spacing: 4,
+          runSpacing: 4,
+          children: Mood.values.map((m) => _Chip(
+            label: m.name,
+            active: style.mood == m,
+            onTap: () => ref.read(styleProvider.notifier).setMood(m),
+          )).toList(),
+        ),
+        const SizedBox(height: 8),
+
+        // Outline chips
+        Text('Outline', style: theme.textTheme.bodySmall!.copyWith(fontSize: 10)),
+        const SizedBox(height: 4),
+        Wrap(
+          spacing: 4,
+          runSpacing: 4,
+          children: OutlineStyle.values.map((o) {
+            final label = switch (o) {
+              OutlineStyle.none => 'none',
+              OutlineStyle.selfOutline => 'self',
+              OutlineStyle.dropShadow => 'shadow',
+              OutlineStyle.selective => 'selective',
+            };
+            return _Chip(
+              label: label,
+              active: style.outline == o,
+              onTap: () => ref.read(styleProvider.notifier).setOutline(o),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 8),
+
+        // Dithering chips
+        Text('Dithering', style: theme.textTheme.bodySmall!.copyWith(fontSize: 10)),
+        const SizedBox(height: 4),
+        Wrap(
+          spacing: 4,
+          runSpacing: 4,
+          children: Dithering.values.map((d) => _Chip(
+            label: d.name,
+            active: style.dithering == d,
+            onTap: () => ref.read(styleProvider.notifier).setDithering(d),
+          )).toList(),
+        ),
+
+        // Style summary
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1a1a30),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            style.toPromptFragment(),
+            style: theme.textTheme.bodySmall!.copyWith(fontSize: 9),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _Chip extends StatelessWidget {
+  const _Chip({required this.label, required this.active, required this.onTap});
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        decoration: BoxDecoration(
+          color: active ? theme.colorScheme.primary.withValues(alpha: 0.25) : null,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(
+            color: active ? theme.colorScheme.primary : theme.dividerColor,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            color: active ? theme.colorScheme.primary : theme.textTheme.bodySmall?.color,
+          ),
+        ),
+      ),
     );
   }
 }

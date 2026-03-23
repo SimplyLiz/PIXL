@@ -187,6 +187,22 @@ enum Commands {
         out: Option<PathBuf>,
     },
 
+    /// Create or manage a .pixlproject file
+    Project {
+        #[command(subcommand)]
+        action: ProjectAction,
+    },
+
+    /// Create a new .pax file from a built-in theme
+    New {
+        /// Theme: dark_fantasy, light_fantasy, sci_fi, nature, gameboy, nes
+        theme: String,
+
+        /// Output .pax file path
+        #[arg(long, short)]
+        out: PathBuf,
+    },
+
     /// Export to game engine format
     Export {
         /// Path to the .pax file
@@ -210,6 +226,7 @@ enum Commands {
 
     /// Start the HTTP API server (for PIXL Studio)
     Serve {
+
         /// Port to listen on
         #[arg(long, default_value = "3742")]
         port: u16,
@@ -220,10 +237,57 @@ enum Commands {
     },
 }
 
+#[derive(Subcommand)]
+enum ProjectAction {
+    /// Initialize a new project
+    Init {
+        /// Project name
+        name: String,
+
+        /// Theme to use
+        #[arg(long)]
+        theme: Option<String>,
+
+        /// Output .pixlproject file
+        #[arg(long, short, default_value = "project.pixlproject")]
+        out: PathBuf,
+    },
+
+    /// Add a world to the project
+    AddWorld {
+        /// Path to .pixlproject file
+        project: PathBuf,
+
+        /// World name
+        name: String,
+
+        /// Path to .pax file
+        pax: String,
+    },
+
+    /// Show project status
+    Status {
+        /// Path to .pixlproject file
+        project: PathBuf,
+    },
+
+    /// Extract and save style latent to the project
+    LearnStyle {
+        /// Path to .pixlproject file
+        project: PathBuf,
+
+        /// World to extract style from
+        world: String,
+    },
+}
+
 fn main() {
     let cli = Cli::parse();
 
     match cli.command {
+        Commands::Project { action } => {
+            cmd_project(action);
+        }
         Commands::Validate { file, check_edges } => {
             cmd_validate(&file, check_edges);
         }
@@ -293,6 +357,9 @@ fn main() {
             out,
         } => {
             cmd_import(&image, &size, &pax, &palette, dither, out.as_deref());
+        }
+        Commands::New { theme, out } => {
+            cmd_new(&theme, &out);
         }
         Commands::Export { file, format, out } => {
             cmd_export(&file, &format, &out);
@@ -417,6 +484,145 @@ fn edge_class_compatible(declared: &str, auto: &str) -> bool {
         return true;
     }
     false
+}
+
+fn cmd_project(action: ProjectAction) {
+    match action {
+        ProjectAction::Init { name, theme, out } => {
+            let proj = pixl_core::project::PixlProject::new(&name, theme.as_deref());
+            if let Err(e) = proj.save(&out) {
+                eprintln!("error: {}", e);
+                process::exit(1);
+            }
+            println!("created project '{}' -> {}", name, out.display());
+        }
+        ProjectAction::AddWorld { project, name, pax } => {
+            let mut proj = match pixl_core::project::PixlProject::load(&project) {
+                Ok(p) => p,
+                Err(e) => {
+                    eprintln!("error: {}", e);
+                    process::exit(1);
+                }
+            };
+            proj.add_world(&name, &pax);
+            if let Err(e) = proj.save(&project) {
+                eprintln!("error: {}", e);
+                process::exit(1);
+            }
+            println!("added world '{}' -> {}", name, pax);
+        }
+        ProjectAction::Status { project } => {
+            let proj = match pixl_core::project::PixlProject::load(&project) {
+                Ok(p) => p,
+                Err(e) => {
+                    eprintln!("error: {}", e);
+                    process::exit(1);
+                }
+            };
+            println!("{}", proj.summary());
+            if let Some(ref latent) = proj.style_latent {
+                println!();
+                println!("{}", latent.describe());
+            }
+        }
+        ProjectAction::LearnStyle { project, world } => {
+            let mut proj = match pixl_core::project::PixlProject::load(&project) {
+                Ok(p) => p,
+                Err(e) => {
+                    eprintln!("error: {}", e);
+                    process::exit(1);
+                }
+            };
+
+            let pax_path = match proj.worlds.get(&world) {
+                Some(p) => p.clone(),
+                None => {
+                    eprintln!("error: world '{}' not found in project", world);
+                    process::exit(1);
+                }
+            };
+
+            // Resolve relative to project file directory
+            let proj_dir = project.parent().unwrap_or(std::path::Path::new("."));
+            let full_path = proj_dir.join(&pax_path);
+
+            let (pax_file, palettes) = load_pax(&full_path);
+            let palette_name = pax_file
+                .tile
+                .values()
+                .next()
+                .map(|t| t.palette.as_str())
+                .unwrap_or("");
+            let palette = match palettes.get(palette_name) {
+                Some(p) => p,
+                None => {
+                    eprintln!("error: no palette found");
+                    process::exit(1);
+                }
+            };
+
+            let mut grids: Vec<Vec<Vec<char>>> = Vec::new();
+            for (_, tile_raw) in &pax_file.tile {
+                if tile_raw.template.is_some() || tile_raw.grid.is_none() {
+                    continue;
+                }
+                let size_str = tile_raw.size.as_deref().unwrap_or("16x16");
+                let (w, h) = match pixl_core::types::parse_size(size_str) {
+                    Ok(s) => s,
+                    Err(_) => continue,
+                };
+                if let Some(ref grid_str) = tile_raw.grid {
+                    if let Ok(grid) = pixl_core::grid::parse_grid(grid_str, w, h, palette) {
+                        grids.push(grid);
+                    }
+                }
+            }
+
+            let grid_refs: Vec<&Vec<Vec<char>>> = grids.iter().collect();
+            let latent = pixl_core::style::StyleLatent::extract(&grid_refs, palette, '.');
+
+            println!("{}", latent.describe());
+            proj.style_latent = Some(latent);
+            proj.progress.tiles_authored = grids.len() as u32;
+
+            if let Err(e) = proj.save(&project) {
+                eprintln!("error: {}", e);
+                process::exit(1);
+            }
+            println!("style latent saved to {}", project.display());
+        }
+    }
+}
+
+fn cmd_new(theme: &str, out: &PathBuf) {
+    let themes = [
+        ("dark_fantasy", include_str!("../../../themes/dark_fantasy.pax")),
+        ("light_fantasy", include_str!("../../../themes/light_fantasy.pax")),
+        ("sci_fi", include_str!("../../../themes/sci_fi.pax")),
+        ("nature", include_str!("../../../themes/nature.pax")),
+        ("gameboy", include_str!("../../../themes/gameboy.pax")),
+        ("nes", include_str!("../../../themes/nes.pax")),
+    ];
+
+    let content = match themes.iter().find(|(name, _)| *name == theme) {
+        Some((_, content)) => content,
+        None => {
+            let available: Vec<&str> = themes.iter().map(|(n, _)| *n).collect();
+            eprintln!(
+                "error: unknown theme '{}'. Available: {}",
+                theme,
+                available.join(", ")
+            );
+            process::exit(1);
+        }
+    };
+
+    if let Err(e) = std::fs::write(out, content) {
+        eprintln!("error: {}", e);
+        process::exit(1);
+    }
+
+    println!("created {} from theme '{}'", out.display(), theme);
 }
 
 fn cmd_check_fix(file: &PathBuf) {

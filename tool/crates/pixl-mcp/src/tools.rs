@@ -4,43 +4,107 @@ use std::sync::Arc;
 
 pub fn tool_definitions() -> Vec<Tool> {
     vec![
+        // ── Discovery (call session_start FIRST) ──
         tool(
             "pixl_session_start",
-            "Start a PIXL session. Returns theme, palette, stamps, workflow.",
+            "CALL THIS FIRST. Returns active theme, palette symbols (char -> hex color + role), \
+             canvas size, light source direction, available stamps, and existing tiles. \
+             You MUST examine the palette symbols before writing any tile grid.",
         ),
         tool(
             "pixl_get_palette",
-            "Get symbol table for a palette with hex colors and roles.",
-        ),
-        tool(
-            "pixl_create_tile",
-            "Create a tile from a character grid. Returns validation + 16x preview.",
-        ),
-        tool("pixl_validate", "Validate the in-memory PAX file."),
-        tool(
-            "pixl_render_tile",
-            "Render a tile to PNG at specified scale.",
-        ),
-        tool(
-            "pixl_check_edge_pair",
-            "Check if two tiles can be placed adjacent.",
+            "Get the full symbol table for a theme's palette. Args: {theme: string}. \
+             Returns each symbol with its hex color and semantic role (bg, fg, shadow, etc).",
         ),
         tool(
             "pixl_list_tiles",
-            "List all tiles with edge classes and tags.",
+            "List all tiles in the session with edge classes, tags, and template info.",
+        ),
+        tool(
+            "pixl_list_themes",
+            "List available themes with palette name, scale, canvas size, light source.",
+        ),
+        tool(
+            "pixl_list_stamps",
+            "List available stamps with sizes.",
+        ),
+        // ── Creation ──
+        tool(
+            "pixl_create_tile",
+            "Create a tile from a character grid. Args: {name, palette, size (e.g. '16x16'), \
+             grid (multi-line string, one char per pixel)}. Optional: edge_class, symmetry, tags. \
+             Returns: preview PNG at 16x zoom, auto-classified edge classes, actual border pixel \
+             strings, and compatible neighbor tiles. Examine the preview image before proceeding.",
+        ),
+        tool(
+            "pixl_load_source",
+            "Load a .pax source string into the session, replacing current state. \
+             Args: {source: string}.",
+        ),
+        // ── Rendering ──
+        tool(
+            "pixl_render_tile",
+            "Render a tile to PNG. Args: {name, scale? (default 16)}. Returns base64 PNG.",
+        ),
+        tool(
+            "pixl_render_sprite_gif",
+            "Render a sprite animation as animated GIF. Args: {spriteset, sprite, scale?}. \
+             Returns base64 GIF. Examine this to judge animation smoothness and timing.",
+        ),
+        // ── Validation ──
+        tool(
+            "pixl_validate",
+            "Validate the entire session. Args: {check_edges?: bool}. \
+             Returns errors, warnings, and stats.",
+        ),
+        tool(
+            "pixl_check_edge_pair",
+            "Check if two tiles can be placed adjacent. Args: {tile_a, direction (north/east/south/west), tile_b}. \
+             Returns compatible: bool + reason.",
+        ),
+        // ── Generation ──
+        tool(
+            "pixl_narrate_map",
+            "Generate a dungeon map from spatial predicates. Args: {width, height, seed?, \
+             rules: ['border:wall_solid', 'region:chamber:floor_stone:3x3:southeast', \
+             'path:0,3:11,3']}. Returns rendered map PNG + tile name grid.",
+        ),
+        tool(
+            "pixl_generate_context",
+            "Build enriched AI generation context. Args: {prompt, type? ('tile'), size? ('16x16')}. \
+             Returns system_prompt and user_prompt with palette, theme, style latent, and edge \
+             context pre-filled. Use this to generate tiles via a separate AI call.",
+        ),
+        // ── Style ──
+        tool(
+            "pixl_learn_style",
+            "Extract style latent from session tiles. Args: {tiles?: [names]}. \
+             Returns 8-property fingerprint + text description. Stored in session for scoring.",
+        ),
+        tool(
+            "pixl_check_style",
+            "Score a tile against the style latent. Args: {name}. Returns 0-1 score + assessment.",
+        ),
+        // ── Blueprint ──
+        tool(
+            "pixl_get_blueprint",
+            "Get anatomy blueprint for character sprites. Args: {width, height, model? ('humanoid_chibi')}. \
+             Returns pixel-coordinate landmarks and eye size rules for the canvas size.",
+        ),
+        // ── Export ──
+        tool(
+            "pixl_pack_atlas",
+            "Pack all session tiles into a sprite atlas. Args: {columns?, padding?, scale?}. \
+             Returns base64 atlas PNG + TexturePacker JSON.",
         ),
         tool(
             "pixl_get_file",
-            "Get the .pax source of the current session.",
+            "Get the full .pax TOML source of the current session state.",
         ),
-        tool("pixl_delete_tile", "Delete a tile from the session."),
-        tool("pixl_narrate_map", "Generate a map from spatial predicates. Pass an array of rules like 'border:wall_solid', 'region:chamber:floor_stone:3x3:southeast', 'path:0,3:11,3'. Returns rendered PNG + tile grid."),
-        tool("pixl_render_sprite_gif", "Render a sprite animation as GIF. Returns base64 GIF for visual inspection of animation quality."),
-        tool("pixl_learn_style", "Extract style latent from reference tiles. Returns style description for prompt injection."),
-        tool("pixl_check_style", "Score a tile against the session style latent. Returns 0-1 match score."),
+        // ── Mutation ──
         tool(
-            "pixl_get_blueprint",
-            "Get anatomy blueprint for a canvas size.",
+            "pixl_delete_tile",
+            "Delete a tile from the session. Args: {name}.",
         ),
     ]
 }

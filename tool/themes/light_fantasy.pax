@@ -1,0 +1,69 @@
+[pax]
+version = "2.0"
+name    = "light_fantasy"
+theme   = "light_fantasy"
+
+[theme.light_fantasy]
+palette          = "cathedral"
+scale            = 2
+canvas           = 16
+max_palette_size = 16
+light_source     = "top-left"
+
+[theme.light_fantasy.roles]
+void   = "."
+bg     = "#"
+fg     = "+"
+accent = "o"
+danger = "r"
+shadow = "s"
+life   = "g"
+hi     = "h"
+bone   = "w"
+
+[theme.light_fantasy.constraints]
+fg_brighter_than_bg         = true
+shadow_darker_than_bg       = true
+max_colors_per_tile         = 16
+
+[palette.cathedral]
+"." = "#00000000"
+"#" = "#8a7a6a"
+"+" = "#c8b8a0"
+"s" = "#5a4a3a"
+"~" = "#4080b0"
+"g" = "#4a9a3a"
+"o" = "#e8c840"
+"r" = "#c04040"
+"h" = "#e8e0d0"
+"w" = "#f0ece0"
+
+[stamp.marble_4x4]
+palette = "cathedral"
+size    = "4x4"
+grid = '''
+++#+
+++h+
+++++
+++s+
+'''
+
+[stamp.vine_4x4]
+palette = "cathedral"
+size    = "4x4"
+grid = '''
+..g.
+.gg.
+.g..
+g...
+'''
+
+[stamp.gold_trim_4x4]
+palette = "cathedral"
+size    = "4x4"
+grid = '''
+oooo
+o++o
+o++o
+oooo
+'''

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/backend_provider.dart';
+import '../providers/claude_provider.dart';
 import 'canvas/canvas_viewport.dart';
 import 'panels/chat_panel.dart';
 import 'panels/tools_panel.dart';
@@ -23,6 +24,7 @@ class _StudioShellState extends ConsumerState<StudioShell> {
     // Connect to the PIXL backend on startup
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(backendProvider.notifier).connect();
+      ref.read(claudeProvider.notifier).init();
     });
   }
 

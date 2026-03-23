@@ -1,0 +1,88 @@
+[pax]
+version = "2.0"
+name    = "nature"
+theme   = "nature"
+
+[theme.nature]
+palette          = "forest"
+scale            = 2
+canvas           = 16
+max_palette_size = 14
+light_source     = "top-left"
+
+[theme.nature.roles]
+void   = "."
+bg     = "#"
+fg     = "+"
+accent = "o"
+danger = "r"
+shadow = "s"
+life   = "g"
+hi     = "G"
+
+[theme.nature.constraints]
+fg_brighter_than_bg         = true
+shadow_darker_than_bg       = true
+max_colors_per_tile         = 14
+
+[palette.forest]
+"." = "#00000000"
+"#" = "#3a2a1a"
+"+" = "#5a4a2a"
+"s" = "#1a1a0a"
+"g" = "#2a6a1a"
+"G" = "#4a8a3a"
+"o" = "#e8c040"
+"r" = "#c83030"
+"~" = "#3070c0"
+"w" = "#e0d8c0"
+
+[stamp.bark_4x4]
+palette = "forest"
+size    = "4x4"
+grid = '''
+##+#
+#+##
+##+#
+#+##
+'''
+
+[stamp.grass_4x4]
+palette = "forest"
+size    = "4x4"
+grid = '''
+gGgG
+GgGg
+gGgG
+GgGg
+'''
+
+[stamp.dirt_4x4]
+palette = "forest"
+size    = "4x4"
+grid = '''
+##++
+#+++
+++##
++##s
+'''
+
+[stamp.leaf_4x4]
+palette = "forest"
+size    = "4x4"
+grid = '''
+.gG.
+gGGg
+GgGG
+.Gg.
+'''
+
+[stamp.water_4x4]
+palette = "forest"
+size    = "4x4"
+grid = '''
+~~~~
+~~+~
+~~~~
+~+~~
+'''

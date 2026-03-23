@@ -21,12 +21,18 @@ class CanvasViewport extends ConsumerStatefulWidget {
 class _CanvasViewportState extends ConsumerState<CanvasViewport> {
   Offset? _hoverPixel;
   Offset _panOffset = Offset.zero;
+  // Centering offset — updated each build from LayoutBuilder constraints.
+  double _centerX = 0;
+  double _centerY = 0;
 
   (int, int)? _pixelFromLocal(Offset localPos, CanvasState cs) {
     final ps = cs.zoomLevel;
 
-    final dx = localPos.dx - _panOffset.dx;
-    final dy = localPos.dy - _panOffset.dy;
+    // localPos is relative to the full viewport container.
+    // The canvas is positioned at (centerX + panOffset) inside the Stack,
+    // so subtract both to get coordinates relative to the canvas origin.
+    final dx = localPos.dx - _centerX - _panOffset.dx;
+    final dy = localPos.dy - _centerY - _panOffset.dy;
 
     final x = (dx / ps).floor();
     final y = (dy / ps).floor();
@@ -126,9 +132,9 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Center the canvas in the viewport
-        final centerX = (constraints.maxWidth - canvasW) / 2;
-        final centerY = (constraints.maxHeight - canvasH) / 2;
+        // Center the canvas in the viewport — store for hit-testing
+        _centerX = (constraints.maxWidth - canvasW) / 2;
+        _centerY = (constraints.maxHeight - canvasH) / 2;
 
         return Focus(
           autofocus: true,
@@ -186,8 +192,8 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
                     child: Stack(
                       children: [
                         Positioned(
-                          left: centerX + _panOffset.dx,
-                          top: centerY + _panOffset.dy,
+                          left: _centerX + _panOffset.dx,
+                          top: _centerY + _panOffset.dy,
                           child: CustomPaint(
                             size: Size(canvasW, canvasH),
                             painter: PixelCanvasPainter(
