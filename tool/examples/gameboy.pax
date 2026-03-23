@@ -1,0 +1,184 @@
+[pax]
+version = "2.0"
+name    = "gameboy_tileset"
+author  = "claude"
+created = "2026-03-23T00:00:00Z"
+theme   = "gameboy"
+
+# --- Theme ---
+# Game Boy: 4 colors only, 8x8 tiles, no light source (flat shading)
+
+[theme.gameboy]
+palette          = "gb"
+scale            = 4
+canvas           = 8
+max_palette_size = 4
+
+[theme.gameboy.roles]
+void   = "."
+bg     = "1"
+fg     = "2"
+accent = "3"
+
+[theme.gameboy.constraints]
+max_colors_per_tile = 4
+
+# --- Palette ---
+# Classic Game Boy green palette
+
+[palette.gb]
+"." = "#0f380f"
+"1" = "#306230"
+"2" = "#8bac0f"
+"3" = "#9bbc0f"
+
+# --- Palette Swaps ---
+
+[palette_swap.pocket]
+base    = "gb"
+partial = true
+map     = { "." = "#000000", "1" = "#545454", "2" = "#a8a8a8", "3" = "#ffffff" }
+
+[palette_swap.dmg_brown]
+base    = "gb"
+partial = true
+map     = { "." = "#1b1b0e", "1" = "#3a3a26", "2" = "#8b8b56", "3" = "#c4c48e" }
+
+# --- Tiles ---
+
+[tile.wall]
+palette    = "gb"
+size       = "8x8"
+edge_class = { n = "solid", e = "solid", s = "solid", w = "solid" }
+semantic   = { affordance = "obstacle", collision = "full", tags = {} }
+grid = '''
+........
+.1..1..1
+.1221221
+........
+1..1..1.
+1221221.
+........
+.1..1..1
+'''
+
+[tile.floor]
+palette    = "gb"
+size       = "8x8"
+edge_class = { n = "floor", e = "floor", s = "floor", w = "floor" }
+semantic   = { affordance = "walkable", collision = "none", tags = {} }
+grid = '''
+22222222
+22232222
+22222222
+22222222
+22222232
+22222222
+23222222
+22222222
+'''
+
+[tile.wall_top]
+palette    = "gb"
+size       = "8x8"
+edge_class = { n = "solid", e = "solid", s = "floor", w = "solid" }
+semantic   = { affordance = "obstacle", collision = "full", tags = {} }
+grid = '''
+........
+.1..1..1
+.1221221
+........
+12212212
+12222222
+22222222
+22322222
+'''
+
+[tile.door]
+palette    = "gb"
+size       = "8x8"
+edge_class = { n = "solid", e = "solid", s = "floor", w = "solid" }
+semantic   = { affordance = "interactive", collision = "none", tags = {} }
+grid = '''
+.111111.
+.133331.
+.132231.
+.132231.
+.133331.
+.133331.
+.122221.
+22222222
+'''
+
+[tile.chest]
+palette    = "gb"
+size       = "8x8"
+edge_class = { n = "floor", e = "floor", s = "floor", w = "floor" }
+semantic   = { affordance = "interactive", collision = "full", tags = {} }
+grid = '''
+22222222
+2......2
+2.3333.2
+2.1111.2
+2.1221.2
+2.1111.2
+2......2
+22222222
+'''
+
+[tile.stairs_down]
+palette    = "gb"
+size       = "8x8"
+edge_class = { n = "floor", e = "floor", s = "floor", w = "floor" }
+semantic   = { affordance = "interactive", collision = "none", tags = { destination = "down" } }
+grid = '''
+22222222
+2......2
+2.2..2.2
+2.2222.2
+2..22..2
+2.2222.2
+2......2
+22222222
+'''
+
+[tile.water]
+palette    = "gb"
+size       = "8x8"
+edge_class = { n = "water", e = "water", s = "water", w = "water" }
+semantic   = { affordance = "hazard", collision = "full", tags = {} }
+grid = '''
+11111111
+11311111
+11111111
+11111131
+11111111
+13111111
+11111111
+11111311
+'''
+
+# --- WFC Rules ---
+
+[wfc_rules]
+forbids = [
+    "affordance:obstacle forbids affordance:hazard adjacent",
+]
+require_boost = 3.0
+requires = [
+    "affordance:walkable requires affordance:obstacle adjacent_any",
+    "affordance:interactive requires affordance:walkable adjacent_any",
+]
+
+[wfc_rules.variant_groups]
+walkable = ["floor", "chest", "stairs_down"]
+
+# --- Atlas ---
+
+[atlas]
+format     = "texturepacker"
+padding    = 0
+scale      = 1
+columns    = 8
+output     = "gameboy_atlas.png"
+map_output = "gameboy_atlas.json"

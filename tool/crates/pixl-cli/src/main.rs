@@ -107,6 +107,32 @@ enum Commands {
         model: String,
     },
 
+    /// Import a reference image into PAX format (diffusion bridge)
+    Import {
+        /// Reference image path (PNG, JPG, etc.)
+        image: PathBuf,
+
+        /// Target size (e.g., "16x16", "32x48")
+        #[arg(long, default_value = "16x16")]
+        size: String,
+
+        /// Palette from a .pax file
+        #[arg(long)]
+        pax: PathBuf,
+
+        /// Palette name within the .pax file
+        #[arg(long)]
+        palette: String,
+
+        /// Apply Bayer dithering
+        #[arg(long)]
+        dither: bool,
+
+        /// Output .pax grid to stdout (or --out for PNG preview)
+        #[arg(long, short)]
+        out: Option<PathBuf>,
+    },
+
     /// Start the MCP server (stdio transport)
     Mcp {
         /// Optional: pre-load a .pax file
@@ -156,6 +182,16 @@ fn main() {
         }
         Commands::Blueprint { size, model } => {
             cmd_blueprint(&size, &model);
+        }
+        Commands::Import {
+            image,
+            size,
+            pax,
+            palette,
+            dither,
+            out,
+        } => {
+            cmd_import(&image, &size, &pax, &palette, dither, out.as_deref());
         }
         Commands::Mcp { file } => {
             cmd_mcp(file.as_deref());
@@ -480,6 +516,62 @@ fn cmd_preview(file: &PathBuf, tile_name: &str, out: &PathBuf, show_grid: bool) 
         if show_grid { " +grid" } else { "" },
         out.display()
     );
+}
+
+fn cmd_import(
+    image_path: &PathBuf,
+    size: &str,
+    pax_path: &PathBuf,
+    palette_name: &str,
+    dither: bool,
+    out: Option<&std::path::Path>,
+) {
+    let (w, h) = match pixl_core::types::parse_size(size) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: {}", e);
+            process::exit(1);
+        }
+    };
+
+    // Load reference image
+    let img = match image::open(image_path) {
+        Ok(i) => i,
+        Err(e) => {
+            eprintln!("error: cannot open image {}: {}", image_path.display(), e);
+            process::exit(1);
+        }
+    };
+
+    // Load palette from pax file
+    let (_, palettes) = load_pax(pax_path);
+    let palette = match palettes.get(palette_name) {
+        Some(p) => p,
+        None => {
+            eprintln!("error: palette '{}' not found", palette_name);
+            process::exit(1);
+        }
+    };
+
+    let result = pixl_render::import::import_reference(&img, w, h, palette, dither);
+
+    println!("# Imported {}x{} from {}", w, h, image_path.display());
+    println!("# Color accuracy: {:.1}%", result.color_accuracy * 100.0);
+    println!("# Clipped colors: {}", result.clipped_colors);
+    println!("# Dither: {}", if dither { "bayer" } else { "none" });
+    println!();
+    println!("{}", result.grid_string);
+
+    // Optionally render preview
+    if let Some(out_path) = out {
+        let preview = pixl_render::renderer::render_grid(&result.grid, palette, 16);
+        if let Err(e) = preview.save(out_path) {
+            eprintln!("error: {}", e);
+            process::exit(1);
+        }
+        println!();
+        println!("preview -> {}", out_path.display());
+    }
 }
 
 fn cmd_blueprint(size: &str, model: &str) {

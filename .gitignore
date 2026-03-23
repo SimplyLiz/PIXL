@@ -26,6 +26,9 @@ studio/.flutter-plugins-dependencies
 !docs/**/*.png
 !examples/**/*.png
 
+# CKB
+.ckb/
+
 # Environment
 .env
 .env.local

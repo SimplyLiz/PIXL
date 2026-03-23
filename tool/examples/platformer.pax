@@ -1,0 +1,244 @@
+[pax]
+version = "2.0"
+name    = "platformer_tileset"
+author  = "claude"
+created = "2026-03-23T00:00:00Z"
+theme   = "forest"
+
+# --- Theme ---
+
+[theme.forest]
+palette          = "forest"
+scale            = 2
+canvas           = 16
+max_palette_size = 12
+light_source     = "top-left"
+
+[theme.forest.roles]
+void   = "."
+bg     = "#"
+fg     = "+"
+accent = "o"
+danger = "r"
+shadow = "s"
+life   = "g"
+
+[theme.forest.constraints]
+fg_brighter_than_bg   = true
+shadow_darker_than_bg = true
+
+# --- Palette ---
+
+[palette.forest]
+"." = "#00000000"
+"#" = "#3a2a1a"
+"+" = "#5a4a2a"
+"s" = "#1a1a0a"
+"g" = "#2a6a1a"
+"G" = "#4a8a3a"
+"o" = "#e8c040"
+"r" = "#c83030"
+"~" = "#3070c0"
+"w" = "#e0d8c0"
+
+# --- Stamps ---
+
+[stamp.dirt_4x4]
+palette = "forest"
+size    = "4x4"
+grid = '''
+##++
+#+++
+++##
++##s
+'''
+
+[stamp.grass_top_4x4]
+palette = "forest"
+size    = "4x4"
+grid = '''
+gGgG
+GgGg
+####
+####
+'''
+
+[stamp.leaf_4x4]
+palette = "forest"
+size    = "4x4"
+grid = '''
+.gG.
+gGGg
+GgGG
+.Gg.
+'''
+
+# --- Tiles ---
+
+[tile.ground_solid]
+palette    = "forest"
+size       = "16x16"
+edge_class = { n = "ground_top", e = "ground", s = "ground", w = "ground" }
+semantic   = { affordance = "obstacle", collision = "full", tags = { biome = "forest" } }
+grid = '''
+gGgGgGgGgGgGgGgG
+GgGgGgGgGgGgGgGg
+################
+##++##++##++####
+#+++++++++++++##
+##++########++##
+################
+##++++++++##++##
+#++++##+++++++++
+##++##++##++####
+################
+##++##++########
+#+++++++++++++##
+##++##++##++####
+#+++++++++++++##
+################
+'''
+
+[tile.ground_platform]
+palette    = "forest"
+size       = "16x16"
+edge_class = { n = "ground_top", e = "open", s = "open", w = "open" }
+semantic   = { affordance = "obstacle", collision = "half_top", tags = { biome = "forest" } }
+grid = '''
+gGgGgGgGgGgGgGgG
+GgGgGgGgGgGgGgGg
+################
+##++##++##++####
+................
+................
+................
+................
+................
+................
+................
+................
+................
+................
+................
+................
+'''
+
+[tile.sky]
+palette    = "forest"
+size       = "16x16"
+edge_class = { n = "open", e = "open", s = "open", w = "open" }
+semantic   = { affordance = "walkable", collision = "none", tags = { biome = "forest" } }
+grid = '''
+................
+................
+................
+................
+................
+................
+................
+................
+................
+................
+................
+................
+................
+................
+................
+................
+'''
+
+[tile.water_top]
+palette    = "forest"
+size       = "16x16"
+edge_class = { n = "open", e = "water", s = "water", w = "water" }
+semantic   = { affordance = "hazard", collision = "full", tags = { depth = "surface", biome = "forest" } }
+grid = '''
+................
+................
+..~..~....~..~..
+~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~+~
+~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
+~~+~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
+'''
+
+[tile.coin]
+palette    = "forest"
+size       = "16x16"
+symmetry   = "quad"
+edge_class = { n = "open", e = "open", s = "open", w = "open" }
+semantic   = { affordance = "collectible", collision = "none", tags = {} }
+grid = '''
+........
+....oo..
+...oooo.
+..oooo..
+.ooooo..
+..oooo..
+...ooo..
+........
+'''
+
+[tile.spike]
+palette    = "forest"
+size       = "16x16"
+edge_class = { n = "open", e = "open", s = "ground_top", w = "open" }
+semantic   = { affordance = "hazard", collision = "full", tags = {} }
+grid = '''
+................
+......r.........
+.....rrr........
+....rrrrr.......
+...rrrrrrr......
+..rrrrrrrrr.....
+.rrrrrrrrrrr....
+rrrrrrrrrrrrrr..
+.r..rrr..rrr..r.
+..r.rrr..rrr.r..
+...rrrr..rrrr...
+....rrr..rrr....
+.....rr..rr.....
+......r..r......
+gGgGgGgGgGgGgGgG
+GgGgGgGgGgGgGgGg
+'''
+
+# --- Tile Run: Platform ---
+
+[tile_run.platform]
+orientation = "horizontal"
+left        = "ground_platform"
+middle      = "ground_platform"
+right       = "ground_platform"
+single      = "ground_platform"
+
+# --- WFC Rules ---
+
+[wfc_rules]
+forbids = [
+    "affordance:hazard forbids affordance:collectible adjacent",
+]
+require_boost = 2.0
+requires = [
+    "affordance:walkable requires affordance:obstacle adjacent_any",
+]
+
+# --- Atlas ---
+
+[atlas]
+format     = "texturepacker"
+padding    = 1
+scale      = 2
+columns    = 4
+include    = ["ground_*", "sky", "water_*", "coin", "spike"]
+output     = "platformer_atlas.png"
+map_output = "platformer_atlas.json"
