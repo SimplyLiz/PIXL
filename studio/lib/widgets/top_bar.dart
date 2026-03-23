@@ -10,6 +10,7 @@ import '../providers/claude_provider.dart';
 import '../services/export_service.dart';
 import '../theme/studio_theme.dart';
 import 'settings_dialog.dart';
+import 'shortcuts_dialog.dart';
 import 'tilegroup_dialog.dart';
 import 'wfc_dialog.dart';
 
@@ -114,7 +115,7 @@ class TopBar extends ConsumerWidget {
           _BarButton(
             label: 'Zoom Out',
             icon: Icons.remove,
-            onTap: () => notifier.setZoom(cs.zoomLevel - 2),
+            onTap: () => notifier.zoomOut(),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -126,7 +127,7 @@ class TopBar extends ConsumerWidget {
           _BarButton(
             label: 'Zoom In',
             icon: Icons.add,
-            onTap: () => notifier.setZoom(cs.zoomLevel + 2),
+            onTap: () => notifier.zoomIn(),
           ),
           const SizedBox(width: 12),
 
@@ -140,6 +141,12 @@ class TopBar extends ConsumerWidget {
             label: 'Redo (Cmd+Shift+Z)',
             icon: Icons.redo,
             onTap: notifier.canRedo ? () => notifier.redo() : null,
+          ),
+          const SizedBox(width: 8),
+          _BarButton(
+            label: 'Shortcuts (Cmd+/)',
+            icon: Icons.help_outline,
+            onTap: () => ShortcutsDialog.show(context),
           ),
         ],
       ),

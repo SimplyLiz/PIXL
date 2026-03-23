@@ -101,6 +101,13 @@ pub fn tool_definitions() -> Vec<Tool> {
             "pixl_get_file",
             "Get the full .pax TOML source of the current session state.",
         ),
+        // ── Variation ──
+        tool(
+            "pixl_vary_tile",
+            "Generate N variants from a base tile. Args: {name, count? (default 4), seed? (default 42)}. \
+             Applies mutations: pixel noise, cracks, row/col shifts, symbol swaps, edge erosion. \
+             Edges are preserved. Returns variant grids + previews.",
+        ),
         // ── Mutation ──
         tool(
             "pixl_delete_tile",

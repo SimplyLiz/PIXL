@@ -1,16 +1,20 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/palette.dart';
 import '../../models/pixel_canvas.dart';
 import '../../providers/backend_provider.dart';
 import '../../providers/canvas_provider.dart';
+import '../../providers/claude_provider.dart';
+import '../../providers/chat_provider.dart';
 import '../../providers/palette_provider.dart';
 import '../../providers/style_provider.dart';
+import '../../services/knowledge_base.dart';
 import '../../theme/studio_theme.dart';
+import '../../utils/grid_parser.dart';
 
 /// Right panel — tools, palette, layers, tile info, validation.
 class ToolsPanel extends ConsumerWidget {
@@ -37,6 +41,8 @@ class ToolsPanel extends ConsumerWidget {
             _CanvasSizeSection(),
             SizedBox(height: StudioTheme.sectionSpacing),
             _StyleSection(),
+            SizedBox(height: StudioTheme.sectionSpacing),
+            _QuickGenerateSection(),
             SizedBox(height: StudioTheme.sectionSpacing),
             _BackendSection(),
             SizedBox(height: StudioTheme.sectionSpacing),
@@ -207,7 +213,13 @@ class _PaletteSection extends ConsumerWidget {
             final isFg = i == cs.foregroundColorIndex;
             final isBg = i == cs.backgroundColorIndex;
             return GestureDetector(
-              onTap: () => ref.read(canvasProvider.notifier).setForegroundColor(i),
+              onTap: () {
+                if (HardwareKeyboard.instance.isShiftPressed) {
+                  ref.read(canvasProvider.notifier).setBackgroundColor(i);
+                } else {
+                  ref.read(canvasProvider.notifier).setForegroundColor(i);
+                }
+              },
               onSecondaryTap: () => ref.read(canvasProvider.notifier).setBackgroundColor(i),
               child: Container(
                 width: 22, height: 22,
@@ -229,13 +241,133 @@ class _PaletteSection extends ConsumerWidget {
           children: [
             Container(width: 16, height: 16, color: palette[cs.foregroundColorIndex]),
             const SizedBox(width: 4),
-            Text(
-              'FG: #${palette[cs.foregroundColorIndex].toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}',
-              style: theme.textTheme.bodySmall,
+            Expanded(
+              child: Text(
+                'FG: #${palette[cs.foregroundColorIndex].toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}',
+                style: theme.textTheme.bodySmall,
+              ),
+            ),
+            // Add color
+            Tooltip(
+              message: 'Add color',
+              child: InkWell(
+                onTap: () => ref.read(paletteProvider.notifier).addColor(
+                  palette[cs.foregroundColorIndex],
+                ),
+                borderRadius: BorderRadius.circular(4),
+                child: const Padding(
+                  padding: EdgeInsets.all(2),
+                  child: Icon(Icons.add, size: 12),
+                ),
+              ),
+            ),
+            // Remove selected
+            Tooltip(
+              message: 'Remove selected color',
+              child: InkWell(
+                onTap: palette.length > 2
+                    ? () {
+                        ref.read(paletteProvider.notifier).removeColor(cs.foregroundColorIndex);
+                        ref.read(canvasProvider.notifier).clampColorIndices(palette.length - 1);
+                      }
+                    : null,
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.all(2),
+                  child: Icon(Icons.remove, size: 12,
+                    color: palette.length > 2 ? null : theme.disabledColor),
+                ),
+              ),
+            ),
+            // Edit hex
+            Tooltip(
+              message: 'Edit hex color',
+              child: InkWell(
+                onTap: () => _showHexEditor(context, ref, cs.foregroundColorIndex, palette),
+                borderRadius: BorderRadius.circular(4),
+                child: const Padding(
+                  padding: EdgeInsets.all(2),
+                  child: Icon(Icons.edit, size: 12),
+                ),
+              ),
             ),
           ],
         ),
+        Text(
+          'Click = FG  |  Shift/Right = BG',
+          style: theme.textTheme.bodySmall!.copyWith(fontSize: 8, color: const Color(0xFF555566)),
+        ),
       ],
+    );
+  }
+
+  static void _showHexEditor(BuildContext context, WidgetRef ref, int index, PixlPalette palette) {
+    final color = palette[index];
+    final hex = color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2);
+    final controller = TextEditingController(text: hex);
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        return Dialog(
+          backgroundColor: theme.cardColor,
+          child: Container(
+            width: 240,
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Edit Color', style: theme.textTheme.bodyMedium!.copyWith(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Text('#', style: theme.textTheme.bodyMedium),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: TextField(
+                        controller: controller,
+                        style: theme.textTheme.bodyMedium!.copyWith(fontSize: 13),
+                        maxLength: 6,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          counterText: '',
+                          contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: const Text('Cancel', style: TextStyle(fontSize: 12)),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: () {
+                        final hexVal = int.tryParse(controller.text, radix: 16);
+                        if (hexVal != null) {
+                          ref.read(paletteProvider.notifier).editColor(
+                            index,
+                            Color(0xFF000000 | hexVal),
+                          );
+                        }
+                        Navigator.of(ctx).pop();
+                      },
+                      child: const Text('Apply', style: TextStyle(fontSize: 12)),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -482,6 +614,154 @@ class _Chip extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ── Quick Generate ─────────────────────────────────────────
+
+class _QuickGenerateSection extends ConsumerStatefulWidget {
+  const _QuickGenerateSection();
+
+  @override
+  ConsumerState<_QuickGenerateSection> createState() => _QuickGenerateSectionState();
+}
+
+class _QuickGenerateSectionState extends ConsumerState<_QuickGenerateSection> {
+  final _controller = TextEditingController();
+  bool _generating = false;
+
+  Future<void> _generate() async {
+    final prompt = _controller.text.trim();
+    if (prompt.isEmpty) return;
+
+    final backend = ref.read(backendProvider);
+    final claude = ref.read(claudeProvider);
+    if (!backend.isConnected || !claude.hasApiKey) return;
+
+    setState(() => _generating = true);
+    final chat = ref.read(chatProvider.notifier);
+    final canvasSize = ref.read(canvasProvider).canvasSize;
+    final sizeStr = '${canvasSize.width}x${canvasSize.height}';
+    final style = ref.read(styleProvider);
+
+    chat.addUserMessage(prompt);
+
+    // Get enriched context
+    final ctx = await ref.read(backendProvider.notifier).getGenerationContext(
+      prompt: prompt,
+      size: sizeStr,
+    );
+    final backendCtx = ctx['system_prompt'] as String? ?? '';
+    final userPrompt = ctx['user_prompt'] as String? ?? prompt;
+    final systemPrompt = await KnowledgeBase.buildSystemPrompt(
+      backendContext: backendCtx,
+      styleFragment: style.toPromptFragment(),
+    );
+
+    final resp = await ref.read(claudeProvider.notifier).generateTile(
+      systemPrompt: systemPrompt,
+      userPrompt: userPrompt,
+    );
+
+    if (!resp.isError) {
+      final grid = extractGrid(resp.content);
+      if (grid != null) {
+        final tileName = generateTileName(prompt);
+        await ref.read(backendProvider.notifier).createTile(
+          name: tileName,
+          palette: ctx['palette'] as String? ?? 'default',
+          size: sizeStr,
+          grid: grid,
+        );
+        chat.addAssistantMessage('Generated **`$tileName`** ($sizeStr)');
+      } else {
+        chat.addAssistantMessage('Could not extract grid from response.');
+      }
+    } else {
+      chat.addAssistantMessage('Error: ${resp.errorMessage}');
+    }
+
+    _controller.clear();
+    setState(() => _generating = false);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final backend = ref.watch(backendProvider);
+    final claude = ref.watch(claudeProvider);
+    final enabled = backend.isConnected && claude.hasApiKey && !_generating;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('GENERATE', style: theme.textTheme.titleSmall),
+        const SizedBox(height: 6),
+        TextField(
+          controller: _controller,
+          enabled: enabled,
+          style: theme.textTheme.bodyMedium!.copyWith(fontSize: 11),
+          maxLines: 2,
+          minLines: 1,
+          decoration: InputDecoration(
+            hintText: enabled ? 'wall tile, moss...' : 'Connect engine + API key',
+            hintStyle: theme.textTheme.bodySmall!.copyWith(fontSize: 10),
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(4),
+              borderSide: StudioTheme.panelBorder,
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(4),
+              borderSide: BorderSide(color: theme.colorScheme.primary),
+            ),
+          ),
+          onSubmitted: (_) => _generate(),
+        ),
+        const SizedBox(height: 4),
+        SizedBox(
+          width: double.infinity,
+          child: InkWell(
+            onTap: enabled ? _generate : null,
+            borderRadius: BorderRadius.circular(4),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              decoration: BoxDecoration(
+                color: enabled
+                    ? theme.colorScheme.primary.withValues(alpha: 0.2)
+                    : null,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(
+                  color: enabled ? theme.colorScheme.primary : theme.dividerColor,
+                ),
+              ),
+              child: Center(
+                child: _generating
+                    ? const SizedBox(
+                        width: 12, height: 12,
+                        child: CircularProgressIndicator(strokeWidth: 1.5),
+                      )
+                    : Text(
+                        'Generate Tile',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: enabled ? theme.colorScheme.primary : theme.disabledColor,
+                        ),
+                      ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -133,6 +133,28 @@ enum Commands {
         out: PathBuf,
     },
 
+    /// Generate tile variants from a base tile
+    Vary {
+        /// Path to the .pax file
+        file: PathBuf,
+
+        /// Base tile name
+        #[arg(long)]
+        tile: String,
+
+        /// Number of variants to generate
+        #[arg(long, default_value = "4")]
+        count: usize,
+
+        /// RNG seed
+        #[arg(long, default_value = "42")]
+        seed: u64,
+
+        /// Output directory for variant PNGs
+        #[arg(long, short)]
+        out: Option<PathBuf>,
+    },
+
     /// Generate procedural stamps for a pattern
     GenerateStamps {
         /// Pattern: brick_bond, checkerboard, diagonal, dither_bayer, horizontal_stripe, dots, cross, noise
@@ -336,6 +358,15 @@ fn main() {
             out,
         } => {
             cmd_narrate(&file, width, height, seed, &rule, &out);
+        }
+        Commands::Vary {
+            file,
+            tile,
+            count,
+            seed,
+            out,
+        } => {
+            cmd_vary(&file, &tile, count, seed, out.as_deref());
         }
         Commands::GenerateStamps {
             pattern,
@@ -617,6 +648,16 @@ fn cmd_new(theme: &str, out: &PathBuf) {
         }
     };
 
+    // Create parent directories if they don't exist
+    if let Some(parent) = out.parent() {
+        if !parent.as_os_str().is_empty() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                eprintln!("error: cannot create directory {}: {}", parent.display(), e);
+                process::exit(1);
+            }
+        }
+    }
+
     if let Err(e) = std::fs::write(out, content) {
         eprintln!("error: {}", e);
         process::exit(1);
@@ -712,19 +753,33 @@ fn cmd_check_fix(file: &PathBuf) {
     }
 
     if fixed > 0 {
-        // Write back
-        match toml::to_string_pretty(&pax_file) {
-            Ok(new_source) => {
-                if let Err(e) = std::fs::write(file, new_source) {
-                    eprintln!("error writing {}: {}", file.display(), e);
-                    process::exit(1);
-                }
-                println!("wrote {} — {} edges fixed", file.display(), fixed);
+        // Append edge_class sections to original source (preserves formatting)
+        let mut appendix = String::new();
+        for (name, tile_raw) in &pax_file.tile {
+            if tile_raw.template.is_some() || tile_raw.grid.is_none() {
+                continue;
             }
-            Err(e) => {
-                eprintln!("error serializing: {}", e);
+            // Only append for tiles we just fixed (no prior edge_class)
+            if let Some(ref ec) = tile_raw.edge_class {
+                // Check if this was in the original source (not our fix)
+                let marker = format!("[tile.{}.edge_class]", name);
+                if source.contains(&marker) {
+                    continue;
+                }
+                appendix.push_str(&format!(
+                    "\n[tile.{}.edge_class]\nn = \"{}\"\ne = \"{}\"\ns = \"{}\"\nw = \"{}\"\n",
+                    name, ec.n, ec.e, ec.s, ec.w
+                ));
+            }
+        }
+
+        if !appendix.is_empty() {
+            let new_source = format!("{}\n{}", source.trim_end(), appendix);
+            if let Err(e) = std::fs::write(file, &new_source) {
+                eprintln!("error writing {}: {}", file.display(), e);
                 process::exit(1);
             }
+            println!("wrote {} — {} edges fixed", file.display(), fixed);
         }
     }
 
@@ -857,6 +912,8 @@ fn cmd_export(file: &PathBuf, format: &str, out_dir: &PathBuf) {
                         img.width(),
                         img.height(),
                         8,
+                        1, // spacing (between tiles)
+                        1, // margin (from image edge)
                         &collision_map,
                     );
                     let tsj_str = serde_json::to_string_pretty(&tileset).unwrap();
@@ -1400,6 +1457,80 @@ fn cmd_narrate(
             process::exit(1);
         }
     }
+}
+
+fn cmd_vary(
+    file: &PathBuf,
+    tile_name: &str,
+    count: usize,
+    seed: u64,
+    out_dir: Option<&std::path::Path>,
+) {
+    let (pax_file, palettes) = load_pax(file);
+
+    let tile_raw = match pax_file.tile.get(tile_name) {
+        Some(t) => t,
+        None => {
+            eprintln!("error: tile '{}' not found", tile_name);
+            process::exit(1);
+        }
+    };
+
+    let palette = match palettes.get(&tile_raw.palette) {
+        Some(p) => p,
+        None => {
+            eprintln!("error: palette '{}' not found", tile_raw.palette);
+            process::exit(1);
+        }
+    };
+
+    // Resolve the base grid
+    let (base_grid, w, h) = match pixl_core::resolve::resolve_tile_grid(
+        tile_name,
+        &pax_file.tile,
+        &palettes,
+        &std::collections::HashMap::new(),
+    ) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("error: {}", e);
+            process::exit(1);
+        }
+    };
+
+    let variants = pixl_core::vary::generate_variants(tile_name, &base_grid, palette, count, seed, '.');
+
+    for v in &variants {
+        println!("[tile.{}]", v.name);
+        println!("palette = \"{}\"", tile_raw.palette);
+        println!("size    = \"{}x{}\"", w, h);
+        println!("# mutation: {}", v.mutation);
+        println!("grid = '''");
+        for row in &v.grid {
+            println!("{}", row.iter().collect::<String>());
+        }
+        println!("'''");
+        println!();
+    }
+
+    // Render PNGs if output dir specified
+    if let Some(dir) = out_dir {
+        if let Err(e) = std::fs::create_dir_all(dir) {
+            eprintln!("error: {}", e);
+            process::exit(1);
+        }
+        for v in &variants {
+            let img = pixl_render::renderer::render_grid(&v.grid, palette, 4);
+            let path = dir.join(format!("{}.png", v.name));
+            if let Err(e) = img.save(&path) {
+                eprintln!("error: {}", e);
+            } else {
+                println!("  {} -> {}", v.name, path.display());
+            }
+        }
+    }
+
+    println!("# Generated {} variant(s) from '{}' (seed={})", variants.len(), tile_name, seed);
 }
 
 fn cmd_generate_stamps(pattern: &str, size: u32, fg: char, bg: char) {

@@ -23,6 +23,7 @@ pub fn handle_tool(state: &Mutex<McpState>, tool_name: &str, args: &Value) -> Va
         "pixl_learn_style" => handle_learn_style(state, args),
         "pixl_check_style" => handle_check_style(state, args),
         "pixl_generate_context" => handle_generate_context(state, args),
+        "pixl_vary_tile" => handle_vary_tile(state, args),
         "pixl_list_themes" => handle_list_themes(state),
         "pixl_list_stamps" => handle_list_stamps(state),
         "pixl_pack_atlas" => handle_pack_atlas(state, args),
@@ -825,6 +826,99 @@ fn handle_get_blueprint(args: &Value) -> Value {
 
 /// Build an enriched generation context for the Studio to send to Claude.
 /// Returns the system prompt + constraints the Studio injects into its Anthropic call.
+fn handle_vary_tile(state: &Mutex<McpState>, args: &Value) -> Value {
+    let mut st = state.lock().unwrap();
+    let name = args.get("name").and_then(|v| v.as_str()).unwrap_or("");
+    let count = args.get("count").and_then(|v| v.as_u64()).unwrap_or(4) as usize;
+    let seed = args.get("seed").and_then(|v| v.as_u64()).unwrap_or(42);
+
+    let palette = {
+        let tile_raw = match st.file.tile.get(name) {
+            Some(t) => t,
+            None => return json!({"error": format!("tile '{}' not found", name)}),
+        };
+        match st.palettes.get(&tile_raw.palette) {
+            Some(p) => p.clone(),
+            None => return json!({"error": "palette not found"}),
+        }
+    };
+
+    let (base_grid, w, h) = match pixl_core::resolve::resolve_tile_grid(
+        name,
+        &st.file.tile,
+        &st.palettes,
+        &std::collections::HashMap::new(),
+    ) {
+        Ok(r) => r,
+        Err(e) => return json!({"error": format!("{}", e)}),
+    };
+
+    let variants = pixl_core::vary::generate_variants(name, &base_grid, &palette, count, seed, '.');
+
+    // Grab what we need before mutating
+    let base_palette_name = st.file.tile.get(name).map(|t| t.palette.clone()).unwrap_or_default();
+    let base_semantic = st.file.tile.get(name).and_then(|t| t.semantic.clone());
+
+    // Store variants in session and render previews
+    let mut results = Vec::new();
+    for v in &variants {
+        let preview_img = renderer::render_grid(&v.grid, &palette, 8);
+        let b64 = renderer::png_to_base64(&renderer::encode_png(&preview_img));
+
+        let grid_string: String = v.grid.iter()
+            .map(|row| row.iter().collect::<String>())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        // Auto-classify edges
+        let auto_edges = edges::auto_classify_edges(&v.grid);
+
+        // Store in session
+        st.file.tile.insert(
+            v.name.clone(),
+            pixl_core::types::TileRaw {
+                palette: base_palette_name.clone(),
+                size: Some(format!("{}x{}", w, h)),
+                encoding: None,
+                symmetry: None,
+                auto_rotate: None,
+                auto_rotate_weight: None,
+                template: None,
+                edge_class: Some(pixl_core::types::EdgeClassRaw {
+                    n: auto_edges.n.clone(),
+                    e: auto_edges.e.clone(),
+                    s: auto_edges.s.clone(),
+                    w: auto_edges.w.clone(),
+                }),
+                tags: vec!["variant".to_string(), format!("base:{}", name)],
+                weight: 1.0,
+                palette_swaps: vec![],
+                cycles: vec![],
+                nine_slice: None,
+                visual_height_extra: None,
+                semantic: base_semantic.clone(),
+                grid: Some(grid_string),
+                rle: None,
+                layout: None,
+            },
+        );
+
+        results.push(json!({
+            "name": v.name,
+            "mutation": v.mutation,
+            "preview_b64": b64,
+        }));
+    }
+
+    json!({
+        "ok": true,
+        "base_tile": name,
+        "count": variants.len(),
+        "seed": seed,
+        "variants": results,
+    })
+}
+
 fn handle_generate_context(state: &Mutex<McpState>, args: &Value) -> Value {
     let st = state.lock().unwrap();
 

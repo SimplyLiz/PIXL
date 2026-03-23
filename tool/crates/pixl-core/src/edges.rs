@@ -28,7 +28,16 @@ pub fn extract_edges(grid: &[Vec<char>]) -> (String, String, String, String) {
 }
 
 /// Auto-classify an edge string into a named edge class.
-/// Uses FNV-1a for deterministic hashing (not SipHash).
+///
+/// Classification is majority-based to produce coarse groups that enable
+/// WFC tiling. Two edges with the same dominant character are considered
+/// compatible, which is visually correct for most pixel art tiles.
+///
+/// Classes produced:
+/// - `"open"` — all transparent (`.`)
+/// - `"solid_X"` — 100% character X
+/// - `"edge_X"` — majority character X (>50%), mixed with others
+/// - `"mixed_<hash>"` — no majority character (perfectly balanced)
 pub fn classify_edge(edge: &str) -> String {
     let chars: Vec<char> = edge.chars().collect();
 
@@ -44,16 +53,31 @@ pub fn classify_edge(edge: &str) -> String {
         return format!("solid_{}", chars[0]);
     }
 
-    // Symmetric edge -> "sym_<hash4>"
-    let reversed: Vec<char> = chars.iter().rev().cloned().collect();
-    if chars == reversed {
-        let h = fnv1a_hash(edge);
-        return format!("sym_{:04x}", h & 0xFFFF);
+    // Count character frequencies
+    let mut counts: std::collections::HashMap<char, usize> = std::collections::HashMap::new();
+    for &c in &chars {
+        *counts.entry(c).or_insert(0) += 1;
     }
 
-    // Mixed -> "mixed_<hash8>"
+    // Find the majority character (most frequent)
+    let total = chars.len();
+    let (majority_char, majority_count) = counts
+        .iter()
+        .max_by_key(|&(c, count)| (*count, std::cmp::Reverse(*c)))
+        .map(|(&c, &count)| (c, count))
+        .unwrap();
+
+    // If one character has strict majority (>50%), classify by it
+    if majority_count * 2 > total {
+        if majority_char == '.' {
+            return "open".to_string();
+        }
+        return format!("edge_{}", majority_char);
+    }
+
+    // No majority — use hash for exact matching (rare in practice)
     let h = fnv1a_hash(edge);
-    format!("mixed_{:08x}", h)
+    format!("mixed_{:x}", h)
 }
 
 /// Auto-classify all four edges of a grid.
@@ -104,35 +128,35 @@ mod tests {
     }
 
     #[test]
-    fn classify_symmetric() {
-        let class = classify_edge("#+.+#");
+    fn classify_majority() {
+        // 3 out of 5 chars are '+' -> edge_+
+        let class = classify_edge("#+.++");
+        assert_eq!(class, "edge_+", "expected edge_+ for majority +, got {}", class);
+    }
+
+    #[test]
+    fn classify_mixed_balanced() {
+        // Exactly 50/50 -> falls to hash
+        let class = classify_edge("##++");
         assert!(
-            class.starts_with("sym_"),
-            "expected sym_ prefix, got {}",
+            class.starts_with("mixed_"),
+            "expected mixed_ prefix for balanced edge, got {}",
             class
         );
     }
 
     #[test]
-    fn classify_mixed() {
-        let class = classify_edge("#++.");
-        assert!(
-            class.starts_with("mixed_"),
-            "expected mixed_ prefix, got {}",
-            class
-        );
+    fn classify_edge_majority_dominant() {
+        // 10 '+' out of 16 (62.5%) -> edge_+
+        let class = classify_edge("++++s+++s++++s++");
+        assert_eq!(class, "edge_+", "expected edge_+ for majority +, got {}", class);
     }
 
     #[test]
     fn deterministic_hashing() {
-        // Same input always produces same hash
         let a = classify_edge("#++#++#");
         let b = classify_edge("#++#++#");
         assert_eq!(a, b);
-
-        // Different input produces different hash (with high probability)
-        let c = classify_edge("#+..+#");
-        // Could theoretically collide but astronomically unlikely
     }
 
     #[test]
@@ -141,8 +165,8 @@ mod tests {
         let ec = auto_classify_edges(&grid);
         assert_eq!(ec.n, "solid_#");
         assert_eq!(ec.s, "solid_+");
-        // West and east are mixed
-        assert!(ec.w.starts_with("mixed_") || ec.w.starts_with("sym_"));
-        assert!(ec.e.starts_with("mixed_") || ec.e.starts_with("sym_"));
+        // West and east: col 0 = #,#,#,+ (75% #) -> edge_#
+        assert_eq!(ec.w, "edge_#");
+        assert_eq!(ec.e, "edge_#");
     }
 }

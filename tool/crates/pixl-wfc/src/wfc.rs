@@ -9,8 +9,14 @@ pub enum WfcError {
     #[error("contradiction at ({x}, {y}): no valid tiles remaining")]
     Contradiction { x: usize, y: usize },
 
-    #[error("WFC failed after {retries} retries")]
-    ExhaustedRetries { retries: u32 },
+    #[error("WFC failed after {retries} retries (last contradiction at ({last_x}, {last_y}), {compatible_pairs} compatible tile pairs out of {total_pairs} possible)")]
+    ExhaustedRetries {
+        retries: u32,
+        last_x: usize,
+        last_y: usize,
+        compatible_pairs: usize,
+        total_pairs: usize,
+    },
 
     #[error("empty tileset")]
     EmptyTileset,
@@ -56,6 +62,7 @@ pub fn run_wfc(
         return Err(WfcError::EmptyTileset);
     }
 
+    let mut last_contradiction = (0, 0);
     for retry in 0..=config.max_retries {
         let seed = config.seed + retry as u64;
         match attempt_wfc(rules, config, pins, n, seed) {
@@ -68,15 +75,32 @@ pub fn run_wfc(
                     retries: retry,
                 });
             }
-            Err(WfcError::Contradiction { .. }) if retry < config.max_retries => {
+            Err(WfcError::Contradiction { x, y }) if retry < config.max_retries => {
+                last_contradiction = (x, y);
                 continue; // retry with next seed
+            }
+            Err(WfcError::Contradiction { x, y }) => {
+                last_contradiction = (x, y);
             }
             Err(e) => return Err(e),
         }
     }
 
+    // Count compatible pairs to help diagnose connectivity issues
+    let mut compatible_pairs = 0;
+    let total_pairs = n * n * 4;
+    for tile_idx in 0..n {
+        for dir in Direction::all() {
+            compatible_pairs += rules.compatible(tile_idx, dir).count_ones(..);
+        }
+    }
+
     Err(WfcError::ExhaustedRetries {
         retries: config.max_retries,
+        last_x: last_contradiction.0,
+        last_y: last_contradiction.1,
+        compatible_pairs,
+        total_pairs,
     })
 }
 

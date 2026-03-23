@@ -34,6 +34,7 @@ pub fn create_router(state: McpState) -> Router {
         .route("/api/sprite/gif", post(render_sprite_gif))
         .route("/api/file", get(get_file))
         .route("/api/generate/context", post(generate_context))
+        .route("/api/tile/vary", post(vary_tile))
         .route("/api/themes", get(list_themes))
         .route("/api/stamps", get(list_stamps))
         .route("/api/atlas/pack", post(pack_atlas))
@@ -126,6 +127,10 @@ async fn list_stamps(State(state): State<SharedState>) -> Json<Value> {
 
 async fn pack_atlas(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
     Json(handlers::handle_tool(&state, "pixl_pack_atlas", &args))
+}
+
+async fn vary_tile(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
+    Json(handlers::handle_tool(&state, "pixl_vary_tile", &args))
 }
 
 async fn load_source(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {

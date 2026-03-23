@@ -15,3 +15,4 @@ pub mod resolve;
 pub mod stampgen;
 pub mod style;
 pub mod validate;
+pub mod vary;

@@ -9,6 +9,21 @@ class PixlPalette {
 
   int get length => colors.length;
   Color operator [](int index) => colors[index];
+
+  PixlPalette withColor(int index, Color color) {
+    final newColors = List<Color>.from(colors);
+    newColors[index] = color;
+    return PixlPalette(name: name, colors: newColors);
+  }
+
+  PixlPalette addColor(Color color) {
+    return PixlPalette(name: name, colors: [...colors, color]);
+  }
+
+  PixlPalette removeColorAt(int index) {
+    final newColors = List<Color>.from(colors)..removeAt(index);
+    return PixlPalette(name: name, colors: newColors);
+  }
 }
 
 /// Built-in theme palettes matching the PIXL themes.

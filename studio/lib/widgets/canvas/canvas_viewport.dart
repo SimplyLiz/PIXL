@@ -6,7 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/palette.dart';
 import '../../models/pixel_canvas.dart';
 import '../../providers/canvas_provider.dart';
+import '../../providers/hover_provider.dart';
 import '../../providers/palette_provider.dart';
+import '../shortcuts_dialog.dart';
 import 'pixel_canvas_painter.dart';
 
 /// The main canvas viewport — handles mouse input, zooming, and delegates
@@ -114,13 +116,23 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
     setState(() {
       _hoverPixel = pixel != null ? Offset(pixel.$1.toDouble(), pixel.$2.toDouble()) : null;
     });
+    // Update hover provider for status bar display
+    final hover = ref.read(hoverProvider.notifier);
+    if (pixel != null) {
+      hover.update(pixel.$1, pixel.$2);
+    } else {
+      hover.clear();
+    }
   }
 
   void _handleScroll(PointerSignalEvent event, CanvasState cs) {
     if (event is PointerScrollEvent) {
       final notifier = ref.read(canvasProvider.notifier);
-      final delta = event.scrollDelta.dy > 0 ? -1.0 : 1.0;
-      notifier.setZoom(cs.zoomLevel + delta);
+      if (event.scrollDelta.dy > 0) {
+        notifier.zoomOut();
+      } else {
+        notifier.zoomIn();
+      }
     }
   }
 
@@ -180,6 +192,27 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
               notifier.setTool(DrawingTool.eyedropper);
               return KeyEventResult.handled;
             }
+            // H = toggle grid
+            if (event.logicalKey == LogicalKeyboardKey.keyH && !meta) {
+              notifier.toggleGrid();
+              return KeyEventResult.handled;
+            }
+            // Cmd+/ = shortcuts overlay
+            if (meta && event.logicalKey == LogicalKeyboardKey.slash) {
+              ShortcutsDialog.show(context);
+              return KeyEventResult.handled;
+            }
+            // +/= and - for zoom
+            if (event.logicalKey == LogicalKeyboardKey.equal ||
+                event.logicalKey == LogicalKeyboardKey.numpadAdd) {
+              notifier.zoomIn();
+              return KeyEventResult.handled;
+            }
+            if (event.logicalKey == LogicalKeyboardKey.minus ||
+                event.logicalKey == LogicalKeyboardKey.numpadSubtract) {
+              notifier.zoomOut();
+              return KeyEventResult.handled;
+            }
             return KeyEventResult.ignored;
           },
           child: Listener(
@@ -187,7 +220,10 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
             child: MouseRegion(
               cursor: _spaceHeld ? SystemMouseCursors.grab : _cursorForTool(cs.activeTool),
               onHover: (event) => _handlePointerHover(event, cs),
-              onExit: (_) => setState(() => _hoverPixel = null),
+              onExit: (_) {
+                setState(() => _hoverPixel = null);
+                ref.read(hoverProvider.notifier).clear();
+              },
               child: Listener(
                 onPointerDown: _isPanMode(cs) ? null : (event) => _handlePointerDown(event, cs, palette),
                 onPointerMove: (event) {

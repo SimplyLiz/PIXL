@@ -52,6 +52,11 @@ pub struct TiledTilesetRef {
 
 #[derive(Debug, Serialize)]
 pub struct TiledTileset {
+    #[serde(rename = "type")]
+    pub tileset_type: String,
+    #[serde(rename = "tiledversion")]
+    pub tiled_version: String,
+    pub version: String,
     pub name: String,
     #[serde(rename = "tilewidth")]
     pub tile_width: u32,
@@ -60,6 +65,8 @@ pub struct TiledTileset {
     #[serde(rename = "tilecount")]
     pub tile_count: u32,
     pub columns: u32,
+    pub spacing: u32,
+    pub margin: u32,
     pub image: String,
     #[serde(rename = "imagewidth")]
     pub image_width: u32,
@@ -112,6 +119,8 @@ pub fn generate_tileset(
     atlas_width: u32,
     atlas_height: u32,
     columns: u32,
+    spacing: u32,
+    margin: u32,
     collision_map: &HashMap<String, String>, // tile_name -> collision type
 ) -> TiledTileset {
     let tiles: Vec<TiledTileEntry> = tile_names
@@ -119,6 +128,8 @@ pub fn generate_tileset(
         .enumerate()
         .map(|(i, tile_name)| {
             let collision = collision_map.get(tile_name).map(|c| c.as_str());
+            let tw = tile_width as f32;
+            let th = tile_height as f32;
             let object_group = match collision {
                 Some("full") => Some(TiledObjectGroup {
                     draw_order: "topdown".to_string(),
@@ -126,20 +137,51 @@ pub fn generate_tileset(
                         id: 1,
                         x: 0.0,
                         y: 0.0,
-                        width: tile_width as f32,
-                        height: tile_height as f32,
+                        width: tw,
+                        height: th,
                     }],
                 }),
-                Some("half_top") => Some(TiledObjectGroup {
+                Some("top_half") | Some("half_top") => Some(TiledObjectGroup {
                     draw_order: "topdown".to_string(),
                     objects: vec![TiledCollisionObject {
                         id: 1,
                         x: 0.0,
                         y: 0.0,
-                        width: tile_width as f32,
-                        height: tile_height as f32 / 2.0,
+                        width: tw,
+                        height: th / 2.0,
                     }],
                 }),
+                Some("bottom_half") => Some(TiledObjectGroup {
+                    draw_order: "topdown".to_string(),
+                    objects: vec![TiledCollisionObject {
+                        id: 1,
+                        x: 0.0,
+                        y: th / 2.0,
+                        width: tw,
+                        height: th / 2.0,
+                    }],
+                }),
+                Some("center") => Some(TiledObjectGroup {
+                    draw_order: "topdown".to_string(),
+                    objects: vec![TiledCollisionObject {
+                        id: 1,
+                        x: tw * 0.25,
+                        y: th * 0.25,
+                        width: tw * 0.5,
+                        height: th * 0.5,
+                    }],
+                }),
+                Some("custom") => Some(TiledObjectGroup {
+                    draw_order: "topdown".to_string(),
+                    objects: vec![TiledCollisionObject {
+                        id: 1,
+                        x: 0.0,
+                        y: 0.0,
+                        width: tw,
+                        height: th,
+                    }],
+                }),
+                Some("none") => None,
                 _ => None,
             };
 
@@ -156,11 +198,16 @@ pub fn generate_tileset(
         .collect();
 
     TiledTileset {
+        tileset_type: "tileset".to_string(),
+        tiled_version: "1.11.0".to_string(),
+        version: "1.10".to_string(),
         name: name.to_string(),
         tile_width,
         tile_height,
         tile_count: tile_names.len() as u32,
         columns,
+        spacing,
+        margin,
         image: atlas_image.to_string(),
         image_width: atlas_width,
         image_height: atlas_height,
@@ -233,10 +280,15 @@ mod tests {
             32,
             16,
             2,
+            1,
+            1,
             &collision,
         );
 
         assert_eq!(tileset.tile_count, 2);
+        assert_eq!(tileset.tileset_type, "tileset");
+        assert_eq!(tileset.spacing, 1);
+        assert_eq!(tileset.margin, 1);
         assert!(tileset.tiles[0].object_group.is_some()); // wall has collision
         assert!(tileset.tiles[1].object_group.is_none()); // floor has no collision
     }
@@ -261,11 +313,17 @@ mod tests {
             16,
             16,
             1,
+            0,
+            0,
             &HashMap::new(),
         );
         let json = serde_json::to_string_pretty(&tileset).unwrap();
         assert!(json.contains("tilewidth"));
         assert!(json.contains("tileheight"));
         assert!(json.contains("pax_name"));
+        assert!(json.contains("\"type\": \"tileset\""));
+        assert!(json.contains("\"tiledversion\""));
+        assert!(json.contains("\"spacing\""));
+        assert!(json.contains("\"margin\""));
     }
 }

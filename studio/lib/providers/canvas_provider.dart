@@ -192,8 +192,39 @@ class CanvasNotifier extends StateNotifier<CanvasState> {
     state = state.copyWith(symmetryMode: mode);
   }
 
+  static const _zoomLevels = [2.0, 4.0, 8.0, 14.0, 20.0, 32.0];
+
   void setZoom(double zoom) {
-    state = state.copyWith(zoomLevel: zoom.clamp(2.0, 32.0));
+    // Snap to nearest discrete zoom level
+    final clamped = zoom.clamp(2.0, 32.0);
+    var best = _zoomLevels.first;
+    var bestDist = (clamped - best).abs();
+    for (final level in _zoomLevels) {
+      final dist = (clamped - level).abs();
+      if (dist < bestDist) {
+        best = level;
+        bestDist = dist;
+      }
+    }
+    state = state.copyWith(zoomLevel: best);
+  }
+
+  void zoomIn() {
+    final idx = _zoomLevels.indexOf(state.zoomLevel);
+    if (idx < 0) {
+      setZoom(state.zoomLevel + 2);
+    } else if (idx < _zoomLevels.length - 1) {
+      state = state.copyWith(zoomLevel: _zoomLevels[idx + 1]);
+    }
+  }
+
+  void zoomOut() {
+    final idx = _zoomLevels.indexOf(state.zoomLevel);
+    if (idx < 0) {
+      setZoom(state.zoomLevel - 2);
+    } else if (idx > 0) {
+      state = state.copyWith(zoomLevel: _zoomLevels[idx - 1]);
+    }
   }
 
   void toggleGrid() {

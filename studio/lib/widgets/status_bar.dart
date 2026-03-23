@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/pixel_canvas.dart';
 import '../providers/backend_provider.dart';
 import '../providers/canvas_provider.dart';
+import '../providers/hover_provider.dart';
 import '../providers/palette_provider.dart';
 import '../theme/studio_theme.dart';
 
@@ -33,6 +34,8 @@ class StatusBar extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
         children: [
+          _PixelPosition(),
+          _sep(),
           Text(cs.canvasSize.label, style: style),
           _sep(),
           Text(toolName, style: style),
@@ -69,6 +72,23 @@ class StatusBar extends ConsumerWidget {
         padding: EdgeInsets.symmetric(horizontal: 8),
         child: Text('|', style: TextStyle(color: Color(0xFF3a3a5e), fontSize: 11)),
       );
+}
+
+class _PixelPosition extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hover = ref.watch(hoverProvider);
+    final style = Theme.of(context).textTheme.bodySmall!.copyWith(fontSize: 11);
+    return SizedBox(
+      width: 48,
+      child: Text(
+        hover.hasPosition ? '${hover.x}, ${hover.y}' : '--, --',
+        style: style.copyWith(
+          color: hover.hasPosition ? null : const Color(0xFF555566),
+        ),
+      ),
+    );
+  }
 }
 
 class _EngineIndicator extends ConsumerWidget {

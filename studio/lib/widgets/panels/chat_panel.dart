@@ -8,7 +8,9 @@ import '../../providers/backend_provider.dart';
 import '../../providers/canvas_provider.dart';
 import '../../providers/chat_provider.dart';
 import '../../providers/claude_provider.dart';
+import '../../providers/style_provider.dart';
 import '../../services/claude_api.dart';
+import '../../services/knowledge_base.dart';
 import '../../theme/studio_theme.dart';
 import '../../utils/grid_parser.dart';
 
@@ -115,11 +117,17 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
       return;
     }
 
-    final systemPrompt = ctx['system_prompt'] as String? ?? '';
+    final backendContext = ctx['system_prompt'] as String? ?? '';
     final userPrompt = ctx['user_prompt'] as String? ?? prompt;
     final themeName = ctx['theme'] as String? ?? '';
 
-    // Step 3: Call Claude API
+    // Step 3: Build enriched system prompt with knowledge base + style
+    final style = ref.read(styleProvider);
+    final systemPrompt = await KnowledgeBase.buildSystemPrompt(
+      backendContext: backendContext,
+      styleFragment: style.toPromptFragment(),
+    );
+
     chat.addAssistantMessage(
       'Generating $sizeStr tile with **${claude.model.split('-').take(2).join(' ')}**...'
       '${themeName.isNotEmpty ? ' (theme: $themeName)' : ''}',
@@ -303,14 +311,17 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
 
     // Send to Claude as expert chat if API key is configured
     if (claude.hasApiKey && backend.isConnected) {
-      // Get context for chat
+      // Build system prompt with knowledge base + session context
       final ctx = await ref.read(backendProvider.notifier).getGenerationContext(
         prompt: text,
         type: 'chat',
       );
-      final systemPrompt = ctx['system_prompt'] as String? ??
-          'You are a pixel art expert. Help the user with pixel art techniques, '
-          'palette design, tiling, and the PAX format.';
+      final backendCtx = ctx['system_prompt'] as String? ?? '';
+      final style = ref.read(styleProvider);
+      final systemPrompt = await KnowledgeBase.buildSystemPrompt(
+        backendContext: backendCtx,
+        styleFragment: style.toPromptFragment(),
+      );
 
       // Build message history from chat
       // Filter out status messages — they waste tokens in Claude's context.

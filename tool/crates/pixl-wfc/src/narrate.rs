@@ -133,6 +133,7 @@ pub fn narrate_map(
         map
     };
 
+    let mut last_contradiction = (0usize, 0usize);
     for retry in 0..=config.max_retries {
         let seed = config.seed + retry as u64;
         let mut pins: Vec<Pin> = Vec::new();
@@ -227,15 +228,29 @@ pub fn narrate_map(
                 }
                 // Path blocked — retry
             }
-            Err(WfcError::Contradiction { .. }) => {
+            Err(WfcError::Contradiction { x, y }) => {
+                last_contradiction = (x, y);
                 // Retry with next seed
             }
             Err(e) => return Err(e),
         }
     }
 
+    // Count compatible pairs for diagnostic
+    let mut compatible_pairs = 0;
+    let total_pairs = tiles.len() * tiles.len() * 4;
+    for tile_idx in 0..tiles.len() {
+        for dir in crate::adjacency::Direction::all() {
+            compatible_pairs += rules.compatible(tile_idx, dir).count_ones(..);
+        }
+    }
+
     Err(WfcError::ExhaustedRetries {
         retries: config.max_retries,
+        last_x: last_contradiction.0,
+        last_y: last_contradiction.1,
+        compatible_pairs,
+        total_pairs,
     })
 }
 
