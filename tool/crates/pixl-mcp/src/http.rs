@@ -39,6 +39,9 @@ pub fn create_router(state: McpState) -> Router {
         .route("/api/stamps", get(list_stamps))
         .route("/api/atlas/pack", post(pack_atlas))
         .route("/api/load", post(load_source))
+        .route("/api/feedback", post(record_feedback))
+        .route("/api/feedback/stats", get(feedback_stats))
+        .route("/api/feedback/constraints", get(feedback_constraints))
         .route("/api/tool", post(generic_tool_call))
         .with_state(shared)
 }
@@ -135,6 +138,18 @@ async fn vary_tile(State(state): State<SharedState>, Json(args): Json<Value>) ->
 
 async fn load_source(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
     Json(handlers::handle_tool(&state, "pixl_load_source", &args))
+}
+
+async fn record_feedback(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
+    Json(handlers::handle_tool(&state, "pixl_record_feedback", &args))
+}
+
+async fn feedback_stats(State(state): State<SharedState>) -> Json<Value> {
+    Json(handlers::handle_tool(&state, "pixl_feedback_stats", &Value::Null))
+}
+
+async fn feedback_constraints(State(state): State<SharedState>) -> Json<Value> {
+    Json(handlers::handle_tool(&state, "pixl_feedback_constraints", &Value::Null))
 }
 
 /// Generic tool call endpoint — accepts { "tool": "pixl_xxx", "args": {...} }

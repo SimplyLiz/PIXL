@@ -247,6 +247,31 @@ class PixlBackend {
     return _get('/api/file');
   }
 
+  // ── Feedback ─────────────────────────────────────────
+
+  /// Record accept/reject/edit feedback for a tile.
+  Future<Map<String, dynamic>> recordFeedback({
+    required String name,
+    required String action,
+    String? rejectReason,
+  }) async {
+    return _post('/api/feedback', {
+      'name': name,
+      'action': action,
+      if (rejectReason != null) 'reject_reason': rejectReason,
+    });
+  }
+
+  /// Get feedback statistics.
+  Future<Map<String, dynamic>> feedbackStats() async {
+    return _get('/api/feedback/stats');
+  }
+
+  /// Get feedback constraints for generation.
+  Future<Map<String, dynamic>> feedbackConstraints() async {
+    return _get('/api/feedback/constraints');
+  }
+
   // ── Generic ────────────────────────────────────────────
 
   /// Call any tool by name.

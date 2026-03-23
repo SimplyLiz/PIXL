@@ -3,6 +3,7 @@ pub mod compose;
 pub mod corpus;
 pub mod cycle;
 pub mod edges;
+pub mod feedback;
 pub mod grid;
 pub mod parser;
 pub mod rle;

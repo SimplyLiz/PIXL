@@ -1,4 +1,5 @@
 use crate::state::McpState;
+use pixl_core::feedback::{FeedbackAction, FeedbackEvent, RejectReason};
 use pixl_core::{blueprint, edges, grid, style::StyleLatent, types::parse_size, validate};
 use pixl_wfc::{adjacency::TileEdges, narrate, semantic};
 use pixl_render::renderer;
@@ -28,6 +29,9 @@ pub fn handle_tool(state: &Mutex<McpState>, tool_name: &str, args: &Value) -> Va
         "pixl_list_stamps" => handle_list_stamps(state),
         "pixl_pack_atlas" => handle_pack_atlas(state, args),
         "pixl_load_source" => handle_load_source(state, args),
+        "pixl_record_feedback" => handle_record_feedback(state, args),
+        "pixl_feedback_stats" => handle_feedback_stats(state),
+        "pixl_feedback_constraints" => handle_feedback_constraints(state),
         _ => json!({"error": format!("unknown tool: {}", tool_name)}),
     }
 }
@@ -999,6 +1003,42 @@ fn handle_generate_context(state: &Mutex<McpState>, args: &Value) -> Value {
         layer_context.push_str(&layer_assignments);
     }
 
+    // Get feedback constraints — structured, not prompt injection
+    let constraints = st.feedback.constraints();
+
+    // Build few-shot examples section from accepted tiles
+    let mut examples_text = String::new();
+    if !constraints.examples.is_empty() {
+        examples_text.push_str("\nReference tiles (accepted by artist):\n");
+        for ex in &constraints.examples {
+            examples_text.push_str(&format!(
+                "  {} [{}]:\n```\n{}\n```\n",
+                ex.name,
+                ex.tags.join(", "),
+                ex.grid
+            ));
+        }
+    }
+
+    // Build avoid constraints from rejection patterns
+    let mut avoid_text = String::new();
+    if !constraints.avoid.is_empty() {
+        avoid_text.push_str("\nLearned constraints (from artist feedback):\n");
+        for c in &constraints.avoid {
+            avoid_text.push_str(&format!("- {}\n", c));
+        }
+    }
+
+    // Preferred style as structured features (not prose)
+    let preference_text = if let Some(ref pref) = constraints.preferred_style {
+        format!(
+            "\nPreferred style profile (from accepted tiles):\n{}",
+            pref.describe()
+        )
+    } else {
+        String::new()
+    };
+
     // Build the enriched system prompt
     let system_prompt = format!(
         "You are a pixel art expert generating PAX format tiles.\n\
@@ -1006,12 +1046,15 @@ fn handle_generate_context(state: &Mutex<McpState>, args: &Value) -> Value {
          {palette_text}\n\
          {theme_text}\n\
          {style_text}\n\
+         {preference_text}\n\
          Canvas size: {size_str}\n\
          Type: {tile_type}\n\
          \n\
          {layer_context}\n\
          Existing tile edge classes:\n\
          {edge_context}\n\
+         {examples_text}\
+         {avoid_text}\
          \n\
          Rules:\n\
          - Use ONLY symbols from the palette above\n\
@@ -1028,6 +1071,8 @@ fn handle_generate_context(state: &Mutex<McpState>, args: &Value) -> Value {
         "Generate a {size_str} {tile_type}: {prompt}"
     );
 
+    let stats = st.feedback.stats();
+
     json!({
         "system_prompt": system_prompt,
         "user_prompt": user_prompt,
@@ -1037,6 +1082,13 @@ fn handle_generate_context(state: &Mutex<McpState>, args: &Value) -> Value {
         "existing_tiles": st.tile_names(),
         "style_latent": style_text,
         "available_layers": layer_roles,
+        "feedback": {
+            "min_style_score": constraints.min_style_score,
+            "acceptance_rate": stats.acceptance_rate,
+            "total_feedback": stats.total_accepts + stats.total_rejects,
+            "example_count": constraints.examples.len(),
+            "avoid_count": constraints.avoid.len(),
+        },
     })
 }
 
@@ -1173,4 +1225,167 @@ fn handle_load_source(state: &Mutex<McpState>, args: &Value) -> Value {
         }
         Err(e) => json!({"ok": false, "error": format!("{}", e)}),
     }
+}
+
+// ── Feedback ─────────────────────────────────────────────────────────
+
+fn handle_record_feedback(state: &Mutex<McpState>, args: &Value) -> Value {
+    let mut st = state.lock().unwrap();
+
+    let tile_name = match args.get("name").and_then(|v| v.as_str()) {
+        Some(n) => n.to_string(),
+        None => return json!({"error": "name required"}),
+    };
+
+    let action = match args.get("action").and_then(|v| v.as_str()) {
+        Some("accept") => FeedbackAction::Accept,
+        Some("reject") => FeedbackAction::Reject,
+        Some("edit") => FeedbackAction::Edit,
+        _ => return json!({"error": "action must be accept, reject, or edit"}),
+    };
+
+    let reject_reason = args.get("reject_reason").and_then(|v| v.as_str()).map(|r| {
+        match r {
+            "too_sparse" => RejectReason::TooSparse,
+            "too_dense" => RejectReason::TooDense,
+            "wrong_style" => RejectReason::WrongStyle,
+            "bad_edges" => RejectReason::BadEdges,
+            "palette_violation" => RejectReason::PaletteViolation,
+            "bad_composition" => RejectReason::BadComposition,
+            other => RejectReason::Other(other.to_string()),
+        }
+    });
+
+    // Extract tile features + grid if the tile exists
+    let (tile_features, grid, tags, target_layer) = if let Some(tile_raw) = st.file.tile.get(&tile_name) {
+        let tags = tile_raw.tags.clone();
+        let target_layer = tile_raw.target_layer.clone();
+
+        // Resolve grid and compute features
+        let resolved = pixl_core::resolve::resolve_tile_grid(
+            &tile_name,
+            &st.file.tile,
+            &st.palettes,
+            &std::collections::HashMap::new(),
+        );
+        match resolved {
+            Ok((grid_data, _, _)) => {
+                // Get palette for feature extraction
+                let palette_name = &tile_raw.palette;
+                let features = st.palettes.get(palette_name).map(|pal| {
+                    let void_sym = pal.symbols.iter()
+                        .find(|(_, rgba)| rgba.a == 0)
+                        .map(|(c, _)| *c)
+                        .unwrap_or('.');
+                    StyleLatent::extract(&[&grid_data], pal, void_sym)
+                });
+                let style_score = features.as_ref().and_then(|f| {
+                    st.style_latent.as_ref().map(|latent| {
+                        let pal = st.palettes.get(palette_name)?;
+                        let void_sym = pal.symbols.iter()
+                            .find(|(_, rgba)| rgba.a == 0)
+                            .map(|(c, _)| *c)
+                            .unwrap_or('.');
+                        Some(latent.score_tile(&grid_data, pal, void_sym))
+                    }).flatten()
+                });
+
+                (features, Some(grid_data), tags, target_layer)
+            }
+            Err(_) => (None, None, tags, target_layer),
+        }
+    } else {
+        (None, None, vec![], None)
+    };
+
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    // Compute style score
+    let style_score = tile_features.as_ref().and_then(|features| {
+        st.style_latent.as_ref().and_then(|latent| {
+            grid.as_ref().and_then(|g| {
+                let tile_raw = st.file.tile.get(&tile_name)?;
+                let pal = st.palettes.get(&tile_raw.palette)?;
+                let void_sym = pal.symbols.iter()
+                    .find(|(_, rgba)| rgba.a == 0)
+                    .map(|(c, _)| *c)
+                    .unwrap_or('.');
+                Some(latent.score_tile(g, pal, void_sym))
+            })
+        })
+    });
+
+    st.feedback.record(FeedbackEvent {
+        tile_name: tile_name.clone(),
+        action,
+        tile_features,
+        style_score,
+        reject_reason,
+        grid,
+        tags,
+        target_layer,
+        timestamp,
+    });
+
+    // Auto-update style latent on accept
+    if action == FeedbackAction::Accept || action == FeedbackAction::Edit {
+        // Rebuild style latent from all accepted tiles
+        let accepted_grids: Vec<Vec<Vec<char>>> = st.feedback.events().iter()
+            .filter(|e| e.action == FeedbackAction::Accept || e.action == FeedbackAction::Edit)
+            .filter_map(|e| e.grid.clone())
+            .collect();
+
+        if !accepted_grids.is_empty() {
+            // Find a palette for extraction
+            if let Some(first_pal) = st.palettes.values().next() {
+                let void_sym = first_pal.symbols.iter()
+                    .find(|(_, rgba)| rgba.a == 0)
+                    .map(|(c, _)| *c)
+                    .unwrap_or('.');
+                let grid_refs: Vec<&Vec<Vec<char>>> = accepted_grids.iter().collect();
+                st.style_latent = Some(StyleLatent::extract(
+                    &grid_refs,
+                    first_pal,
+                    void_sym,
+                ));
+            }
+        }
+    }
+
+    let stats = st.feedback.stats();
+    json!({
+        "ok": true,
+        "recorded": tile_name,
+        "acceptance_rate": stats.acceptance_rate,
+        "total_feedback": stats.total_accepts + stats.total_rejects + stats.total_edits,
+        "style_score": style_score,
+    })
+}
+
+fn handle_feedback_stats(state: &Mutex<McpState>) -> Value {
+    let st = state.lock().unwrap();
+    let stats = st.feedback.stats();
+    json!({
+        "total_accepts": stats.total_accepts,
+        "total_rejects": stats.total_rejects,
+        "total_edits": stats.total_edits,
+        "acceptance_rate": stats.acceptance_rate,
+        "avg_accepted_score": stats.avg_accepted_score,
+        "avg_rejected_score": stats.avg_rejected_score,
+        "top_reject_reasons": stats.top_reject_reasons,
+    })
+}
+
+fn handle_feedback_constraints(state: &Mutex<McpState>) -> Value {
+    let st = state.lock().unwrap();
+    let constraints = st.feedback.constraints();
+    json!({
+        "avoid": constraints.avoid,
+        "examples": constraints.examples,
+        "min_style_score": constraints.min_style_score,
+        "has_preferred_style": constraints.preferred_style.is_some(),
+    })
 }

@@ -194,40 +194,96 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     _scrollToBottom();
   }
 
-  /// Accept the pending tile — it stays in the session.
-  void _acceptTile() {
+  /// Accept the pending tile — record feedback, update style latent.
+  Future<void> _acceptTile() async {
     final chat = ref.read(chatProvider.notifier);
     if (_pendingTileName != null) {
-      chat.addAssistantMessage('Accepted **`$_pendingTileName`**. Tile is in the session.');
+      // Record feedback — triggers style latent update in engine
+      final resp = await ref.read(backendProvider.notifier).backend.recordFeedback(
+        name: _pendingTileName!,
+        action: 'accept',
+      );
+      final rate = resp['acceptance_rate'];
+      final rateStr = rate != null ? ' (${(rate * 100).round()}% acceptance rate)' : '';
+      chat.addAssistantMessage('Accepted **`$_pendingTileName`**.$rateStr');
       ref.read(backendProvider.notifier).refreshTiles();
     }
     setState(() {
       _pendingTileName = null;
       _pendingPreviewB64 = null;
-
     });
     _scrollToBottom();
   }
 
-  /// Reject the pending tile — delete from session.
+  /// Reject the pending tile — show reason selector, record feedback.
   void _rejectTile() {
+    if (_pendingTileName == null) return;
+    _showRejectReasonPicker();
+  }
+
+  void _showRejectReasonPicker() {
+    final reasons = {
+      'too_sparse': 'Too sparse',
+      'too_dense': 'Too dense',
+      'wrong_style': 'Wrong style',
+      'bad_edges': 'Bad edges',
+      'palette_violation': 'Palette issue',
+      'bad_composition': 'Bad composition',
+    };
+
+    showDialog(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Why reject?', style: TextStyle(fontSize: 14)),
+        children: [
+          ...reasons.entries.map((e) => SimpleDialogOption(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _doReject(e.key);
+            },
+            child: Text(e.value, style: const TextStyle(fontSize: 12)),
+          )),
+          SimpleDialogOption(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _doReject(null);
+            },
+            child: const Text('Skip (no reason)', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _doReject(String? reason) async {
     final chat = ref.read(chatProvider.notifier);
     if (_pendingTileName != null) {
+      // Record feedback with reason
+      await ref.read(backendProvider.notifier).backend.recordFeedback(
+        name: _pendingTileName!,
+        action: 'reject',
+        rejectReason: reason,
+      );
       ref.read(backendProvider.notifier).deleteTile(_pendingTileName!);
-      chat.addAssistantMessage('Rejected **`$_pendingTileName`**. Tile removed.');
+      final reasonText = reason != null ? ' (${reason.replaceAll('_', ' ')})' : '';
+      chat.addAssistantMessage('Rejected **`$_pendingTileName`**$reasonText');
     }
     setState(() {
       _pendingTileName = null;
       _pendingPreviewB64 = null;
-
     });
     _scrollToBottom();
   }
 
   /// Re-generate with the same prompt (variation).
   Future<void> _generateVariation() async {
-    // Delete current pending tile first
+    // Record reject + delete current pending tile
     if (_pendingTileName != null) {
+      await ref.read(backendProvider.notifier).backend.recordFeedback(
+        name: _pendingTileName!,
+        action: 'reject',
+        rejectReason: 'wrong_style', // variation implies style mismatch
+      );
       ref.read(backendProvider.notifier).deleteTile(_pendingTileName!);
     }
     setState(() {

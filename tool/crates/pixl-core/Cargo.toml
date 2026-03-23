@@ -12,6 +12,7 @@ toml = { workspace = true }
 fnv = { workspace = true }
 thiserror = { workspace = true }
 rand = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = "1"

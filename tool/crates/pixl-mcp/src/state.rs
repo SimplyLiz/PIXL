@@ -1,3 +1,4 @@
+use pixl_core::feedback::FeedbackStore;
 use pixl_core::parser::{parse_pax, resolve_all_palettes};
 use pixl_core::style::StyleLatent;
 use pixl_core::types::{Palette, PaxFile};
@@ -10,6 +11,7 @@ pub struct McpState {
     pub palettes: HashMap<String, Palette>,
     pub refinement_count: HashMap<String, u32>,
     pub style_latent: Option<StyleLatent>,
+    pub feedback: FeedbackStore,
 }
 
 impl McpState {
@@ -22,6 +24,7 @@ impl McpState {
             palettes: HashMap::new(),
             refinement_count: HashMap::new(),
             style_latent: None,
+            feedback: FeedbackStore::new(),
         }
     }
 
@@ -34,6 +37,7 @@ impl McpState {
             palettes,
             refinement_count: HashMap::new(),
             style_latent: None,
+            feedback: FeedbackStore::new(),
         })
     }
 
