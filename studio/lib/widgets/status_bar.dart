@@ -32,7 +32,7 @@ class StatusBar extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
         children: [
-          Text('${cs.canvasSize.label}', style: style),
+          Text(cs.canvasSize.label, style: style),
           _sep(),
           Text(toolName, style: style),
           _sep(),
@@ -46,7 +46,7 @@ class StatusBar extends ConsumerWidget {
             ),
           ),
           Text(
-            '#${palette[cs.foregroundColorIndex].value.toRadixString(16).padLeft(8, '0').substring(2)}',
+            '#${palette[cs.foregroundColorIndex].toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}',
             style: style,
           ),
           _sep(),

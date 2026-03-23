@@ -14,7 +14,7 @@ enum CanvasSize {
   final int width;
   final int height;
 
-  String get label => '${width}×$height';
+  String get label => '$width×$height';
 }
 
 /// Drawing tools available in the editor.

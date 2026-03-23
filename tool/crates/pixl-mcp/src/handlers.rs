@@ -22,6 +22,11 @@ pub fn handle_tool(state: &Mutex<McpState>, tool_name: &str, args: &Value) -> Va
         "pixl_render_sprite_gif" => handle_render_sprite_gif(state, args),
         "pixl_learn_style" => handle_learn_style(state, args),
         "pixl_check_style" => handle_check_style(state, args),
+        "pixl_generate_context" => handle_generate_context(state, args),
+        "pixl_list_themes" => handle_list_themes(state),
+        "pixl_list_stamps" => handle_list_stamps(state),
+        "pixl_pack_atlas" => handle_pack_atlas(state, args),
+        "pixl_load_source" => handle_load_source(state, args),
         _ => json!({"error": format!("unknown tool: {}", tool_name)}),
     }
 }
@@ -815,5 +820,234 @@ fn handle_get_blueprint(args: &Value) -> Value {
             })
         }
         None => json!({"error": format!("unknown model: {}", model)}),
+    }
+}
+
+/// Build an enriched generation context for the Studio to send to Claude.
+/// Returns the system prompt + constraints the Studio injects into its Anthropic call.
+fn handle_generate_context(state: &Mutex<McpState>, args: &Value) -> Value {
+    let st = state.lock().unwrap();
+
+    let prompt = args.get("prompt").and_then(|v| v.as_str()).unwrap_or("");
+    let tile_type = args.get("type").and_then(|v| v.as_str()).unwrap_or("tile");
+    let size_str = args.get("size").and_then(|v| v.as_str()).unwrap_or("16x16");
+
+    // Build palette constraint text
+    let mut palette_text = String::new();
+    for (pal_name, palette) in &st.palettes {
+        palette_text.push_str(&format!("Palette '{}':\n", pal_name));
+        for (sym, rgba) in &palette.symbols {
+            palette_text.push_str(&format!(
+                "  '{}' = #{:02x}{:02x}{:02x}\n",
+                sym, rgba.r, rgba.g, rgba.b
+            ));
+        }
+    }
+
+    // Build theme constraint text
+    let mut theme_text = String::new();
+    if let Some(theme_name) = st.active_theme() {
+        if let Some(theme) = st.file.theme.get(theme_name) {
+            theme_text.push_str(&format!("Active theme: {}\n", theme_name));
+            if let Some(max) = theme.max_palette_size {
+                theme_text.push_str(&format!("Max palette size: {} colors\n", max));
+            }
+            if let Some(ref light) = theme.light_source {
+                theme_text.push_str(&format!("Light source: {}\n", light));
+            }
+            for (role, sym) in &theme.roles {
+                theme_text.push_str(&format!("  Role '{}' = '{}'\n", role, sym));
+            }
+        }
+    }
+
+    // Build style latent text
+    let style_text = st
+        .style_latent
+        .as_ref()
+        .map(|l| l.describe())
+        .unwrap_or_default();
+
+    // Build edge context from existing tiles
+    let mut edge_context = String::new();
+    for (name, tile_raw) in &st.file.tile {
+        if let Some(ref ec) = tile_raw.edge_class {
+            edge_context.push_str(&format!(
+                "  {}: n={}, e={}, s={}, w={}\n",
+                name, ec.n, ec.e, ec.s, ec.w
+            ));
+        }
+    }
+
+    // Build the enriched system prompt
+    let system_prompt = format!(
+        "You are a pixel art expert generating PAX format tiles.\n\
+         \n\
+         {palette_text}\n\
+         {theme_text}\n\
+         {style_text}\n\
+         Canvas size: {size_str}\n\
+         Type: {tile_type}\n\
+         \n\
+         Existing tile edge classes:\n\
+         {edge_context}\n\
+         \n\
+         Rules:\n\
+         - Use ONLY symbols from the palette above\n\
+         - Output a raw character grid (one row per line)\n\
+         - Shadows go bottom-right of structures\n\
+         - Highlights go top-left of surfaces\n\
+         - Grid must be exactly {size_str} characters\n\
+         - For WFC compatibility, edges should match neighboring tiles"
+    );
+
+    // Build the enriched user prompt
+    let user_prompt = format!(
+        "Generate a {size_str} {tile_type}: {prompt}"
+    );
+
+    json!({
+        "system_prompt": system_prompt,
+        "user_prompt": user_prompt,
+        "palette_symbols": palette_text.trim(),
+        "theme": st.active_theme(),
+        "size": size_str,
+        "existing_tiles": st.tile_names(),
+        "style_latent": style_text,
+    })
+}
+
+fn handle_list_themes(state: &Mutex<McpState>) -> Value {
+    let st = state.lock().unwrap();
+
+    let themes: Vec<Value> = st
+        .file
+        .theme
+        .iter()
+        .map(|(name, theme)| {
+            json!({
+                "name": name,
+                "palette": theme.palette,
+                "scale": theme.scale,
+                "canvas": theme.canvas,
+                "max_palette_size": theme.max_palette_size,
+                "light_source": theme.light_source,
+                "roles": theme.roles,
+            })
+        })
+        .collect();
+
+    json!({"themes": themes})
+}
+
+fn handle_list_stamps(state: &Mutex<McpState>) -> Value {
+    let st = state.lock().unwrap();
+
+    let stamps: Vec<Value> = st
+        .file
+        .stamp
+        .iter()
+        .map(|(name, stamp)| {
+            json!({
+                "name": name,
+                "palette": stamp.palette,
+                "size": stamp.size,
+            })
+        })
+        .collect();
+
+    json!({"stamps": stamps})
+}
+
+fn handle_pack_atlas(state: &Mutex<McpState>, args: &Value) -> Value {
+    let st = state.lock().unwrap();
+
+    let columns = args.get("columns").and_then(|v| v.as_u64()).unwrap_or(8) as u32;
+    let padding = args.get("padding").and_then(|v| v.as_u64()).unwrap_or(1) as u32;
+    let scale = args.get("scale").and_then(|v| v.as_u64()).unwrap_or(1) as u32;
+
+    let palette_name = st
+        .file
+        .tile
+        .values()
+        .next()
+        .map(|t| t.palette.clone())
+        .unwrap_or_default();
+    let palette = match st.palettes.get(&palette_name) {
+        Some(p) => p.clone(),
+        None => return json!({"ok": false, "error": "no palette found"}),
+    };
+
+    let mut tiles = Vec::new();
+    for (name, tile_raw) in &st.file.tile {
+        if tile_raw.template.is_some() {
+            continue;
+        }
+        match pixl_core::resolve::resolve_tile_grid(
+            name,
+            &st.file.tile,
+            &st.palettes,
+            &std::collections::HashMap::new(),
+        ) {
+            Ok((grid_data, w, h)) => {
+                tiles.push(pixl_render::atlas::AtlasTile {
+                    name: name.clone(),
+                    grid: grid_data,
+                    width: w,
+                    height: h,
+                });
+            }
+            Err(_) => continue,
+        }
+    }
+
+    if tiles.is_empty() {
+        return json!({"ok": false, "error": "no tiles to pack"});
+    }
+
+    match pixl_render::atlas::pack_atlas(&tiles, &palette, columns, padding, scale, "atlas.png") {
+        Ok((img, atlas_json)) => {
+            let b64 = renderer::png_to_base64(&renderer::encode_png(&img));
+            let json_str = serde_json::to_string(&atlas_json).unwrap_or_default();
+            json!({
+                "ok": true,
+                "atlas_b64": b64,
+                "atlas_json": json_str,
+                "tile_count": tiles.len(),
+                "width": img.width(),
+                "height": img.height(),
+            })
+        }
+        Err(e) => json!({"ok": false, "error": e}),
+    }
+}
+
+fn handle_load_source(state: &Mutex<McpState>, args: &Value) -> Value {
+    let mut st = state.lock().unwrap();
+    let source = match args.get("source").and_then(|v| v.as_str()) {
+        Some(s) => s,
+        None => return json!({"ok": false, "error": "missing 'source' field"}),
+    };
+
+    match pixl_core::parser::parse_pax(source) {
+        Ok(file) => {
+            match pixl_core::parser::resolve_all_palettes(&file) {
+                Ok(palettes) => {
+                    let tile_count = file.tile.len();
+                    let theme_count = file.theme.len();
+                    st.file = file;
+                    st.palettes = palettes;
+                    st.refinement_count.clear();
+                    st.style_latent = None;
+                    json!({
+                        "ok": true,
+                        "tiles": tile_count,
+                        "themes": theme_count,
+                    })
+                }
+                Err(e) => json!({"ok": false, "error": format!("{}", e)}),
+            }
+        }
+        Err(e) => json!({"ok": false, "error": format!("{}", e)}),
     }
 }

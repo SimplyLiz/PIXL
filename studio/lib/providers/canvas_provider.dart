@@ -2,7 +2,6 @@ import 'dart:ui' show Color;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../models/palette.dart';
 import '../models/pixel_canvas.dart';
 
 /// Manages the canvas state: pixels, layers, tool, zoom, etc.

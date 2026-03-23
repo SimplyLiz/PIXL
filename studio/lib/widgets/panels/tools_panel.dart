@@ -259,7 +259,7 @@ class _PaletteSection extends ConsumerWidget {
                     width: isFg || isBg ? 2 : 1,
                   ),
                 ),
-                child: color.alpha == 0
+                child: color.a == 0
                     ? CustomPaint(painter: _TransparentPainter())
                     : null,
               ),
@@ -276,7 +276,7 @@ class _PaletteSection extends ConsumerWidget {
             ),
             const SizedBox(width: 4),
             Text(
-              'FG: #${palette[cs.foregroundColorIndex].value.toRadixString(16).padLeft(8, '0').substring(2)}',
+              'FG: #${palette[cs.foregroundColorIndex].toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}',
               style: theme.textTheme.bodySmall,
             ),
           ],

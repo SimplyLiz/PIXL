@@ -33,6 +33,11 @@ pub fn create_router(state: McpState) -> Router {
         .route("/api/blueprint", post(get_blueprint))
         .route("/api/sprite/gif", post(render_sprite_gif))
         .route("/api/file", get(get_file))
+        .route("/api/generate/context", post(generate_context))
+        .route("/api/themes", get(list_themes))
+        .route("/api/stamps", get(list_stamps))
+        .route("/api/atlas/pack", post(pack_atlas))
+        .route("/api/load", post(load_source))
         .route("/api/tool", post(generic_tool_call))
         .with_state(shared)
 }
@@ -102,6 +107,29 @@ async fn render_sprite_gif(
 
 async fn get_file(State(state): State<SharedState>) -> Json<Value> {
     Json(handlers::handle_tool(&state, "pixl_get_file", &Value::Null))
+}
+
+async fn generate_context(
+    State(state): State<SharedState>,
+    Json(args): Json<Value>,
+) -> Json<Value> {
+    Json(handlers::handle_tool(&state, "pixl_generate_context", &args))
+}
+
+async fn list_themes(State(state): State<SharedState>) -> Json<Value> {
+    Json(handlers::handle_tool(&state, "pixl_list_themes", &Value::Null))
+}
+
+async fn list_stamps(State(state): State<SharedState>) -> Json<Value> {
+    Json(handlers::handle_tool(&state, "pixl_list_stamps", &Value::Null))
+}
+
+async fn pack_atlas(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
+    Json(handlers::handle_tool(&state, "pixl_pack_atlas", &args))
+}
+
+async fn load_source(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
+    Json(handlers::handle_tool(&state, "pixl_load_source", &args))
 }
 
 /// Generic tool call endpoint — accepts { "tool": "pixl_xxx", "args": {...} }

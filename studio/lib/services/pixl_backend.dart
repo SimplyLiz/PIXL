@@ -1,115 +1,286 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:http/http.dart' as http;
 
-/// Service that calls the PIXL Rust CLI for rendering, validation, etc.
-/// The Rust binary is expected at `../tool/target/release/pixl-cli` or on PATH.
+/// Service that communicates with the PIXL Rust engine via HTTP API.
+/// The engine runs as `pixl serve` on localhost:3742.
 class PixlBackend {
-  PixlBackend({String? binaryPath})
-      : _binaryPath = binaryPath ?? _findBinary();
+  PixlBackend({
+    this.port = 3742,
+    String? binaryPath,
+  }) : _binaryPath = binaryPath ?? _findBinary();
 
+  final int port;
   final String _binaryPath;
+  Process? _serverProcess;
+
+  String get _baseUrl => 'http://127.0.0.1:$port';
 
   static String _findBinary() {
-    // Look for the binary relative to the studio directory
     final candidates = [
-      '../tool/target/release/pixl-cli',
-      '../tool/target/debug/pixl-cli',
-      'pixl-cli', // on PATH
+      '../tool/target/release/pixl',
+      '../tool/target/debug/pixl',
+      'pixl',
     ];
     for (final c in candidates) {
       if (File(c).existsSync()) return c;
     }
-    return 'pixl-cli'; // fallback to PATH
+    return 'pixl';
   }
 
-  /// Validate a PAX source string.
-  Future<ValidationResult> validate(String paxSource) async {
-    final result = await _run(['validate', '--stdin'], stdin: paxSource);
-    return ValidationResult(
-      success: result.exitCode == 0,
-      output: result.stdout,
-      errors: result.stderr,
-    );
-  }
-
-  /// Render a tile to PNG bytes (base64 encoded).
-  Future<RenderResult> renderTile({
-    required String paxFile,
-    required String tileName,
-    int scale = 4,
-  }) async {
-    final result = await _run([
-      'render',
-      paxFile,
-      '--tile',
-      tileName,
-      '--scale',
-      '$scale',
-      '--out',
-      '-', // stdout
-    ]);
-    if (result.exitCode != 0) {
-      return RenderResult(success: false, error: result.stderr);
-    }
-    return RenderResult(success: true, pngBytes: result.stdoutBytes);
-  }
-
-  /// Run the PIXL CLI with given arguments.
-  Future<_ProcessResult> _run(List<String> args, {String? stdin}) async {
+  /// Start the backend server. Call this on app launch.
+  Future<bool> start({String? paxFile}) async {
     try {
-      final process = await Process.start(_binaryPath, args);
-      if (stdin != null) {
-        process.stdin.write(stdin);
-        await process.stdin.close();
+      final args = ['serve', '--port', '$port'];
+      if (paxFile != null) {
+        args.addAll(['--file', paxFile]);
       }
-      final stdout = await process.stdout.transform(utf8.decoder).join();
-      final stdoutBytes = await process.stdout.toList();
-      final stderr = await process.stderr.transform(utf8.decoder).join();
-      final exitCode = await process.exitCode;
-      return _ProcessResult(
-        exitCode: exitCode,
-        stdout: stdout,
-        stderr: stderr,
-        stdoutBytes: stdoutBytes.expand((b) => b).toList(),
-      );
+      _serverProcess = await Process.start(_binaryPath, args);
+
+      // Wait for server to be ready
+      for (var i = 0; i < 30; i++) {
+        await Future.delayed(const Duration(milliseconds: 200));
+        try {
+          final resp = await http.get(Uri.parse('$_baseUrl/health'));
+          if (resp.statusCode == 200) return true;
+        } catch (_) {}
+      }
+      return false;
     } catch (e) {
-      return _ProcessResult(
-        exitCode: -1,
-        stdout: '',
-        stderr: 'Failed to run pixl-cli: $e',
-        stdoutBytes: [],
-      );
+      return false;
     }
   }
-}
 
-class _ProcessResult {
-  const _ProcessResult({
-    required this.exitCode,
-    required this.stdout,
-    required this.stderr,
-    required this.stdoutBytes,
-  });
-  final int exitCode;
-  final String stdout;
-  final String stderr;
-  final List<int> stdoutBytes;
-}
+  /// Stop the backend server. Call this on app exit.
+  void stop() {
+    _serverProcess?.kill();
+    _serverProcess = null;
+  }
 
-class ValidationResult {
-  const ValidationResult({
-    required this.success,
-    this.output = '',
-    this.errors = '',
-  });
-  final bool success;
-  final String output;
-  final String errors;
-}
+  /// Check if the server is running.
+  Future<bool> get isHealthy async {
+    try {
+      final resp = await http.get(Uri.parse('$_baseUrl/health'));
+      return resp.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
 
-class RenderResult {
-  const RenderResult({required this.success, this.pngBytes, this.error});
-  final bool success;
-  final List<int>? pngBytes;
-  final String? error;
+  // ── Session ────────────────────────────────────────────
+
+  /// Start or get current session info.
+  Future<Map<String, dynamic>> sessionStart() async {
+    return _post('/api/session', {});
+  }
+
+  /// Load a .pax source into the session.
+  Future<Map<String, dynamic>> loadSource(String paxSource) async {
+    return _post('/api/load', {'source': paxSource});
+  }
+
+  // ── Palette & Theme ────────────────────────────────────
+
+  /// Get palette symbols for a theme.
+  Future<Map<String, dynamic>> getPalette(String theme) async {
+    return _post('/api/palette', {'theme': theme});
+  }
+
+  /// List available themes.
+  Future<Map<String, dynamic>> listThemes() async {
+    return _get('/api/themes');
+  }
+
+  /// List available stamps.
+  Future<Map<String, dynamic>> listStamps() async {
+    return _get('/api/stamps');
+  }
+
+  // ── Tile CRUD ──────────────────────────────────────────
+
+  /// Create a tile. Returns validation + 16x preview + edge context.
+  Future<Map<String, dynamic>> createTile({
+    required String name,
+    required String palette,
+    required String size,
+    required String grid,
+    Map<String, String>? edgeClass,
+    String? symmetry,
+    List<String>? tags,
+  }) async {
+    return _post('/api/tile/create', {
+      'name': name,
+      'palette': palette,
+      'size': size,
+      'grid': grid,
+      if (edgeClass != null) 'edge_class': edgeClass,
+      if (symmetry != null) 'symmetry': symmetry,
+      if (tags != null) 'tags': tags,
+    });
+  }
+
+  /// Render a tile to PNG (base64).
+  Future<Map<String, dynamic>> renderTile(String name, {int scale = 16}) async {
+    return _post('/api/tile/render', {'name': name, 'scale': scale});
+  }
+
+  /// Delete a tile.
+  Future<Map<String, dynamic>> deleteTile(String name) async {
+    return _post('/api/tile/delete', {'name': name});
+  }
+
+  /// Check if two tiles can be adjacent.
+  Future<Map<String, dynamic>> checkEdgePair(
+    String tileA,
+    String direction,
+    String tileB,
+  ) async {
+    return _post('/api/tile/edge-check', {
+      'tile_a': tileA,
+      'direction': direction,
+      'tile_b': tileB,
+    });
+  }
+
+  /// List all tiles.
+  Future<Map<String, dynamic>> listTiles() async {
+    return _get('/api/tiles');
+  }
+
+  // ── Validation ─────────────────────────────────────────
+
+  /// Validate the current session state.
+  Future<Map<String, dynamic>> validate({bool checkEdges = false}) async {
+    return _post('/api/validate', {'check_edges': checkEdges});
+  }
+
+  // ── Generation ─────────────────────────────────────────
+
+  /// Get enriched context for AI generation.
+  /// Returns system_prompt + user_prompt for the Studio to send to Claude.
+  Future<Map<String, dynamic>> generateContext({
+    required String prompt,
+    String type = 'tile',
+    String size = '16x16',
+  }) async {
+    return _post('/api/generate/context', {
+      'prompt': prompt,
+      'type': type,
+      'size': size,
+    });
+  }
+
+  /// Generate a map from narrative predicates.
+  Future<Map<String, dynamic>> narrateMap({
+    required int width,
+    required int height,
+    required List<String> rules,
+    int seed = 42,
+  }) async {
+    return _post('/api/narrate', {
+      'width': width,
+      'height': height,
+      'rules': rules,
+      'seed': seed,
+    });
+  }
+
+  // ── Style ──────────────────────────────────────────────
+
+  /// Learn style from reference tiles.
+  Future<Map<String, dynamic>> learnStyle({List<String>? tiles}) async {
+    return _post('/api/style/learn', {
+      if (tiles != null) 'tiles': tiles,
+    });
+  }
+
+  /// Score a tile against the style latent.
+  Future<Map<String, dynamic>> checkStyle(String tileName) async {
+    return _post('/api/style/check', {'name': tileName});
+  }
+
+  // ── Blueprint ──────────────────────────────────────────
+
+  /// Get anatomy blueprint for character sprites.
+  Future<Map<String, dynamic>> getBlueprint({
+    int width = 32,
+    int height = 48,
+    String model = 'humanoid_chibi',
+  }) async {
+    return _post('/api/blueprint', {
+      'width': width,
+      'height': height,
+      'model': model,
+    });
+  }
+
+  // ── Export ─────────────────────────────────────────────
+
+  /// Pack atlas (base64 PNG + JSON metadata).
+  Future<Map<String, dynamic>> packAtlas({
+    int columns = 8,
+    int padding = 1,
+    int scale = 1,
+  }) async {
+    return _post('/api/atlas/pack', {
+      'columns': columns,
+      'padding': padding,
+      'scale': scale,
+    });
+  }
+
+  /// Render sprite as animated GIF (base64).
+  Future<Map<String, dynamic>> renderSpriteGif({
+    required String spriteset,
+    required String sprite,
+    int scale = 8,
+  }) async {
+    return _post('/api/sprite/gif', {
+      'spriteset': spriteset,
+      'sprite': sprite,
+      'scale': scale,
+    });
+  }
+
+  /// Get the full .pax source.
+  Future<Map<String, dynamic>> getFile() async {
+    return _get('/api/file');
+  }
+
+  // ── Generic ────────────────────────────────────────────
+
+  /// Call any tool by name.
+  Future<Map<String, dynamic>> callTool(
+    String toolName,
+    Map<String, dynamic> args,
+  ) async {
+    return _post('/api/tool', {'tool': toolName, 'args': args});
+  }
+
+  // ── HTTP helpers ───────────────────────────────────────
+
+  Future<Map<String, dynamic>> _get(String path) async {
+    try {
+      final resp = await http.get(Uri.parse('$_baseUrl$path'));
+      return jsonDecode(resp.body) as Map<String, dynamic>;
+    } catch (e) {
+      return {'error': 'HTTP error: $e'};
+    }
+  }
+
+  Future<Map<String, dynamic>> _post(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
+    try {
+      final resp = await http.post(
+        Uri.parse('$_baseUrl$path'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(body),
+      );
+      return jsonDecode(resp.body) as Map<String, dynamic>;
+    } catch (e) {
+      return {'error': 'HTTP error: $e'};
+    }
+  }
 }

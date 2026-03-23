@@ -21,12 +21,9 @@ class CanvasViewport extends ConsumerStatefulWidget {
 class _CanvasViewportState extends ConsumerState<CanvasViewport> {
   Offset? _hoverPixel;
   Offset _panOffset = Offset.zero;
-  Offset? _lastFocalPoint;
 
   (int, int)? _pixelFromLocal(Offset localPos, CanvasState cs) {
     final ps = cs.zoomLevel;
-    final canvasW = cs.width * ps;
-    final canvasH = cs.height * ps;
 
     final dx = localPos.dx - _panOffset.dx;
     final dy = localPos.dy - _panOffset.dy;
@@ -61,7 +58,7 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
         if (picked != null) {
           // Find matching palette color
           for (var i = 0; i < palette.length; i++) {
-            if (palette[i].value == picked.value) {
+            if (palette[i].toARGB32() == picked.toARGB32()) {
               notifier.setForegroundColor(i);
               break;
             }
