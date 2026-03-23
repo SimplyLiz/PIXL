@@ -187,6 +187,20 @@ enum Commands {
         out: Option<PathBuf>,
     },
 
+    /// Export to game engine format
+    Export {
+        /// Path to the .pax file
+        file: PathBuf,
+
+        /// Export format: texturepacker, tiled, godot, unity, gbstudio
+        #[arg(long, default_value = "tiled")]
+        format: String,
+
+        /// Output directory
+        #[arg(long, short)]
+        out: PathBuf,
+    },
+
     /// Start the MCP server (stdio transport)
     Mcp {
         /// Optional: pre-load a .pax file
@@ -203,9 +217,10 @@ fn main() {
             cmd_validate(&file, check_edges);
         }
         Commands::Check { file, fix } => {
-            cmd_validate(&file, false);
             if fix {
-                eprintln!("--fix: auto-fix not yet implemented (coming soon)");
+                cmd_check_fix(&file);
+            } else {
+                cmd_validate(&file, true);
             }
         }
         Commands::Render {
@@ -267,6 +282,9 @@ fn main() {
             out,
         } => {
             cmd_import(&image, &size, &pax, &palette, dither, out.as_deref());
+        }
+        Commands::Export { file, format, out } => {
+            cmd_export(&file, &format, &out);
         }
         Commands::Mcp { file } => {
             cmd_mcp(file.as_deref());
@@ -340,6 +358,294 @@ fn cmd_validate(file: &PathBuf, check_edges: bool) {
             result.warnings.len()
         );
         process::exit(1);
+    }
+}
+
+fn cmd_check_fix(file: &PathBuf) {
+    let source = match std::fs::read_to_string(file) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: cannot read {}: {}", file.display(), e);
+            process::exit(1);
+        }
+    };
+
+    let mut pax_file = match pixl_core::parser::parse_pax(&source) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("parse error: {}", e);
+            process::exit(1);
+        }
+    };
+
+    let palettes = match pixl_core::parser::resolve_all_palettes(&pax_file) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("palette error: {}", e);
+            process::exit(1);
+        }
+    };
+
+    let mut fixed = 0usize;
+    let mut warned = 0usize;
+
+    for (name, tile_raw) in pax_file.tile.iter_mut() {
+        if tile_raw.template.is_some() || tile_raw.grid.is_none() {
+            continue;
+        }
+        let size_str = tile_raw.size.as_deref().unwrap_or("16x16");
+        let (w, h) = match pixl_core::types::parse_size(size_str) {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+        let palette = match palettes.get(&tile_raw.palette) {
+            Some(p) => p,
+            None => continue,
+        };
+        let grid = match pixl_core::grid::parse_grid(tile_raw.grid.as_ref().unwrap(), w, h, palette)
+        {
+            Ok(g) => g,
+            Err(_) => continue,
+        };
+
+        let auto = pixl_core::edges::auto_classify_edges(&grid);
+
+        if tile_raw.edge_class.is_none() {
+            // Fill missing
+            tile_raw.edge_class = Some(pixl_core::types::EdgeClassRaw {
+                n: auto.n.clone(),
+                e: auto.e.clone(),
+                s: auto.s.clone(),
+                w: auto.w.clone(),
+            });
+            println!("  fixed: '{}' — edge_class generated", name);
+            fixed += 1;
+        } else {
+            // Warn on mismatch (don't overwrite)
+            let ec = tile_raw.edge_class.as_ref().unwrap();
+            let mismatches: Vec<String> = [
+                (&ec.n, &auto.n, "n"),
+                (&ec.e, &auto.e, "e"),
+                (&ec.s, &auto.s, "s"),
+                (&ec.w, &auto.w, "w"),
+            ]
+            .iter()
+            .filter(|(declared, computed, _)| declared != computed)
+            .map(|(declared, computed, dir)| {
+                format!("{}='{}' (auto='{}')", dir, declared, computed)
+            })
+            .collect();
+
+            if !mismatches.is_empty() {
+                println!(
+                    "  warn: '{}' — edge mismatch: {}",
+                    name,
+                    mismatches.join(", ")
+                );
+                warned += 1;
+            }
+        }
+    }
+
+    if fixed > 0 {
+        // Write back
+        match toml::to_string_pretty(&pax_file) {
+            Ok(new_source) => {
+                if let Err(e) = std::fs::write(file, new_source) {
+                    eprintln!("error writing {}: {}", file.display(), e);
+                    process::exit(1);
+                }
+                println!("wrote {} — {} edges fixed", file.display(), fixed);
+            }
+            Err(e) => {
+                eprintln!("error serializing: {}", e);
+                process::exit(1);
+            }
+        }
+    }
+
+    if warned > 0 {
+        println!("{} edge mismatch warning(s) — not overwritten", warned);
+    }
+    if fixed == 0 && warned == 0 {
+        println!("ok: all tiles have edge classes, no mismatches");
+    }
+}
+
+fn cmd_export(file: &PathBuf, format: &str, out_dir: &PathBuf) {
+    let (pax_file, palettes) = load_pax(file);
+
+    // Create output directory
+    if let Err(e) = std::fs::create_dir_all(out_dir) {
+        eprintln!("error creating directory: {}", e);
+        process::exit(1);
+    }
+
+    // Collect tile data
+    let palette_name = pax_file
+        .tile
+        .values()
+        .next()
+        .map(|t| t.palette.as_str())
+        .unwrap_or("");
+    let palette = match palettes.get(palette_name) {
+        Some(p) => p,
+        None => {
+            eprintln!("error: no palette found");
+            process::exit(1);
+        }
+    };
+
+    let mut tile_names: Vec<String> = Vec::new();
+    let mut tile_grids: Vec<Vec<Vec<char>>> = Vec::new();
+    let mut collision_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+
+    for (name, tile_raw) in &pax_file.tile {
+        if tile_raw.template.is_some() || tile_raw.grid.is_none() {
+            continue;
+        }
+        let size_str = tile_raw.size.as_deref().unwrap_or("16x16");
+        let (w, h) = match pixl_core::types::parse_size(size_str) {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+        if let Ok(grid) = pixl_core::grid::parse_grid(tile_raw.grid.as_ref().unwrap(), w, h, palette) {
+            tile_names.push(name.clone());
+            tile_grids.push(grid);
+            if let Some(ref sem) = tile_raw.semantic {
+                if let Some(ref c) = sem.collision {
+                    collision_map.insert(name.clone(), c.clone());
+                }
+            }
+        }
+    }
+
+    if tile_names.is_empty() {
+        eprintln!("error: no tiles found");
+        process::exit(1);
+    }
+
+    let tile_size = pax_file
+        .tile
+        .values()
+        .next()
+        .and_then(|t| t.size.as_deref())
+        .and_then(|s| pixl_core::types::parse_size(s).ok())
+        .unwrap_or((16, 16));
+
+    match format {
+        "texturepacker" | "tp" => {
+            // Render atlas + TexturePacker JSON
+            let atlas_tiles: Vec<pixl_render::atlas::AtlasTile> = tile_names
+                .iter()
+                .zip(tile_grids.iter())
+                .map(|(name, grid)| pixl_render::atlas::AtlasTile {
+                    name: name.clone(),
+                    grid: grid.clone(),
+                    width: tile_size.0,
+                    height: tile_size.1,
+                })
+                .collect();
+
+            let atlas_path = out_dir.join("atlas.png");
+            let json_path = out_dir.join("atlas.json");
+
+            match pixl_render::atlas::pack_atlas(&atlas_tiles, palette, 8, 1, 1, "atlas.png") {
+                Ok((img, json)) => {
+                    img.save(&atlas_path).unwrap();
+                    let json_str = serde_json::to_string_pretty(&json).unwrap();
+                    std::fs::write(&json_path, json_str).unwrap();
+                    println!("texturepacker: {} -> {}", atlas_path.display(), json_path.display());
+                }
+                Err(e) => {
+                    eprintln!("error: {}", e);
+                    process::exit(1);
+                }
+            }
+        }
+
+        "tiled" | "tmj" => {
+            // Atlas PNG + Tiled tileset JSON + empty map
+            let atlas_tiles: Vec<pixl_render::atlas::AtlasTile> = tile_names
+                .iter()
+                .zip(tile_grids.iter())
+                .map(|(name, grid)| pixl_render::atlas::AtlasTile {
+                    name: name.clone(),
+                    grid: grid.clone(),
+                    width: tile_size.0,
+                    height: tile_size.1,
+                })
+                .collect();
+
+            let atlas_path = out_dir.join("tileset.png");
+            let tsj_path = out_dir.join("tileset.tsj");
+
+            match pixl_render::atlas::pack_atlas(&atlas_tiles, palette, 8, 1, 1, "tileset.png") {
+                Ok((img, _)) => {
+                    img.save(&atlas_path).unwrap();
+
+                    let tileset = pixl_export::tiled::generate_tileset(
+                        &pax_file.pax.name,
+                        &tile_names,
+                        tile_size.0,
+                        tile_size.1,
+                        "tileset.png",
+                        img.width(),
+                        img.height(),
+                        8,
+                        &collision_map,
+                    );
+                    let tsj_str = serde_json::to_string_pretty(&tileset).unwrap();
+                    std::fs::write(&tsj_path, tsj_str).unwrap();
+                    println!("tiled: {} + {}", atlas_path.display(), tsj_path.display());
+                }
+                Err(e) => {
+                    eprintln!("error: {}", e);
+                    process::exit(1);
+                }
+            }
+        }
+
+        "godot" | "tres" => {
+            let atlas_tiles: Vec<pixl_render::atlas::AtlasTile> = tile_names
+                .iter()
+                .zip(tile_grids.iter())
+                .map(|(name, grid)| pixl_render::atlas::AtlasTile {
+                    name: name.clone(),
+                    grid: grid.clone(),
+                    width: tile_size.0,
+                    height: tile_size.1,
+                })
+                .collect();
+
+            let atlas_path = out_dir.join("tileset.png");
+            let tres_path = out_dir.join("tileset.tres");
+
+            match pixl_render::atlas::pack_atlas(&atlas_tiles, palette, 8, 1, 1, "tileset.png") {
+                Ok((img, _)) => {
+                    img.save(&atlas_path).unwrap();
+                    let tres = pixl_export::godot::generate_tres(
+                        &pax_file.pax.name,
+                        &tile_names,
+                        tile_size.0,
+                        tile_size.1,
+                        "tileset.png",
+                        &collision_map,
+                    );
+                    std::fs::write(&tres_path, tres).unwrap();
+                    println!("godot: {} + {}", atlas_path.display(), tres_path.display());
+                }
+                Err(e) => {
+                    eprintln!("error: {}", e);
+                    process::exit(1);
+                }
+            }
+        }
+
+        _ => {
+            eprintln!("error: unknown format '{}'. Supported: texturepacker, tiled, godot", format);
+            process::exit(1);
+        }
     }
 }
 

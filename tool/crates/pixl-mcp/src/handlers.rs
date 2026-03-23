@@ -19,6 +19,7 @@ pub fn handle_tool(state: &Mutex<McpState>, tool_name: &str, args: &Value) -> Va
         "pixl_delete_tile" => handle_delete_tile(state, args),
         "pixl_get_blueprint" => handle_get_blueprint(args),
         "pixl_narrate_map" => handle_narrate_map(state, args),
+        "pixl_render_sprite_gif" => handle_render_sprite_gif(state, args),
         "pixl_learn_style" => handle_learn_style(state, args),
         "pixl_check_style" => handle_check_style(state, args),
         _ => json!({"error": format!("unknown tool: {}", tool_name)}),
@@ -169,6 +170,8 @@ fn handle_create_tile(state: &Mutex<McpState>, args: &Value) -> Value {
         })
         .unwrap_or_default();
 
+    let edge_class_for_response = edge_class.clone();
+
     st.file.tile.insert(
         name.clone(),
         pixl_core::types::TileRaw {
@@ -196,6 +199,28 @@ fn handle_create_tile(state: &Mutex<McpState>, args: &Value) -> Value {
         },
     );
 
+    // Build edge context: actual border pixels from compatible neighbors
+    let (edge_n, edge_e, edge_s, edge_w) = edges::extract_edges(&parsed_grid);
+    let mut compatible_neighbors = serde_json::Map::new();
+    for (other_name, other_raw) in &st.file.tile {
+        if other_name == &name || other_raw.grid.is_none() {
+            continue;
+        }
+        if let (Some(other_ec), Some(our_ec)) = (&other_raw.edge_class, &edge_class_for_response) {
+            let mut dirs = Vec::new();
+            if our_ec.n == other_ec.s { dirs.push("can go north"); }
+            if our_ec.s == other_ec.n { dirs.push("can go south"); }
+            if our_ec.e == other_ec.w { dirs.push("can go east"); }
+            if our_ec.w == other_ec.e { dirs.push("can go west"); }
+            if !dirs.is_empty() {
+                compatible_neighbors.insert(
+                    other_name.clone(),
+                    json!(dirs),
+                );
+            }
+        }
+    }
+
     json!({
         "ok": true,
         "name": name,
@@ -206,6 +231,13 @@ fn handle_create_tile(state: &Mutex<McpState>, args: &Value) -> Value {
             "s": auto_edges.s,
             "w": auto_edges.w,
         },
+        "edge_pixels": {
+            "n": edge_n,
+            "e": edge_e,
+            "s": edge_s,
+            "w": edge_w,
+        },
+        "compatible_neighbors": compatible_neighbors,
         "preview_b64": preview_b64,
         "refinement_count": 0,
     })
@@ -366,6 +398,113 @@ fn handle_delete_tile(state: &Mutex<McpState>, args: &Value) -> Value {
         "name": name,
         "message": if deleted { "tile deleted" } else { "tile not found" },
     })
+}
+
+fn handle_render_sprite_gif(state: &Mutex<McpState>, args: &Value) -> Value {
+    let st = state.lock().unwrap();
+    let spriteset_name = args.get("spriteset").and_then(|v| v.as_str()).unwrap_or("");
+    let sprite_name = args.get("sprite").and_then(|v| v.as_str()).unwrap_or("");
+    let scale = args.get("scale").and_then(|v| v.as_u64()).unwrap_or(8) as u32;
+
+    let spriteset = match st.file.spriteset.get(spriteset_name) {
+        Some(ss) => ss,
+        None => return json!({"error": format!("spriteset '{}' not found", spriteset_name)}),
+    };
+
+    let palette = match st.palettes.get(&spriteset.palette) {
+        Some(p) => p,
+        None => return json!({"error": format!("palette '{}' not found", spriteset.palette)}),
+    };
+
+    let (sw, sh) = parse_size(&spriteset.size).unwrap_or((16, 32));
+
+    let sprite = match spriteset.sprite.iter().find(|s| s.name == sprite_name) {
+        Some(s) => s,
+        None => return json!({"error": format!("sprite '{}' not found in '{}'", sprite_name, spriteset_name)}),
+    };
+
+    if sprite.frames.is_empty() {
+        return json!({"error": "sprite has no frames"});
+    }
+
+    // Resolve frames
+    let mut resolved_grids: Vec<Vec<Vec<char>>> = Vec::new();
+    let mut base_grids: std::collections::HashMap<u32, Vec<Vec<char>>> = std::collections::HashMap::new();
+
+    for frame in &sprite.frames {
+        let encoding = frame.encoding.as_deref().unwrap_or("grid");
+        match encoding {
+            "grid" => {
+                if let Some(ref grid_str) = frame.grid {
+                    match grid::parse_grid(grid_str, sw, sh, palette) {
+                        Ok(g) => {
+                            base_grids.insert(frame.index, g.clone());
+                            resolved_grids.push(g);
+                        }
+                        Err(e) => return json!({"error": format!("frame {}: {}", frame.index, e)}),
+                    }
+                }
+            }
+            "delta" => {
+                let base_idx = frame.base.unwrap_or(1);
+                if let Some(base_grid) = base_grids.get(&base_idx) {
+                    let mut new_grid = base_grid.clone();
+                    for change in &frame.changes {
+                        let ch = change.sym.chars().next().unwrap_or('.');
+                        if (change.y as usize) < new_grid.len()
+                            && (change.x as usize) < new_grid[0].len()
+                        {
+                            new_grid[change.y as usize][change.x as usize] = ch;
+                        }
+                    }
+                    resolved_grids.push(new_grid);
+                }
+            }
+            "linked" => {
+                let link_idx = frame.link_to.unwrap_or(1);
+                if let Some(linked_grid) = base_grids.get(&link_idx) {
+                    resolved_grids.push(linked_grid.clone());
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if resolved_grids.is_empty() {
+        return json!({"error": "could not resolve any frames"});
+    }
+
+    // Render each frame
+    let fps = sprite.fps.max(1);
+    let frame_duration_ms = 1000 / fps;
+
+    let gif_frames: Vec<(image::RgbaImage, u32)> = resolved_grids
+        .iter()
+        .enumerate()
+        .map(|(i, grid)| {
+            let dur = sprite.frames.get(i)
+                .and_then(|f| f.duration_ms)
+                .unwrap_or(frame_duration_ms);
+            let img = renderer::render_grid(grid, palette, scale);
+            (img, dur)
+        })
+        .collect();
+
+    match pixl_render::gif::encode_gif(&gif_frames, sprite.r#loop) {
+        Ok(gif_bytes) => {
+            use base64::Engine;
+            let gif_b64 = base64::engine::general_purpose::STANDARD.encode(&gif_bytes);
+            json!({
+                "ok": true,
+                "spriteset": spriteset_name,
+                "sprite": sprite_name,
+                "frames": resolved_grids.len(),
+                "fps": fps,
+                "gif_b64": gif_b64,
+            })
+        }
+        Err(e) => json!({"error": format!("GIF encode failed: {}", e)}),
+    }
 }
 
 fn handle_narrate_map(state: &Mutex<McpState>, args: &Value) -> Value {
