@@ -24,20 +24,44 @@ The LLM works within its reliable accuracy zone. The tool does the rest.
 # Validate a .pax file
 pixl validate examples/dungeon.pax
 
-# Render a tile to PNG
+# Render a tile (supports grid, RLE, compose, template, symmetry)
 pixl render examples/dungeon.pax --tile wall_solid --scale 4 --out wall.png
 
-# 16x zoom preview (for SELF-REFINE visual inspection)
+# 16x zoom preview for SELF-REFINE visual inspection
 pixl preview examples/dungeon.pax --tile floor_moss --out preview.png --grid
 
-# Pack tiles into a sprite atlas with TexturePacker JSON
+# Pack tiles into a sprite atlas
 pixl atlas examples/dungeon.pax --out atlas.png --map atlas.json --scale 2
+
+# Export to game engine format (Tiled, TexturePacker, Godot)
+pixl export examples/dungeon.pax --format tiled --out dungeon/
+
+# Auto-fix missing edge classes from grid content
+pixl check examples/dungeon.pax --fix
+
+# Import a reference image into PAX palette
+pixl import reference.png --size 16x16 --pax dungeon.pax --palette dungeon
+
+# Extract style fingerprint from reference tiles
+pixl style examples/dungeon.pax
+
+# Generate procedural stamps
+pixl generate-stamps brick_bond --size 4
+
+# Generate a map from spatial predicates
+pixl narrate examples/dungeon.pax --width 12 --height 8 \
+  -r "region:entrance:floor_moss:2x2:northwest" \
+  -r "region:chamber:floor_stone:3x3:southeast" \
+  --out dungeon_map.png
 
 # Show anatomy blueprint for character sprites
 pixl blueprint 32x48
 
-# Start MCP server for Claude Code integration
+# Start MCP server for Claude Code
 pixl mcp --file examples/dungeon.pax
+
+# Start HTTP API for PIXL Studio
+pixl serve --port 3742 --file examples/dungeon.pax
 ```
 
 ## The PAX Format
@@ -58,10 +82,10 @@ max_palette_size = 16
 light_source     = "top-left"
 
 [palette.dungeon]
-"." = "#00000000"    # transparent
-"#" = "#2a1f3d"      # stone dark
-"+" = "#4a3a6d"      # stone lit
-"~" = "#1a3a5c"      # water
+"." = "#00000000"
+"#" = "#2a1f3d"
+"+" = "#4a3a6d"
+"~" = "#1a3a5c"
 
 [tile.wall_solid]
 palette    = "dungeon"
@@ -74,23 +98,13 @@ grid = '''
 #+++++++++++++##
 ##++########++##
 ################
-##++++++++####++
-#++++##+++++++++
-##++##++##++####
-################
-##++##++########
-#+++++++++++++##
-##++##++##++####
-################
-##++##++##++####
-#+++++++++++++##
-################
+...
 '''
 ```
 
 Full format specification: [docs/specs/pax.md](docs/specs/pax.md)
 
-## MCP Integration
+## MCP Integration (Claude Code)
 
 Add to your Claude Code MCP config:
 
@@ -98,26 +112,46 @@ Add to your Claude Code MCP config:
 {
   "mcpServers": {
     "pixl": {
-      "command": "pixl",
-      "args": ["mcp"]
+      "command": "/path/to/pixl",
+      "args": ["mcp", "--file", "examples/dungeon.pax"]
     }
   }
 }
 ```
 
-Then ask Claude to create pixel art tilesets. The MCP server provides 10 tools:
+14 MCP tools available:
+- `pixl_session_start` — palette, theme, stamps, workflow
+- `pixl_create_tile` — create with auto edge classification + 16x preview + edge context
+- `pixl_narrate_map` — spatial predicates to rendered dungeon map
+- `pixl_learn_style` / `pixl_check_style` — style latent extraction + scoring
+- `pixl_render_tile`, `pixl_check_edge_pair`, `pixl_validate`
+- `pixl_render_sprite_gif` — animated GIF preview for sprites
+- `pixl_generate_context` — enriched prompt builder for AI generation
+- `pixl_list_tiles`, `pixl_list_themes`, `pixl_list_stamps`
+- `pixl_get_file`, `pixl_delete_tile`, `pixl_get_blueprint`
+- `pixl_pack_atlas`, `pixl_load_source`
 
-- `pixl_session_start` — palette symbols, theme, workflow guidance
-- `pixl_create_tile` — create tile with auto edge classification + 16x preview
-- `pixl_check_edge_pair` — verify two tiles can be placed adjacent
-- `pixl_render_tile` — render any tile to PNG
-- `pixl_validate` — full file validation
-- `pixl_get_blueprint` — anatomy guide for character sprites
-- `pixl_list_tiles`, `pixl_get_palette`, `pixl_get_file`, `pixl_delete_tile`
+## HTTP API (PIXL Studio)
 
-Every create/render response includes a base64 PNG at 16x zoom — the
-SELF-REFINE vision loop (Madaan et al., NeurIPS 2023) lets the LLM see what
-it drew and fix issues iteratively.
+`pixl serve --port 3742` exposes 20 REST endpoints:
+
+```
+GET  /health                  POST /api/session
+POST /api/palette             GET  /api/themes
+GET  /api/stamps              GET  /api/tiles
+POST /api/tile/create         POST /api/tile/render
+POST /api/tile/delete         POST /api/tile/edge-check
+POST /api/validate            POST /api/narrate
+POST /api/style/learn         POST /api/style/check
+POST /api/blueprint           POST /api/sprite/gif
+GET  /api/file                POST /api/generate/context
+POST /api/atlas/pack          POST /api/load
+POST /api/tool
+```
+
+The `/api/generate/context` endpoint builds enriched system prompts with
+palette symbols, theme constraints, style latent, and edge context — the
+Studio sends this to Anthropic and gets back valid PAX grids.
 
 ## Export Formats
 
@@ -126,20 +160,34 @@ it drew and fix issues iteratively.
 - **Godot .tres** — TileSet resource with physics layers
 - **GBStudio** — 128px-wide tileset PNG for Game Boy style games
 
+## Key Features
+
+- **Style Latent** — extract visual fingerprint from reference tiles, score new tiles against it. Makes session 5 look like session 1.
+- **SELF-REFINE Loop** — every create/render returns 16x preview PNG. The LLM sees what it drew and fixes issues iteratively (Madaan et al., NeurIPS 2023).
+- **Blueprint System** — anatomy-guided character sprites. Exact pixel coordinates for eyes, shoulders, knees at any canvas size.
+- **Diffusion Import** — quantize any reference image into a PAX palette. Bridge from FLUX.2/SD to indexed pixel art.
+- **Procedural Stamps** — 8 pattern types (brick, checker, diagonal, Bayer dither...) generate compose vocabulary without LLM authorship.
+- **Narrate-to-Map** — spatial predicates to rendered dungeon. The killer demo.
+
 ## Architecture
 
 ```
 PIXL/
-├── tool/                    Rust workspace
-│   ├── pixl-core/           Format types, parser, validator, blueprint
-│   ├── pixl-render/         Tile renderer, atlas, GIF, preview
-│   ├── pixl-wfc/            Wave Function Collapse engine
-│   ├── pixl-mcp/            MCP server (rmcp, stdio)
+├── tool/                    Rust workspace (6 crates)
+│   ├── pixl-core/           Format types, parser, validator, blueprint, style latent
+│   ├── pixl-render/         Tile renderer, atlas, GIF, preview, diffusion import
+│   ├── pixl-wfc/            Wave Function Collapse, semantic constraints, narrate
+│   ├── pixl-mcp/            MCP server + HTTP API (rmcp + axum)
 │   ├── pixl-export/         TexturePacker, Tiled, Godot, Unity, GBStudio
-│   └── pixl-cli/            CLI binary
-├── studio/                  PIXL Studio (Flutter, future)
-├── docs/specs/pax.md        PAX 2.0 format specification
-└── examples/dungeon.pax     Complete example tileset
+│   └── pixl-cli/            CLI binary (15 commands)
+├── studio/                  PIXL Studio (Flutter desktop app)
+├── docs/
+│   ├── specs/pax.md         PAX 2.0 format specification
+│   └── plans/               Implementation plan
+└── examples/
+    ├── dungeon.pax          Dark fantasy tileset
+    ├── platformer.pax       Forest side-scroller
+    └── gameboy.pax          4-color Game Boy
 ```
 
 ## Building
@@ -147,7 +195,7 @@ PIXL/
 ```bash
 cd tool
 cargo build --release
-cargo test
+cargo test  # 136 tests
 ```
 
 ## License

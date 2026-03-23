@@ -1469,9 +1469,30 @@ orchestration on top.
 
 ## 7. Implementation Phases
 
+**Status: V1 COMPLETE. All 6 phases shipped + V1.1/V1.2 features.**
+
 **Authoritative format spec:** `docs/specs/pax.md` (PAX 2.0)
 **All format details, algorithms, and type definitions** live in the spec.
-Phases below reference spec sections and focus on tasks, deliverables, timeline.
+
+### Completion Summary
+
+| Phase | Status | Tests | Key Deliverables |
+|-------|--------|-------|-----------------|
+| Phase 1 — Parser & Validator | DONE | 75 | types, parser, grid, RLE, symmetry, compose, template, theme, edges, rotate, cycle, blueprint, validate, style, stampgen, resolve |
+| Phase 2 — Rendering | DONE | 20 | renderer, atlas, GIF, preview, import |
+| Phase 3 — WFC Engine | DONE | 29 | adjacency, WFC, semantic constraints, autotile, narrate |
+| Phase 4 — MCP Server | DONE | 4 | 19 MCP tools, state management |
+| Phase 5 — Game Engine Export | DONE | 8 | TexturePacker, Tiled, Godot, Unity, GBStudio |
+| Phase 6 — Polish | DONE | — | README, CI, cargo fmt, clippy |
+| V1.1 — Import Bridge | DONE | +5 | diffusion import, platformer + gameboy examples |
+| V1.2 — Style Latent | DONE | +7 | style extraction, scoring, MCP tools |
+| V1.2 — Stamp Generation | DONE | +6 | 8 procedural patterns |
+| V1.5 — Narrate Pipeline | DONE | +6 | predicate parser, WFC pins, path validation |
+| Studio Integration | DONE | — | HTTP API (20 endpoints), generate/context, pixl_backend.dart |
+
+**Total: 136 tests, ~11K LOC Rust, 15 CLI commands, 19 MCP tools, 20 HTTP endpoints**
+
+### Original Phase Details (for reference)
 
 ### Phase 1 — Core Format & Parser (Week 1–3)
 
@@ -1687,76 +1708,42 @@ Excluded: `pixl-mcp`, `pixl-cli` (not applicable to WASM).
 
 ---
 
-## 9. Beyond MVP — Future Roadmap
+## 9. Roadmap — What's Done, What's Next
 
-### V1.1 — Diffusion Import Bridge + Theme Library
+### Shipped (V1.0 - V1.5)
 
-**Theme Library:**
+| Feature | Status | Notes |
+|---------|--------|-------|
+| V1.0 Core (6 phases) | DONE | Parser, renderer, WFC, MCP, export, polish |
+| V1.1 Diffusion Import | DONE | `pixl import` with Lanczos + Bayer dither |
+| V1.1 Examples | DONE | dungeon.pax, platformer.pax, gameboy.pax |
+| V1.2 Style Latent | DONE | 8-property fingerprint, scoring, MCP tools |
+| V1.2 Procedural Stamps | DONE | 8 patterns, `pixl generate-stamps` |
+| V1.3 HTTP API | DONE | 20 endpoints via `pixl serve` (axum) |
+| V1.5 Narrate Pipeline | DONE | Predicate parser, WFC pins, path validation |
+| Studio Integration | DONE | generate/context, themes, stamps, atlas, load |
+
+### Remaining — Next Priorities
+
+**Theme Library (V1.1 remaining):**
 - Built-in themes: dark_fantasy, light_fantasy, sci_fi, nature, gameboy, nes
 - Each theme ships with curated stamp libraries
 - `pixl new theme <name>` scaffold command
-- `pixl new tile <name> --theme <t>` scaffold with palette
 
-**Diffusion Import Bridge:**
-
-- `pixl.import_reference()` MCP tool + `pixl import` CLI command
-- Downscale reference image (Lanczos) to target sprite size
-- Palette quantize using perceptual distance (weighted RGB)
-- Optional Bayer dithering for smoother gradients
-- Returns quantized PAX grid + 16x preview for SELF-REFINE refinement
-- ~200 lines in `pixl-render/src/import.rs`
-- Enables: FLUX.2/SD3.5 generates reference → PAX quantizes → LLM refines
-
-### V1.2 — Style Latent + Project Sessions + Procedural Variation
-
-**PAX Style Latent** (inspired by NTC's compact learned representation idea):
-- Extract style fingerprint from 8-10 reference tiles: lighting direction,
-  outline weight, dithering pattern, palette contrast ratios, pixel density,
-  run-length distribution, color clustering, edge sharpness
-- Store as `[style]` block in `.pixlproject` file
-- All AI-generated tiles conditioned on this fingerprint
-- ~300 lines of Rust, pure signal processing on indexed color grids
-- MCP tool: `pixl.learn_style(reference_tiles[])`
-- MCP tool: `pixl.check_style(tile_name)` — scores tile against fingerprint
-
-**Project Session Architecture:**
+**Project Session Architecture (V1.2 remaining):**
 - `.pixlproject` files for cross-session continuity
 - `pixl session --project <name> --world <world>` loads context
-- Style latent injected into every generation prompt
-- Progress tracking: tiles authored, categories missing, completion %
-- MCP tool: `pixl.session_context()` — existing tiles, missing categories
+- Style latent persisted across sessions
+- Progress tracking: tiles authored, categories missing
 
 **Procedural Variation Engine:**
-- Auto-generate N variants from base tile, conditioned on style latent
+- Auto-generate N variants from base tile conditioned on style latent
 - Crack placement, moss/erosion density, color jitter within palette
-- `pixl vary <tile> --count 4 --seed 42` CLI command
+- `pixl vary <tile> --count 4 --seed 42`
 
-### V1.3 — HTTP API
-
-- `pixl serve` — HTTP server exposing all MCP tools as REST endpoints
-- `POST /render`, `POST /validate`, `POST /wfc`
-- SSE transport for MCP (alongside stdio)
-- OpenAPI spec generation
-
-### V1.4 — WASM Playground
-
+**WASM Playground:**
 - Compile `pixl-core` + `pixl-render` to WASM
 - Browser-based .pax editor with live preview
-- Embed in documentation site
-- Share tiles via URL-encoded PAX snippets
-
-### V1.5 — Narrative-to-Map Pipeline (Killer Demo)
-
-Full algorithm specified in PAX 2.1 addendum (docs/concept/):
-
-- `pixl.narrate_map(prompt, theme, width, height, seed?)` MCP tool
-- Phase 1: LLM extracts spatial predicates (Object-Relation-Object triples)
-- Phase 2: Predicates → WFC constraints (position bias, pins, zones, paths)
-- Phase 3: WFC with constraint painting assembles the map
-- Phase 4: Post-validate connectivity, retry on blocked paths (max 5)
-- CLI: `pixl narrate "A dark forest dungeon with a boss chamber in the
-  southeast and three loot rooms" --theme dark_fantasy --width 20 --height 15`
-- This is the launch screenshot. Comprehensible to non-technical audiences.
 
 ### V1.6 — GameTileNet Corpus Integration (~1–2 weeks)
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/pixel_canvas.dart';
+import '../providers/backend_provider.dart';
 import '../providers/canvas_provider.dart';
 import '../providers/palette_provider.dart';
 import '../theme/studio_theme.dart';
@@ -56,6 +57,8 @@ class StatusBar extends ConsumerWidget {
               style: style.copyWith(color: theme.colorScheme.primary),
             ),
           const Spacer(),
+          _EngineIndicator(),
+          _sep(),
           Text('PIXL Studio v0.1', style: style),
         ],
       ),
@@ -66,4 +69,32 @@ class StatusBar extends ConsumerWidget {
         padding: EdgeInsets.symmetric(horizontal: 8),
         child: Text('|', style: TextStyle(color: Color(0xFF3a3a5e), fontSize: 11)),
       );
+}
+
+class _EngineIndicator extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final status = ref.watch(backendProvider.select((s) => s.status));
+    final tileCount = ref.watch(backendProvider.select((s) => s.tiles.length));
+    final style = Theme.of(context).textTheme.bodySmall!.copyWith(fontSize: 11);
+
+    final (color, label) = switch (status) {
+      BackendStatus.connected => (const Color(0xFF4caf50), 'Engine OK ($tileCount tiles)'),
+      BackendStatus.connecting => (const Color(0xFFffaa00), 'Connecting...'),
+      BackendStatus.error => (const Color(0xFFf44336), 'Engine Error'),
+      BackendStatus.disconnected => (const Color(0xFF888888), 'Offline'),
+    };
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 6, height: 6,
+          decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+        ),
+        const SizedBox(width: 4),
+        Text(label, style: style.copyWith(color: color)),
+      ],
+    );
+  }
 }

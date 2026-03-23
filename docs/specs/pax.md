@@ -1064,80 +1064,82 @@ Based on Madaan et al., NeurIPS 2023:
 2. Refine via `pixl.refine_tile()` -> re-examine
 3. Cap at 3 iterations (diminishing returns per research)
 
-### MCP Tool Catalog
+### MCP Tool Catalog (19 tools implemented)
 
 **Discovery:**
-- `pixl.session_start()` -> theme, palette, stamps, tiles, light_source, workflow
-- `pixl.get_palette(theme)` -> symbol table with roles and hex values
-- `pixl.get_blueprint(model, width, height)` -> guide_text, landmarks, eye_size,
-  omitted_features. Auto-injected into `create_tile` when tags include `"character"`.
-- `pixl.get_edge_context(tile_name, direction)` -> actual border pixel string,
-  edge_class, 4px-strip preview. Gives LLM concrete pixel targets, not just
-  abstract class names.
-- `pixl.list_tiles()`, `pixl.list_stamps()`, `pixl.list_sprites()`
+- `pixl_session_start` -> theme, palette, stamps, tiles, light_source, workflow
+- `pixl_get_palette(theme)` -> symbol table with roles and hex values
+- `pixl_get_blueprint(model, width, height)` -> guide_text, landmarks, eye_size
+- `pixl_list_tiles` -> tiles with edge classes, tags, template info
+- `pixl_list_themes` -> themes with palette, scale, light source, roles
+- `pixl_list_stamps` -> stamps with sizes
 
 **Creation:**
-- `pixl.create_tile(...)` -> validation + preview PNG (16x) + edge context pixels
-- `pixl.compose_tile(...)` -> same response format
-- `pixl.create_stamp(...)` -> preview PNG
-- `pixl.create_spriteset(...)`, `pixl.add_sprite(...)` -> preview **GIF** (not PNG)
-- `pixl.define_palette_swap(...)`, `pixl.define_cycle(...)`
+- `pixl_create_tile(...)` -> validation + 16x preview PNG + edge_pixels +
+  compatible_neighbors. Edge context shows actual border strings and which
+  existing tiles can go in each direction.
+- `pixl_load_source(source)` -> load a .pax string into session state
 
 **Refinement (SELF-REFINE):**
-- `pixl.refine_tile(name, region_x, region_y, region_w, region_h, grid)` ->
-  updated preview + refinement count. After 3: suggests accept.
-- `pixl.check_edge_pair(tile_a, direction, tile_b)` -> compatible: bool, reason
-- `pixl.render_with_swap(tile, swap_name)` -> preview PNG with swap applied
-- `pixl.render_cycle_frame(tile, cycle_name, frame_offset)` -> preview PNG
+- `pixl_check_edge_pair(tile_a, direction, tile_b)` -> compatible: bool, reason
+- `pixl_render_tile(name, scale?)` -> base64 PNG at specified zoom
+- `pixl_render_sprite_gif(spriteset, sprite, scale?)` -> animated base64 GIF.
+  Resolves grid/delta/linked frames. Multimodal LLM examines animation quality.
+- `pixl_delete_tile(name)` -> removes tile from session
+
+**Style:**
+- `pixl_learn_style(tiles?)` -> extract style latent from reference tiles.
+  Returns 8-property fingerprint (light direction, run length, shadow ratio,
+  palette breadth, pixel density, entropy, hue bias, luminance). Stored in
+  session state for subsequent scoring.
+- `pixl_check_style(name)` -> score a tile against the session latent (0-1)
 
 **Validation & Generation:**
-- `pixl.validate(check_edges?)` -> errors, warnings, summary
-- `pixl.generate_wfc_map(width, height, seed?, constraints?)` -> map_grid, preview PNG
-- `pixl.generate_autotile_set(base_tile, mode)` -> generated tiles, preview
-- `pixl.render_atlas(...)` -> atlas PNG + JSON
-- `pixl.get_file(section?)` -> full .pax source, or a specific section
-  ("palettes", "tiles", "sprites", "tilemaps"). Large tilesets (50KB+) may
-  exceed LLM context; sectioned retrieval avoids this.
-- `pixl.get_tile_source(name)` -> TOML source for a single tile
+- `pixl_validate(check_edges?)` -> errors, warnings, stats
+- `pixl_narrate_map(width, height, seed?, rules[])` -> rendered map PNG +
+  tile name grid from spatial predicates. Rules: "border:wall_solid",
+  "region:name:type:WxH:position", "path:x1,y1:x2,y2". Retries on
+  contradiction (max 5).
+- `pixl_generate_context(prompt, type?, size?)` -> enriched system_prompt +
+  user_prompt for AI generation. Includes palette symbols, theme constraints,
+  style latent, edge context. Studio sends this to Anthropic API directly.
+- `pixl_pack_atlas(columns?, padding?, scale?)` -> base64 atlas PNG + JSON
 
-**Mutation tools:**
-- `pixl.delete_tile(name)` -> removes tile from in-memory state. Required for
-  cleanup during iterative sessions — without delete, bad tiles pollute WFC.
-- `pixl.rename_tile(old_name, new_name)` -> renames tile, updates all references
-  (template, tile_run, variant_groups, tilemap grids)
-- `pixl.upscale_tile(name, factor)` -> nearest-neighbor upscale of character
-  grid (each pixel becomes factor x factor block). Returns expanded grid +
-  preview for LLM to refine detail. Trivial algorithm, high value for
-  8x8 -> 16x16 workflow.
+**Export:**
+- `pixl_get_file` -> full .pax TOML source
 
-**Animated previews:** Sprite and cycling tile previews return base64 **GIF**
-(not static PNG). A multimodal LLM examining a static frame cannot judge
-animation quality. Four frames as a GIF gives temporal context for evaluating
-walk cycle smoothness, cycle timing, and frame transition quality.
+### HTTP API (20 endpoints, `pixl serve --port 3742`)
 
-**Edge context injection:** When `pixl.create_tile` is called and the tile must
-be edge-compatible with existing tiles, the response from `session_start()`
-includes actual border pixel strings for all existing tiles. The LLM sees
-"your leftmost column must be `################` to match wall_solid's east
-edge" — concrete and actionable, not just "edge_class west = solid."
+All MCP tools are also available as REST endpoints for PIXL Studio:
 
-**Error state rendering:** If the LLM sends a malformed grid (wrong dimensions,
-unknown symbols), the tile is stored with `status: "invalid"` and rendered
-anyway — unknown symbols display as hot pink (#FF00FF). The LLM can visually
-inspect its mistake in the preview rather than working from text error messages
-alone. Invalid tiles are excluded from WFC and atlas export.
+```
+GET  /health                  POST /api/session
+POST /api/palette             GET  /api/themes
+GET  /api/stamps              GET  /api/tiles
+POST /api/tile/create         POST /api/tile/render
+POST /api/tile/delete         POST /api/tile/edge-check
+POST /api/validate            POST /api/narrate
+POST /api/style/learn         POST /api/style/check
+POST /api/blueprint           POST /api/sprite/gif
+GET  /api/file                POST /api/generate/context
+POST /api/atlas/pack          POST /api/load
+POST /api/tool                (generic: {tool, args})
+```
+
+**Edge context injection:** `create_tile` responses include `edge_pixels`
+(actual border strings N/E/S/W) and `compatible_neighbors` (which tiles can
+go in each direction). Concrete pixel targets, not just abstract class names.
+
+**Animated previews:** `render_sprite_gif` returns base64 GIF for multimodal
+LLM inspection of animation quality.
+
+**Error state rendering:** Unknown symbols render as hot pink (#FF00FF). The
+LLM can visually inspect mistakes in the preview. Invalid tiles are excluded
+from WFC and atlas export.
 
 **`pixl check --fix` behavior:** Fills missing edge classes from auto-
-classification. Warns (but does not overwrite) when auto-classified edges
-differ from user-specified ones. Never silently changes existing declarations.
-
-**Tilemap grid parsing:** Tile names in tilemap grids are whitespace-delimited.
-Tile names cannot contain whitespace. `"."` is the reserved empty-cell marker.
-
-**`narrate_map`:** Deferred to V1.2 with project files and style latent.
-Natural language -> spatial predicates -> WFC constraints -> rendered map.
-Algorithm specified in PAX 2.1 addendum. This is the killer demo but requires
-the constraint painting and semantic WFC subsystems to be battle-tested first.
+classification. Warns on mismatch (recognizes aliases: "solid" matches
+"solid_#"). Never overwrites existing declarations.
 
 ---
 
