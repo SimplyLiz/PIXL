@@ -107,6 +107,24 @@ enum Commands {
         model: String,
     },
 
+    /// Generate procedural stamps for a pattern
+    GenerateStamps {
+        /// Pattern: brick_bond, checkerboard, diagonal, dither_bayer, horizontal_stripe, dots, cross, noise
+        pattern: String,
+
+        /// Stamp size (e.g., "4x4", "8x8")
+        #[arg(long, default_value = "4")]
+        size: u32,
+
+        /// Foreground symbol
+        #[arg(long, default_value = "#")]
+        fg: char,
+
+        /// Background symbol
+        #[arg(long, default_value = "+")]
+        bg: char,
+    },
+
     /// Extract style latent from reference tiles
     Style {
         /// Path to the .pax file
@@ -192,6 +210,14 @@ fn main() {
         }
         Commands::Blueprint { size, model } => {
             cmd_blueprint(&size, &model);
+        }
+        Commands::GenerateStamps {
+            pattern,
+            size,
+            fg,
+            bg,
+        } => {
+            cmd_generate_stamps(&pattern, size, fg, bg);
         }
         Commands::Style { file, tiles } => {
             cmd_style(&file, tiles.as_deref());
@@ -529,6 +555,32 @@ fn cmd_preview(file: &PathBuf, tile_name: &str, out: &PathBuf, show_grid: bool) 
         if show_grid { " +grid" } else { "" },
         out.display()
     );
+}
+
+fn cmd_generate_stamps(pattern: &str, size: u32, fg: char, bg: char) {
+    let stamps = pixl_core::stampgen::generate_stamps(pattern, size, fg, bg);
+    if stamps.is_empty() {
+        eprintln!(
+            "error: unknown pattern '{}'. Available: {:?}",
+            pattern,
+            pixl_core::stampgen::available_patterns()
+        );
+        process::exit(1);
+    }
+
+    for stamp in &stamps {
+        println!("[stamp.{}]", stamp.name);
+        println!("palette = \"<your_palette>\"");
+        println!("size    = \"{}x{}\"", stamp.width, stamp.height);
+        println!("grid    = '''");
+        for row in &stamp.grid {
+            println!("{}", row.iter().collect::<String>());
+        }
+        println!("'''");
+        println!();
+    }
+
+    println!("# Generated {} stamp(s) for pattern '{}'", stamps.len(), pattern);
 }
 
 fn cmd_style(file: &PathBuf, tiles_filter: Option<&str>) {
