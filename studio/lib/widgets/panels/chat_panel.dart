@@ -10,7 +10,6 @@ import '../../providers/chat_provider.dart';
 import '../../providers/claude_provider.dart';
 import '../../services/claude_api.dart';
 import '../../theme/studio_theme.dart';
-import '../settings_dialog.dart';
 
 /// Left panel — AI expert chat with Claude generation pipeline.
 ///
@@ -34,7 +33,6 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
   // Pending generated tile for accept/reject flow
   String? _pendingTileName;
   String? _pendingPreviewB64;
-  String? _pendingPaxGrid;
   String? _lastGenerationPrompt;
 
   void _scrollToBottom() {
@@ -171,7 +169,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     setState(() {
       _pendingTileName = tileName;
       _pendingPreviewB64 = previewB64;
-      _pendingPaxGrid = grid;
+
     });
 
     final validationInfo = createResp['validation'] as Map<String, dynamic>?;
@@ -196,7 +194,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     setState(() {
       _pendingTileName = null;
       _pendingPreviewB64 = null;
-      _pendingPaxGrid = null;
+
     });
     _scrollToBottom();
   }
@@ -211,7 +209,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     setState(() {
       _pendingTileName = null;
       _pendingPreviewB64 = null;
-      _pendingPaxGrid = null;
+
     });
     _scrollToBottom();
   }
@@ -225,7 +223,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     setState(() {
       _pendingTileName = null;
       _pendingPreviewB64 = null;
-      _pendingPaxGrid = null;
+
     });
 
     if (_lastGenerationPrompt != null) {
@@ -448,7 +446,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
                     setState(() {
                       _pendingTileName = null;
                       _pendingPreviewB64 = null;
-                      _pendingPaxGrid = null;
+                
                     });
                   },
                   tooltip: 'Clear chat',

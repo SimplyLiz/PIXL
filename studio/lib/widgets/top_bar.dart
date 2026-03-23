@@ -102,6 +102,74 @@ class TopBar extends ConsumerWidget {
   }
 }
 
+class _ExportMenu extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return PopupMenuButton<String>(
+      tooltip: 'Export',
+      iconSize: 18,
+      icon: const Icon(Icons.file_download, size: 18),
+      onSelected: (value) async {
+        final messenger = ScaffoldMessenger.of(context);
+        switch (value) {
+          case 'png':
+            final cs = ref.read(canvasProvider);
+            final ok = await ExportService.exportCanvasPng(canvasState: cs, scale: 4);
+            messenger.showSnackBar(SnackBar(
+              content: Text(ok ? 'PNG exported' : 'Export cancelled'),
+              duration: const Duration(seconds: 2),
+            ));
+            break;
+          case 'png8x':
+            final cs = ref.read(canvasProvider);
+            final ok = await ExportService.exportCanvasPng(canvasState: cs, scale: 8);
+            messenger.showSnackBar(SnackBar(
+              content: Text(ok ? 'PNG exported (8x)' : 'Export cancelled'),
+              duration: const Duration(seconds: 2),
+            ));
+            break;
+          case 'pax':
+            final source = await ref.read(backendProvider.notifier).getPaxSource();
+            if (source != null) {
+              final ok = await ExportService.savePaxSource(source);
+              messenger.showSnackBar(SnackBar(
+                content: Text(ok ? 'PAX source saved' : 'Save cancelled'),
+                duration: const Duration(seconds: 2),
+              ));
+            } else {
+              messenger.showSnackBar(const SnackBar(
+                content: Text('No PAX source available (engine not connected?)'),
+              ));
+            }
+            break;
+          case 'atlas':
+            final resp = await ref.read(backendProvider.notifier).packAtlas();
+            final png = resp['png'] as String?;
+            if (png != null) {
+              final ok = await ExportService.saveAtlasPng(png);
+              messenger.showSnackBar(SnackBar(
+                content: Text(ok ? 'Atlas exported' : 'Export cancelled'),
+                duration: const Duration(seconds: 2),
+              ));
+            } else {
+              messenger.showSnackBar(SnackBar(
+                content: Text('Atlas pack failed: ${resp['error'] ?? 'unknown'}'),
+              ));
+            }
+            break;
+        }
+      },
+      itemBuilder: (_) => const [
+        PopupMenuItem(value: 'png', child: Text('Export PNG (4x)', style: TextStyle(fontSize: 12))),
+        PopupMenuItem(value: 'png8x', child: Text('Export PNG (8x)', style: TextStyle(fontSize: 12))),
+        PopupMenuDivider(),
+        PopupMenuItem(value: 'pax', child: Text('Save PAX Source', style: TextStyle(fontSize: 12))),
+        PopupMenuItem(value: 'atlas', child: Text('Export Atlas', style: TextStyle(fontSize: 12))),
+      ],
+    );
+  }
+}
+
 class _ApiKeyBadge extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {

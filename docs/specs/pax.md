@@ -1255,35 +1255,37 @@ prompt templates.
 
 ---
 
-## 19. Future Subsystems (Specified, Not V1)
+## 19. Subsystem Status
 
-### 19.1 Skeletal Animation (V2)
+### Implemented
 
+| Subsystem | Status | CLI / API |
+|-----------|--------|-----------|
+| **Theme Library** | DONE | `pixl new <theme>` — 6 built-in themes (dark_fantasy, light_fantasy, sci_fi, nature, gameboy, nes) with curated stamps |
+| **Diffusion Import** | DONE | `pixl import` — Lanczos downscale + perceptual palette quantize + Bayer dither |
+| **Style Latent** | DONE | `pixl style` / `pixl_learn_style` — 8-property fingerprint, tile scoring, TOML-serializable |
+| **Project Sessions** | DONE | `pixl project init/add-world/status/learn-style` — .pixlproject format with persistent style latent |
+| **Narrate Pipeline** | DONE | `pixl narrate` / `pixl_narrate_map` — spatial predicates to WFC map |
+| **Procedural Stamps** | DONE | `pixl generate-stamps` — 8 pattern types |
+| **HTTP API** | DONE | `pixl serve` — 20 REST endpoints via axum |
+| **Blueprint System** | DONE | `pixl blueprint` / `pixl_get_blueprint` — anatomy landmarks |
+
+### Future (Not Yet Implemented)
+
+**19.1 Skeletal Animation (V2):**
 Body part sprites + RotSprite rotation + bone interpolation. Author 6-8 body
 parts and 3-4 skeletal keyframe poses; system generates complete spritesheets.
-4-directional movement via mirror. See PAX 2.1 addendum for full skeleton
-format specification.
 
-**Key algorithms:**
-- RotSprite: scale 8x, modified Scale2x, rotate, scale back. No new colors.
-- Bone interpolation: lerp transforms, snap to integer pixels.
-- Body part compositing: depth-sorted bone rendering.
-
-### 19.2 Diffusion Import Bridge (V1.1)
-
-`import_reference`: downscale reference image + palette quantize + optional
-Bayer dither. ~200 lines in `pixl-render`. Enables: FLUX.2 generates reference
--> PAX quantizes to palette -> LLM refines structure via SELF-REFINE.
-
-### 19.3 Project Files + Session Architecture (V1.2)
-
-`.pixlproject` files for cross-session continuity. Style latent as session
-glue. `pixl session` command loads project context.
-
-### 19.4 Fine-tuned PAX LoRA (V2+)
-
+**19.2 Fine-tuned PAX LoRA (V2+):**
 Train LoRA adapter on GameTileNet corpus converted to PAX format. Local 7B
 model generates PAX-native grids; frontier model validates via vision.
+
+**19.3 WASM Playground:**
+Compile `pixl-core` + `pixl-render` to wasm32. Browser-based .pax editor.
+
+**19.4 Procedural Variation Engine:**
+Auto-generate N tile variants conditioned on style latent. Crack placement,
+moss density, color jitter.
 
 ---
 

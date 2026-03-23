@@ -1710,40 +1710,38 @@ Excluded: `pixl-mcp`, `pixl-cli` (not applicable to WASM).
 
 ## 9. Roadmap — What's Done, What's Next
 
-### Shipped (V1.0 - V1.5)
+### Shipped
 
-| Feature | Status | Notes |
-|---------|--------|-------|
-| V1.0 Core (6 phases) | DONE | Parser, renderer, WFC, MCP, export, polish |
+| Feature | Status | CLI / API |
+|---------|--------|-----------|
+| V1.0 Core (6 phases) | DONE | Parser, renderer, WFC, MCP, export, CI |
 | V1.1 Diffusion Import | DONE | `pixl import` with Lanczos + Bayer dither |
 | V1.1 Examples | DONE | dungeon.pax, platformer.pax, gameboy.pax |
-| V1.2 Style Latent | DONE | 8-property fingerprint, scoring, MCP tools |
-| V1.2 Procedural Stamps | DONE | 8 patterns, `pixl generate-stamps` |
-| V1.3 HTTP API | DONE | 20 endpoints via `pixl serve` (axum) |
-| V1.5 Narrate Pipeline | DONE | Predicate parser, WFC pins, path validation |
-| Studio Integration | DONE | generate/context, themes, stamps, atlas, load |
+| V1.1 Theme Library | DONE | `pixl new <theme>` — 6 themes with stamps |
+| V1.2 Style Latent | DONE | `pixl style` / `pixl_learn_style` / `pixl_check_style` |
+| V1.2 Procedural Stamps | DONE | `pixl generate-stamps` — 8 patterns |
+| V1.2 Project Sessions | DONE | `pixl project init/add-world/status/learn-style` |
+| V1.3 HTTP API | DONE | `pixl serve` — 20 endpoints (axum) |
+| V1.5 Narrate Pipeline | DONE | `pixl narrate` / `pixl_narrate_map` |
+| Studio Integration | DONE | generate/context, pixl_backend.dart |
+| MCP Tool Descriptions | DONE | 19 tools with LLM-optimized descriptions |
 
-### Remaining — Next Priorities
-
-**Theme Library (V1.1 remaining):**
-- Built-in themes: dark_fantasy, light_fantasy, sci_fi, nature, gameboy, nes
-- Each theme ships with curated stamp libraries
-- `pixl new theme <name>` scaffold command
-
-**Project Session Architecture (V1.2 remaining):**
-- `.pixlproject` files for cross-session continuity
-- `pixl session --project <name> --world <world>` loads context
-- Style latent persisted across sessions
-- Progress tracking: tiles authored, categories missing
+### Remaining — Future
 
 **Procedural Variation Engine:**
-- Auto-generate N variants from base tile conditioned on style latent
-- Crack placement, moss/erosion density, color jitter within palette
+- Auto-generate N tile variants conditioned on style latent
+- Crack placement, moss/erosion density, color jitter
 - `pixl vary <tile> --count 4 --seed 42`
 
 **WASM Playground:**
-- Compile `pixl-core` + `pixl-render` to WASM
+- Compile `pixl-core` + `pixl-render` to wasm32
 - Browser-based .pax editor with live preview
+
+**Skeletal Animation (V2):**
+- Body part sprites + RotSprite rotation + bone interpolation
+
+**Fine-tuned PAX LoRA (V2+):**
+- Train on GameTileNet corpus converted to .pax format
 
 ### V1.6 — GameTileNet Corpus Integration (~1–2 weeks)
 

@@ -4,8 +4,6 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/rendering.dart';
-
 import '../models/pixel_canvas.dart';
 
 /// Export service for saving tiles, PAX source, and atlases.

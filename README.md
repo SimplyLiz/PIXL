@@ -21,8 +21,11 @@ The LLM works within its reliable accuracy zone. The tool does the rest.
 ## Quick Start
 
 ```bash
+# Start a new project from a built-in theme
+pixl new dark_fantasy --out my_tileset.pax
+
 # Validate a .pax file
-pixl validate examples/dungeon.pax
+pixl validate my_tileset.pax
 
 # Render a tile (supports grid, RLE, compose, template, symmetry)
 pixl render examples/dungeon.pax --tile wall_solid --scale 4 --out wall.png
@@ -56,6 +59,12 @@ pixl narrate examples/dungeon.pax --width 12 --height 8 \
 
 # Show anatomy blueprint for character sprites
 pixl blueprint 32x48
+
+# Manage a multi-world game project
+pixl project init my_game --theme dark_fantasy
+pixl project add-world my_game.pixlproject dungeon worlds/dungeon.pax
+pixl project learn-style my_game.pixlproject dungeon
+pixl project status my_game.pixlproject
 
 # Start MCP server for Claude Code
 pixl mcp --file examples/dungeon.pax
@@ -159,6 +168,50 @@ Studio sends this to Anthropic and gets back valid PAX grids.
 - **Tiled TMJ/TSJ** — with collision shapes, importable to Godot and Unity
 - **Godot .tres** — TileSet resource with physics layers
 - **GBStudio** — 128px-wide tileset PNG for Game Boy style games
+
+## Theme Library
+
+6 built-in themes with curated palettes and stamps. Start a project instantly:
+
+```bash
+pixl new dark_fantasy --out dungeon.pax   # Purple stone, dark shadows
+pixl new light_fantasy --out castle.pax   # Warm marble, gold trim
+pixl new sci_fi --out station.pax         # Neon blue on dark panels
+pixl new nature --out forest.pax          # Greens, browns, water
+pixl new gameboy --out gb_game.pax        # 4-color GB green
+pixl new nes --out nes_game.pax           # 4-color NES brown
+```
+
+Each theme includes: palette, semantic color roles, light source direction,
+`max_palette_size` constraint, and 2-5 stamps for compose mode. Validates
+clean out of the box.
+
+## Project Sessions
+
+Multi-world game projects with persistent style across sessions:
+
+```bash
+# Initialize a project
+pixl project init my_game --theme dark_fantasy
+
+# Add worlds (each is a separate .pax file)
+pixl project add-world my_game.pixlproject dungeon worlds/dungeon.pax
+pixl project add-world my_game.pixlproject ice_cave worlds/ice.pax
+
+# Extract style latent from a world's tiles
+pixl project learn-style my_game.pixlproject dungeon
+# -> style latent saved to my_game.pixlproject
+
+# Check project status
+pixl project status my_game.pixlproject
+# -> Project: my_game | Theme: dark_fantasy | Worlds: 2 | Progress: 43/120 tiles
+```
+
+The `.pixlproject` file stores: project metadata, world list (paths to .pax
+files), style latent (8-property fingerprint extracted from reference tiles),
+and progress tracking. Style persists across sessions — world 5 looks like
+world 1 because the latent encodes lighting, shadow density, pixel density,
+hue bias, and palette usage from the first tiles you authored.
 
 ## Key Features
 
