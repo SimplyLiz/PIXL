@@ -7,6 +7,7 @@ import '../../models/palette.dart';
 import '../../models/pixel_canvas.dart';
 import '../../providers/canvas_provider.dart';
 import '../../providers/hover_provider.dart';
+import '../../theme/studio_theme.dart';
 import '../../providers/palette_provider.dart';
 import '../shortcuts_dialog.dart';
 import 'pixel_canvas_painter.dart';
@@ -238,7 +239,7 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
                 },
                 onPointerUp: (event) => _handlePointerUp(event),
                 child: Container(
-                  color: const Color(0xFF121220),
+                  color: const StudioTheme.canvasBg,
                   child: Stack(
                     children: [
                       Positioned(

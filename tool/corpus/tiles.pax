@@ -1,0 +1,2110 @@
+[pax]
+version = "2.0"
+name = "corpus_dungeon"
+
+[palette.dungeon]
+"#" = "#2a1f3dff"
+"+" = "#4a3a6dff"
+"." = "#00000000"
+"g" = "#2d5a27ff"
+"h" = "#6a5a9dff"
+"o" = "#c8a035ff"
+"r" = "#8b1a1aff"
+"s" = "#1a0f2eff"
+"w" = "#e8e0d4ff"
+"~" = "#1a3a5cff"
+
+[stamp.openSecretDoor32]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 91.2%
+grid = '''
+wwwhowwwo+owww+s
+wwwh+wwwo+hwww+s
+www++owwo#hwww+s
+h++#s#+++ss+++#s
+oh+sssssssshh+s#
+ooosssssssshoh#r
+oohsssssssshohsr
+oohsssssssshoh#r
+oohsssssssshoh#r
+oohsssssssshohsr
+oohsssssssshohsr
+oohsssssssshohsr
+oohsssssssshoh#r
+ooosssssssshohsr
+h++ssssssss+++sr
+#ssssssssssssssr
+'''
+
+[stamp.floor21]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 90.0%
+grid = '''
+gghghggghhgghggg
+hg+++gg+hhgghhgg
+gg++~+++++~+ohhg
+ggh+g+ghhh+~ggh+
+gog#ggg+ohghoggg
+ggh+~g+~g~+hhhhh
+#ghh~gghg++gg+gg
+ggg+#ooghg+g#hoh
+ggo++ogghhhh++hg
+gohh~+++gggg+hg~
+g+oh+h+~~+hg#hgh
+g#+ggh~ghh+hgghg
++g~+hh+ghh++h+gg
+hh++~+~g##g+++++
+g+ggg++gghhh#+gg
+gghghhggghhgghgg
+'''
+
+[stamp.roomWall22]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 90.1%
+grid = '''
+h+hhhh+g#+hohhhh
+hhooh+ggg#o+hhhh
+hh++hhgoh##hhhoh
++hh+hhghh+s#+hh+
+hohh##ghh#ggg+h+
+h+#gggghh#goh#so
+#+#~h+ghg##++#s+
++h+ss~#+~+h+oo+#
+hggggg#ss#+#++#s
+ggohhh++ohho+sss
++ghh+g~#h++h+shh
++##+s##+ohh+oo##
+oh#ssss#+ggg++s#
+hhhgg###sgoh+s##
+hh#~#s#h##s###h+
+o+o+ss#+#h#ss#++
+'''
+
+[stamp.roomWall23]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 88.8%
+grid = '''
+hh+hh+hhh+hh+h+h
+wohoohoohhoh+ohh
+h+h+hhh+hhh+h++h
+ohw+hoo+hoohohho
++hhh+hhh+h+h+hhh
+hooohooohw+ohooh
+h+h+hhh+h+hhh+hh
+whohooh+ohooo+oo
++hhh+hhh+hhh+hhh
+hwoh+ooo+ooo+ooo
+h+hhh+h+hh+hh++h
+hhwohhohwo+ooh+o
+hhh+hh+hh+hh+hh+
+hohhwo+hohoh+oh+
+h+hh++h++h+hh+hh
+whwohhwohohwwhoo
+'''
+
+[stamp.road31]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 84.9%
+grid = '''
+hhhhohohhoohohoh
+oohhooohoohoohoh
+ohohohohhoohowhh
+ohoohhohhhohohoh
+ohohoohoooohohho
+hhohhohhoohhhooh
+ohhoooooohoohooh
+ohhohhoohhohhoho
+hhoohohhohohoooo
+oohoohhhoohhohoh
+hoohohoooohooooh
+ohohoohhhoohhooo
+hhoohohhhohoohhh
+hoohhooohhoohooh
+ohooohhohohooooo
+hhohhhohoohhohho
+'''
+
+[stamp.wall31]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 92.4%
+grid = '''
+++#++#+++#++#+#+
+hh+hh+hh++hh#h+h
++#+#+++#+++#+#++
+h+h#+hh++hh+h++h
+#+++#+++#+#+#+++
++hhh+hhh+h#h+hhh
++#+++++++#+++#++
+h+h+hh+#h+hhh+hh
+#+++#+++#+++#+++
++hh++hhh#hhh#hhh
++#h++#+#++#+++#+
+h+hh++h+hh#hh+#h
++++#++#++#++#++#
+hh++hh#hh+h+#h+#
++#++##+##+#++#++
+h+hhh+hh+h+hh+hh
+'''
+
+[stamp.door31]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 88.8%
+grid = '''
+h+++##hhhh###++h
+hh#hohhoohho+h+h
+++hhoh+hh+ohhh++
+h+oh+++##++#oo++
++hh##hhh+hh+#hh+
+hoh#hooohwoo+hh+
++h++ooohhoooh+h+
++o++ooohhooooho+
++h++ooohhoooo+h+
++o++oowohwoooho+
++h++ooh+hhhoo+h+
++o++hhhh+hhooho+
++h++ooohhoooo+h+
++o++ooohhooooho+
++h++ooohhoooo+h+
+ho+#h+h++hhh+hoh
+'''
+
+[stamp.openSecretDoor33]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 91.0%
+grid = '''
+swoo#hohhohsooo+
+hooo+oooooh+wohh
++ooo+hohooh+oohh
+s+++##++++#s#++#
+hoh~#sssss#~hoh#
+woo++sssss+~hoh+
+ooh+#sssss+#ooh+
+#h+~+sssss#+h++s
+ho+~+sssss+~hoh#
+woh+#sssss#+hoh+
+ooh~#sssss#+ohh+
+++##+sssss+~#++s
+#oo+#sssss+~hohh
+hohh#sssss#+ooho
++oo+#sssss#+hooh
+s++#sssssss#+++#
+'''
+
+[stamp.roomFloor0]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 82.8%
+grid = '''
+hhhhrrhhhhrhhhhh
+hhhhhrhhhhhhhhhh
+hhhhhhhhrhhrrhhh
+hhhhhhhhhhorhhhh
+hhrhhhrrrhrhhhhh
+hhhhhhhhrhhhhhhh
+hhhrhhhrhhhrhhhh
+hhhrhhhhhhhhhhhh
+hhhrhhrrhhhrrhhh
+hhhhhhhhhhhhrhhh
+hhhhrhrrhhhrhhhr
+hhhhhhhrhhhhhhhh
+hhhrrhhhhrhhhhrr
+hhhrhhhhhhhhhhhh
+hrhhhhhrhhrrhhhh
+ohooooohohrooooo
+'''
+
+[stamp.floor22]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 86.2%
+grid = '''
+h+hhhh+oh+hohhhh
+hhooh+h+hhh+hhhh
+hh+hho+hoh+h+hoh
++hh+hhhhohhhhhh+
+hhhh+hohh+hh+oh+
+hhhh+hoh+hhhh+ho
+hooh+h++oh+hhhh+
+h+hhohhhohhohho+
+ho+hh+o+h+hhhh++
+h+h+hohhhhhhhhho
+ohhohhhh+hh+h+hh
++hhh++ooo+hoh+o+
+oh+ho+hh++ohhhhh
+h+oohhh+o++ho+hh
+hh++ho+hh+oh+hhh
+o+ohhhhhhhhhho+h
+'''
+
+[stamp.openSecretDoor31]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 93.6%
+grid = '''
+++#++#+++#++#+#+
+hh+hh+hh++hh#h+h
++#+#ssssssss+#++
+h+h#ssssssssh++h
+#+++#ssssss+#+++
++hhh+ssssssh+hhh
++#+#ssssssssss++
+h+h+sssssssssshh
+#+++sssssssss+++
++hh+ssssssssshhh
++#h++sssssssss#+
+h+hhhsssssssss#h
++++sssssssss#++#
+hh+sssssssss#h+#
++#+++sssss#++#++
+h+hhhsssss+hh+hh
+'''
+
+[stamp.door33]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 88.3%
+grid = '''
++hhhhhhhhhhhhhh#
+hwoooooooooooooh
++++++++++++h+++#
++hhh+#hh+h+hhh+s
+ohoo#hwohwohohh+
+whoh#hwohoohohhh
+whoh#hwohoohohhh
+#+oh#hwohoohoh#s
+ohoh#hwohwohoh++
+whoh#hh+hhohohhh
+ohoh#hohhoohohhh
+++oh#hwohwohoh+s
+#hoh#hwohoohohho
+hhoh#hwohwwhohhw
++hoh+hoh+ohhohhh
++h+++#ssss+h++##
+'''
+
+[stamp.Ground0]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 82.6%
+grid = '''
+gggggggggogggggg
+ggggggoggggggggg
+ggggggggggogghgg
+gggggggggggggggg
+gggghggggggggggg
+gggggggggggggggg
+ggggggghggohgoog
+ggggggghgghggggg
+ggggghgggggggggh
+ggggggggggggggog
+ggggggggogghgggg
+gghggggggggggggg
+gggggggggggggggg
+gggggggggggggghg
+gggggggggggggggg
+gggggggggggggggg
+'''
+
+[stamp.wall33]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 88.8%
+grid = '''
+swoo#hohhohsooo+
+hooo+oooooh+wohh
++ooo+hohooh+oohh
+s+++##++++#s~++#
+hohoo+#ooh~oohh#
+woooohhoohhohoh+
+ohhoh++ooh+oohh+
+#h+++s#++#s++++s
+hoshoooh#ooohhh#
+wohooohhhohohhh+
+oo+hhhoh+oohhhh+
+++s~+++#s+h+##+s
+#oooohshooooh#oh
+hohohhhooooohhoo
++ohhhh+hhohhh+oh
+s++++#s#++++#s+#
+'''
+
+[stamp.roomWall21]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 83.2%
+grid = '''
+#ghw#hwoogg~owoh
+hgoohwooogogoooo
+ggoohooogohggooh
+sggg+gggg+gggggg
+oogoohggohgoggo#
+wogooogowohwgooh
+oohooghooh+oooo+
+gogg+#gg++#hh++g
+ggghwowogwwwhogg
+wogogoooowoooog+
+oo+oghoggooooogg
++gggg+hggghh#ggg
+#oggoogghgoohggg
+hwggoogoogoogggg
+gggoohghoggogggg
+sgh++#s#hgg+g#+#
+'''
+
+[stamp.Wall32]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 89.8%
+grid = '''
+wwwhowwwo+owww+s
+wwwh+wwwo+hwww+s
+www++owwo#hwww+s
+h++#s+~~~s#+++#s
+h++sho++++oo++s#
+owo#ooooooowwo#r
+www++oooooowww+s
+www++oooooowww+s
+hho#+oooooooho+s
++sss+ooooooh##ss
+ohhsoooooooohh#r
+www+owwwohowww+#
+wowh+wwwo~hwow+s
+www++owwo#hwww+s
++~+#s#+++s#+++#s
+#sss#rssssr#ssss
+'''
+
+[stamp.Door32]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 88.7%
+grid = '''
+#hhhhhhhhhh+hhss
++oooooooooooooss
+#+####++###++#ss
++rsrrrrrrrr#h#ss
+ho#+hhhhhoo+ohss
+ho+#+~+h+ho+ooss
+ho++rrrrhho+ohss
+ho+hoooohho+ohss
++o++h+hhhoh#ohss
++o+#+~+h+oh#ohss
+ho+rrrrrhh++ohss
+ho+hoooohhh+ohss
+ho++h+hhhho+ohss
+ho+#+~+h+hh+ohss
+ho+rrrrrhoo+ohss
++o+++++++++#ohss
+'''
+
+[stamp.floor23]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 91.7%
+grid = '''
+++++++++++h++h++
+++++++h++++++h++
+h++++++++++++++h
+++++++++++++++++
+h+hh+++++h++++++
++++++h+h++++++h+
+++h+++++++++++++
+++h+++++h+++h++h
+hh+h+++hh++h++++
++++++++++++++++h
+++++++++++++h+++
++++hhh++++++++++
++++++++++++h++++
++h++++++++h++h++
+++++++++++++++++
+++++++++++++++++
+'''
+
+[stamp.floor33]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 88.1%
+grid = '''
+hhoohohohhhohohh
+hhoohhh+hhhhhhhh
+hhhhhohhohhh+hoo
+hhh+hhhoohhhhohh
+ooho+hohhhhhhoh+
+hhhohhoh+hhhhhho
+hooh+h++oh+hhhhh
+hhhhohhhoohohhoh
+ho+ohhohhhhohh+h
+hhhhhohhhhhhhoho
+ohhohhhh+oh+hhhh
+hhhh++ooo+hoh+o+
+oo+ho+hoh+ohhhhh
+h+hohhhhoh+ho+hh
+hh+hhohhhhohhhhh
+ohohohhhhhhhhoho
+'''
+
+[stamp.door22]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 89.5%
+grid = '''
+++hhhhhhhhhh+h+h
++ooooooooooooo++
+#+rr++++++#+r+#h
++#or#rr#rr#+o#+h
+o+oh###rsrr+o+h+
+h+oh#rgr#gr+o++o
++#oh###r#rr+o+++
+#+oh#r#r#grho+g+
+++oh#+++rr#hooo+
+++oo#+h+r+++ohh+
+hhoo#rrrr+#+o++#
+g+oh#rrrrr#+o+##
++#oh#+++rr#ho+#+
+s#oh#+h+rr#ho#+#
++#oh#rrrrr#hogo#
+h+oos#####s+o+~#
+'''
+
+[stamp.wall22]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 90.7%
+grid = '''
+h+hhhh++++hohhhh
+hhooh+hoh#o+hhhh
+hh++hhhoh##h+hoh
++hh+hh+hh+s#+hh+
+hohh+#+ohs+oh+h+
+h+#hoh+hh#hoh#so
+#+##h++h+#s++ss+
++++ss+#++###+h##
+h+h+h+#sss#####s
++oohoh+#h++h#sss
++hhh+++s#####shh
++##+s###+###++s#
+oh#s#sss#+h+##s#
+hhh+h####ooh+s##
+hh#+#s#h##s###h+
+o+o+ss#+#h#ss#++
+'''
+
+[stamp.roomWall31]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 88.8%
+grid = '''
+hh+hh+hhh+hh+h+h
+wohoohoohhoh+ohh
+h+h+hhh+hhh+h++h
+ohw+hoo+hoohohho
++hhh+hhh+h+h+hhh
+hooohooohw+ohooh
+h+h+hhh+h+hhh+hh
+whohooh+ohooo+oo
++hhh+hhh+hhh+hhh
+hwoh+ooo+ooo+ooo
+h+hhh+h+hh+hh++h
+hhwohhohwo+ooh+o
+hhh+hh+hh+hh+hh+
+hohhwo+hohoh+oh+
+h+hh++h++h+hh+hh
+whwohhwohohwwhoo
+'''
+
+[stamp.wall23]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 85.8%
+grid = '''
+gg#gg#ggg#gg#g#g
+orgoo#oor#or#o#g
+##g##gg#ggg#g##g
+ggo#rro#rro#o#rr
+#ggg#ggg#g###ggg
+goho#ooo+o#r#oor
+g#g##gg#g#ggg#gg
+o#hghor#o#ooo#hr
+#ggg#ggg##gg#ggg
+gorr#oho#hoo#oor
+g#ggg###gg#gg##g
+rgoor#rgoo#oor#o
+ggg#gg#gg#gg#gg#
+rorgoo#ro#or#or#
+g#+g##g####gg#gg
+ogoorgorgrgoogoo
+'''
+
+[stamp.door23]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 88.8%
+grid = '''
++hhhhhhhhhhhhhh#
+hwoooooooooooooh
+#++++++++++++++#
+soo#++++#+++#ohs
+soo++ooohooogohs
+s+h++ooohwoo#hhs
+sho#+ooohooo#ohs
+shh#+ooohwoo+hgs
+s+o++ooohooo#oos
+soo#+owohwoo#ohs
+soh~+oh+hhoogohs
+s+o++oohhooo#hhs
+sho#+ooohwoo#ohs
+shh#+ooohooo+hgs
+s+og+owohwwo~oos
+soo+#hh++hh+#oos
+'''
+
+[stamp.floor32]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 83.1%
+grid = '''
+ggggogoggoogoggg
+ghggggogghggggoh
+ggoggghgggogoogg
+oghoggogggggoggg
+ggogoggggooghggh
+gghgghggoogggghg
+oggghoogggohgoog
+ggghggohggogghgo
+ggoggogggggggggo
+ogghggggohggogog
+gghggggooggogghg
+hghggogggohggogh
+ggohghggghgggggg
+ggggggooggogghhg
+ggogogghghgggghh
+ggggggogoogghggg
+'''
+
+[stamp.openSecretDoor21]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 89.6%
+grid = '''
+sggw#hohggg~hoo+
+hggo+ooogghghohh
+gghogghhghhgghhh
+sggg#gggg+ggggg~
+hggg#sssssssggh#
+wggh#ssssss#gho+
+ohhh#ssssss#hoh+
+gggg#ssssss#+++g
+gggg#ssssss#hhgg
+ohgh#ssssss#hhg+
+oo+h#ssssss#hhgg
++ggg#ssssss~+ggg
+#hgg#ssssss#gggg
+hogg#ssssss#gggg
+gggh#~##~#s#gggg
+sgg+gg+ggggg#s+#
+'''
+
+[stamp.OpenSecretDoor23]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 89.5%
+grid = '''
+gg#gg#ggg#g+#g#g
+orgoogoorgor#o#g
+##g#ssssssssg##g
+ggo#sssssssso#rr
+#gggsssssss##ggg
+goho#ssssssogoor
+g#g#ssssssssssgg
+o#h#sssssssssshr
+#gggsssssssssggg
+gorrsssssssssoor
+g#gggsssssssss#g
+rgooosssssssss#o
+gggssssssssssgg#
+rorsssssssss#or#
+g#+g#sssss#gg#gg
+ogooosssssgoogoo
+'''
+
+[stamp.door21]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 88.5%
+grid = '''
+s+hhhhhhhhhh+h+#
+soooooooooooooo+
+s++++#++++#+++#+
+sggrs#hhhh#+rsg~
+hgho#h++++rho+h#
+wggo+h#r+#rho+hh
+ohho+h+++++ho+h+
+ggho+h#r+srho+~g
+ggho++hhhohhoggg
+oh+o+#+h+o+hogg+
+ohho+hhhoh+hoggg
++gho+hohhhhho+gg
+#h+o++hhhohhoggg
+hoho+~+h+hhho+gg
+ggho+hohoohho+gg
+sg+o+#++++#+o++#
+'''
+
+[stamp.wall21]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 86.4%
+grid = '''
+sggw#hohggg~hoo+
+hggo+ooogghghohh
+gghogghhghhgghhh
+sggg#gggg+ggggg~
+hgghohgghhggggh#
+wgghhggoohhogho+
+ohhohggohh+hhoh+
+gggg+sgg+#s++++g
+ggghoooggooohhgg
+ohgoghhhoohhhhg+
+oo+hghogghohhhgg
++gggg+gggg++#ggg
+#hgghhggggoogggg
+hogghhghogoogggg
+ggghhhghhgghgggg
+sgg++#s#+gg+gs+#
+'''
+
+[stamp.roomWall33]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 87.8%
+grid = '''
+#www#owoowhsowoh
+hwwohwowooohwwoo
++ooohooowoo+owoo
+s++h##+hh+#s+h+#
+owoooh#ooh+wooo#
+wwwoohhwwohwoooh
+woooohhwoh+owoo+
+#h+++s#+++#hh++s
+oo#hwwwh#wwwooo#
+wwhwoooohwoooooh
+ow+ooooh+ooooooh
+++s+++h#shhh+++s
+#owwooshwoooh#wh
+hwoooohwoowwhhwo
+hwoooo+hooooh+wh
+s+h++#s#hh++#s+#
+'''
+
+[stamp.roomWall32]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 88.7%
+grid = '''
+woh+ooooh+owoh##
+oho++ohhh+hoho+s
+ohh++oooh#hohh~s
++#+ss####s#+~+ss
+oh+shh+++hho++s#
+ooh#hoooooowoh#r
+whh#+oohhooohh~s
+oho~+ooohoooho+s
+hhh#+oohohohhh#s
++sss+ohhoooh##ss
+ohhshooohoowhh#r
+woh+owoohhwwoh##
+oho++ohhh#hoho+s
+ohh++oohh#hohh~s
++##ss####s####ss
+#sss#rssssr#ssss
+'''
+
+[stamp.openSecretDoor22]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 90.8%
+grid = '''
+h+hh+++oh+hhhhhh
+hhoo+hh#+h++hhhh
+hh+h+h+#hhho#+oh
++hh+#+shoohh#+h+
+hhhhoohh+#sss+o+
++###h++ssssho#+o
+#h+sssssss#oh+#+
++~+#ssssssshhhs+
+hhoh#sssssshhh##
++hhh+sssssshh+##
++#+++sssssshh+s+
+h#ssssssss#+++#+
+oo##hsssshoooh#+
+h+#+h#s+shhhhh##
+h++#ss#s#ssssss+
+ohh++#+hhh+#++#h
+'''
+
+[stamp.Floor31]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 78.7%
+grid = '''
+gggggggggggggggg
+gggggggggggggggg
+gggggggggggggggg
+gggggggggggggggg
+gggggggggggggggg
+gggggggggggggggg
+gggggggggggggggg
+gggggggggggggggg
+gggggggggggggggg
+gggggggggggggggg
+gggggggggggggggg
+gggggggggggggggg
+gggggggggggggggg
+gggggggggggggggg
+gggggggggggggggg
+gggggggggggggggg
+'''
+
+[stamp.roadNE]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 85.5%
+grid = '''
+gooooooooooooooo
+ghoooooooooooooo
+ggoooooooooooooo
+ggggoooooooooooo
+ggggoooooooooooo
+ggggghoooooooooo
+gggggggooooooooo
+gggggggooooooooo
+ggggghggoooooooo
+ggggggggggoooooo
+ggggggggoggooooo
+gghgggggggggoooo
+gggggggggggggooo
+ggggggggggggggoo
+gggggggggggggggo
+gggggggggggggggg
+'''
+
+[stamp.Road]
+palette = "dungeon"
+size = "16x16"
+# affordance: walkable
+# accuracy: 89.2%
+grid = '''
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+'''
+
+[stamp.roomWindow0]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 91.0%
+grid = '''
+hh+hh+hhh+hh+h+h
+whhoohoohhoh+o+h
+h+hsssssssss+++h
+hhosssssssssh+ho
++hhssssssssshhhh
++oossssssssshwoh
+h+hsssssssssh+hh
+whhsssssssssh+ho
++hhssssssss#hhhh
+hwhs++++++++hwhh
+h+hhh+h+hh+hh++h
+hhooh+hhoo+ooh+o
+hhh+hh+hh+hh+hh+
+hohhoo+hohoh+oh+
+h+hh++h++++hh#hh
+whwohhohhohwohoo
+'''
+
+[stamp.waterNW]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 77.1%
+grid = '''
+hhhhhhhhhhhhhhhg
+hhhhhhhhhhhhhhgg
+hhhhhhhhhh~hhhgg
+hhhhhhhhhhhhgggg
+hhhhhhhhhhhggggg
+hhhhhhhhhhgggggg
+hhhhhhhhhgohgggg
+hhhhhhhhgghggggg
+hhhhhhhhgghggggh
+hhhhhhgggggggghg
+hhhhhgggogghgggg
+hhhhgggggggggggg
+hhhggggggggggggg
+hhggggggggggghog
+hgggggggghgggggg
+gggggggggggggggg
+'''
+
+[stamp.openDoor21]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 91.1%
+grid = '''
+s+hhhhh+hhhh+h+#
+soooooooooooooo+
+s+++++++#+#+++#+
+sggrsssssss+rsg~
+hgho#ssssssho+h#
+wggo+ssssss+o+hh
+ohho#ssssss+o+h+
+ggho#ssssssho+~g
+ggho+sssssshoggg
+oh+o+sssssshogg+
+ohho+sssssshoggg
++gho+ssssss+o+gg
+#h+o+sssssshoggg
+hoho#ssssssho+gg
+gggo#ssssssho+gg
+sg+o+ssssss+o++#
+'''
+
+[stamp.openDoor23]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 91.8%
+grid = '''
++hhhhhhhhhhhhhh#
+hwoooooooooooooh
+#++++++++++++++#
+soo#ssssssss#ohs
+soh+ssssssssgohs
+s+o+ssssssss#hhs
+sho#ssssssss#ohs
+shogssssssss+hhs
+sho#ssssssss#oos
+soo#ssssssss#ohs
+shh+ssssssssgohs
+sho#ssssssss#ohs
+sho#ssssssss+ohs
+shogssssssss+hos
+sgo#sssssssssoos
+howohhhhhhhhowoh
+'''
+
+[stamp.openDoor22]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 90.6%
+grid = '''
+++h++++oh+hohhhh
++oooohh++hh+hhhh
+#++hhooooh++#+hh
++++r##+hhooooh+#
+hh+o+ssss#+hooo+
+hh+oossssss#r+#+
++++ohssssssor#++
+#+#ohssssssoh#g+
++++o+ssssssohho+
+++ho+sssssso#gh+
+hoho+sssssss+++#
+g+ho##sssss+o+#s
++#+o+##ssssho#+#
+s+#oh++s#ss+hg#s
+++#oh+++h#sgoh+s
+hh+oo#rrrrs#####
+'''
+
+[stamp.openDoor32]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 92.7%
+grid = '''
+#hhhhhh+hhh+hhss
++oooooooooooooss
+#+###+++#++++#ss
++rssssssssssh#ss
+ho#sssssssssohss
+ho+sssssssssooss
+ho#sssssssssohss
+ho#sssssssssohss
++o+sssssssssohss
++o+sssssssssohss
++o+sssssssssohss
+ho#sssssssssohss
+ho+sssssssssohss
+ho#sssssssssohss
+ho#sssssssssohss
++o+sssssssssohss
+'''
+
+[stamp.Roomwall0]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 88.8%
+grid = '''
+hh+hh+hhh+hh+h+h
+wohoohoohhoh+ohh
+h+h+hhh+hhh+h++h
+ohw+hoo+hoohohho
++hhh+hhh+h+h+hhh
+hooohooohw+ohooh
+h+h+hhh+h+hhh+hh
+whohooh+ohooo+oo
++hhh+hhh+hhh+hhh
+hwoh+ooo+ooo+ooo
+h+hhh+h+hh+hh++h
+hhwohhohwo+ooh+o
+hhh+hh+hh+hh+hh+
+hohhwo+hohoh+oh+
+h+hh++h++h+hh+hh
+whwohhwohohwwhoo
+'''
+
+[stamp.Opendoor0]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 90.8%
+grid = '''
+hh++#shhhhss#h+h
+wh#hwhowwoow+h+h
+hhwhwwhoohwohw+h
+hhwohhssssh+wwhh
+hoh+ssssssss+ho+
+hwhsssssssssshoh
++o+ssssssssss+h+
+hw+sssssssssshwh
++h+ssssssssss+o+
+hw+sssssssssshwh
++o+ssssssssss+h+
+hw+sssssssssshwh
++h+ssssssssss+o+
+hw+sssssssssshwh
++o+ssssssssss+h+
+hwhsssssssssshwh
+'''
+
+[stamp.openRoomSecretDoor11]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 91.8%
+grid = '''
+#woo#ooooo+sooo+
+hooo+oooooo+wooo
++ooo+oooooo+oooo
+s+++##++++#s#++#
+ooo+#sssss#+ooo#
+woo+~sssss#+ooo+
+ooh+~sssss#+ooo+
+#h+#+sssss+#s++s
+oo+++sssss+#ooo#
+woo+#sssss#+ooo+
+ooo+~sssss#+hoo+
+++##+sssss+#s++s
+#oo+#sssss+#oooh
+hooh#sssss#+oooo
++oo+#sssss#+oooh
+s++#sssssss#+++#
+'''
+
+[stamp.roomFloor11]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 88.6%
+grid = '''
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+'''
+
+[stamp.openDoor33]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 91.1%
+grid = '''
++hhhhhhhhhhhhhh#
+hwooooooowoooooh
+++++++++++hh+++#
++hhh+sssss#hhh+s
+ohoosssssss#whh+
+whoosssssss#ohhh
+whoosssssss#ohhh
+#+oosssssss#oh#s
+ohoosssssss#oh++
+whoosssssss#ohhh
+ohoosssssss#ohhh
+++oosssssss#oh+s
+#hoosssssss#ohho
+hhoossssssssohhw
++hoh#sssssshwhhh
++h+++#ssss+h+++#
+'''
+
+[stamp.openDoor31]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 92.7%
+grid = '''
+h+++##hhhh###++h
+hh#hohhoohho+h+h
+++hhohhhhhohhh++
+hhoh++#sss+#oo++
++hh#ssssssss#hh+
+hohsssssssssshh+
++h+ssssssssss+h+
++o+ssssssssss+o+
++h+ssssssssss+h+
++o+ssssssssss+o+
++h+ssssssssss+h+
++o+ssssssssss+o+
++h+ssssssssss+h+
++o+ssssssssss+o+
++h+ssssssssss+h#
+ho+ssssssssss+oh
+'''
+
+[stamp.roomFloor13]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 89.9%
+grid = '''
+rrrrrhrrrrrrhrrr
+rrrrrrrrhrrrr+hr
+rrrr+rrrrrhrrhrr
+rrrrhrrhrhrr++rr
+rrhrrrr+rhrrrrrr
+hrrrrrrrhrrrhhrr
+rrhhrrrrhrrrrhhr
+hrhhrrrrhrrrrrrr
+rrhrrhrrrrrr++hr
++rrhrhrrrrrrh++r
+rhrhrrrhrrrhrrhr
+rrrrrrhhrrrrrrrr
+hhhhhhrrrrrrrrrr
+rrrrrhrh+rrrrrhh
+hrrhrhrrhhrhhrrr
+rrrrrrrrrrrrrrrr
+'''
+
+[stamp.openRoomSecretDoor13]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 91.4%
+grid = '''
+h++hh++h++h++h+h
+oh+oo+ooh+oo+o+h
+h+h#ssssssssss+h
+o+o#ssssssssssoo
+++h+#ssssss+#+h+
++ooo+sssssso+ooh
+h+h+sssssssssshh
+o+o+ssssssssssoo
++hh+sssssssss+hh
++ohhsssssssssooh
+++hh+sssssssss+h
+h+oohsssssssss#o
++h+sssssssss#+++
+hohsssssssss+oh+
+h#+h+sssss#h+#+h
+o+oohssssshoo+oo
+'''
+
+[stamp.roadNW]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 85.8%
+grid = '''
+ooooooooooooooog
+ooooooooooooooog
+oooooooooooooogg
+oooooooooooogggg
+oooooooooooggggg
+oooooooooogggggg
+ooooooooogohgoog
+oooooooogghggggg
+ooooooohgggggggh
+ooooooggggggggog
+ooooogggogghgggg
+oooogggggggggggg
+oooogggggggggggg
+oogggggggggggghg
+oggggggggggggggg
+gggggggggggggggg
+'''
+
+[stamp.waterNE]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 77.3%
+grid = '''
+ghhhhhhhhhhhhhhh
+ghhhhhhhhhhhhhhh
+ggghhhhhhh~hhhhh
+gggghhhhhhhhhhhh
+gggghhhhhhhhhh~h
+ggggghhhhhhhhhhh
+ggggggghhhhhhhhh
+ggggggghhhhhhhhh
+ggggghgghhhhhhhh
+gggggggggghhhhhh
+gggggggghgghhhhh
+gggggggggggghhhh
+ggggggggggggghhh
+ggggggggggggghhh
+ggggggggghgggggh
+gggggggggggggggg
+'''
+
+[stamp.openRoomSecretDoor12]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 94.3%
+grid = '''
+##s##s###s##s#s#
+++#++#+++#++s+#+
+#s+sssssssss#s##
++#+sssssssss+#++
+s###sssssss#s###
+#+++#ssssss+#+++
+#s##ssssssssss##
+h#+#ssssssssss++
+####sssssssss###
+#+++sssssssss+++
+#####ssssssssss#
++#+++sssssssss#+
+###ssssssssss##s
++++sssssssss#++#
+#s###ssssss##s##
+h#+++sssss+h+#++
+'''
+
+[stamp.roomFloor12]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 85.1%
+grid = '''
+rrrrrhrrrrrrhrrr
+rrrrrrrrrrrrrrrr
+rrrrrrrrrrhrrhrr
+rrrrrrrhrhrrrrrr
+rrhrrrrrrhrrrrrr
+rrrrrrrrhrrrhhrr
+rrrhrrrrhrrrrhhr
+hrrhrrrrhrrrrrrr
+rrhrrhrrrrrrrrhr
+rrrhrrrrrrrrrrrr
+rhrrrrrhrrrhrrhr
+rrrrrrhhrrrrrrrr
+hrhhrhrrrrrrrrrr
+rrrrrhrhrrrrrrhh
+hrrhrhrrrhrrhrrr
+rrrrrrrrrrrrrrrr
+'''
+
+[stamp.Roomfloor23]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 87.1%
+grid = '''
+rrrrrrrrrrrrrrrr
+rrrrorrrorrrorrr
+rrorroorrrorroor
+rrroohrrrrroohrr
+roroororrorooror
+rrohroorrrohroor
+rroroorrororoorr
+rrrrrrrrrrrrrrrr
+rorrrrorrorrrror
+rrrrorrrorrrorrr
+rrorroorrrorroor
+rrroohrrrrroohrr
+roroororrorooror
+rrohroorrrohroor
+rroroorrororoorr
+rrrrrrrrrrrrrrrr
+'''
+
+[stamp.openRoomSecretDoor23]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 91.6%
+grid = '''
+hh+hh+hhh+hh+h+h
+wohoohowhhwo+ohh
+h+h+ssssssssh++h
+ohw+ssssssssohho
++hhh#ssssssh+hhh
+hooohssssssohooh
+h+h+sssssssssshh
+who+ssssssssssoo
++hhhssssssssshhh
+hwohssssssss#woo
+h+hhhsssssssss+h
+hhwoosssssssss+o
+hhhsssssssss+hh+
+hohsssssssss+wh+
+h+hh+sssss+hh+hh
+whwoossssshwohoo
+'''
+
+[stamp.openRoomSecretDoor22]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 90.5%
+grid = '''
+h+hh+#goh+hhhhhh
+hhoo+gg+++gghhhh
+hh+h+h+~gghh#+oh
++hh+#~sgoohh#+h+
+hhhggohh+##ss+o+
++##shg~ssssgh#+o
+#h+ssssssssgh+#+
++~g#ssssssshhh#+
+hggh#sssssshhh##
+#hhh+sssssshh+##
++#+g~sssssshh~s+
+h#sssssssss~g~#+
+oo#sgssssgoggh#+
+h+#gg#s+sghhhh##
+h++#ss#s#ssssss+
+ohh#+#+hhh+#++#h
+'''
+
+[stamp.roomFloor22]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 88.6%
+grid = '''
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+'''
+
+[stamp.slow21]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 90.6%
+grid = '''
+gghgggg#gggghggg
+hg~+oooohooghogg
+gg#ohooggooggg+~
+g~#gggghhh#sggo+
+ghohggg#h#gghhhg
+gogh##oghggooshg
+ghsho#hgg+gh+##g
+gggg+ghggog##ggg
+#gggsgggghg#ggg#
++gg#~g+g+#gsggg#
+ggg#gg+hs#gggggg
+ggg#gghg#+gggg#g
++#++gohggg##g+gg
+hh+~hoo+##g++g++
+g##gohh+##ssss#g
+~~ssssssssssghgg
+'''
+
+[stamp.openRoomSecretDoor21]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 87.6%
+grid = '''
+#ghw#hwoogg~owoh
+hgoohwooogogoooo
+ggoohooogohggooh
+sggg#gggg+gggggg
+ooggssssssssggo#
+wogh#ssssss#gooh
+oooh#ssssss#hoo+
+gogg#ssssss#h++g
+gggg#ssssss#hogg
+wogh#ssssss#hog+
+oo+h#ssssss#hogg
++ggg#ssssss~+ggg
+#ogg#ssssss#gggg
+hwgg#ssssss#gggg
+gghh#~##~#s#gggg
+sgh+gg+gggg#~#+#
+'''
+
+[stamp.roomFloor21]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 90.5%
+grid = '''
+gggg+ggggrgggggg
+grggggggggggggrg
+gggggggggg+grrgg
+rgggggrggggggggg
+ggggrgggggggrggr
+ggrgg+ggrggggggg
+ggggggg#gggggggg
+gggggggrggrggggr
+gg+ggrgggggggggr
+ggggggggg+gggggg
+gggggggggggrgg+g
+gggggrgggrgggrgg
+ggrggggggrgggggg
+ggggggggggrgggrg
+ggggrggggggggggg
+ggggggrggggggggg
+'''
+
+[stamp.openDoor13]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 90.8%
+grid = '''
+#hhhhhhhhhhhh+h+
++oooooooooooooo+
+#+##############
+shrsssssssssshrs
+sohssssssssssohs
+sohssssssssssoos
+sohssssssssssohs
+sohssssssssssohs
+sohssssssssssohs
+soossssssssssohs
+soossssssssssohs
+sohssssssssssohs
+sohssssssssssohs
+sohssssssssssohs
+sohssssssssssohs
+s++ssssssssss++s
+'''
+
+[stamp.roomFloor31]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 92.4%
+grid = '''
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+oooooooooooooooo
+'''
+
+[stamp.openRoomSecretDoor31]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 91.6%
+grid = '''
+hh+hh+hhh+hh+h+h
+wohoohowhhwo+ohh
+h+h+ssssssssh++h
+ohw+ssssssssohho
++hhh#ssssssh+hhh
+hooohssssssohooh
+h+h+sssssssssshh
+who+ssssssssssoo
++hhhssssssssshhh
+hwohssssssss#woo
+h+hhhsssssssss+h
+hhwoosssssssss+o
+hhhsssssssss+hh+
+hohsssssssss+wh+
+h+hh+sssss+hh+hh
+whwoossssshwohoo
+'''
+
+[stamp.water]
+palette = "dungeon"
+size = "16x16"
+# affordance: hazard
+# accuracy: 70.7%
+grid = '''
+hhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhh
+hhhhhhhhhh~hhhhh
+hhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhh~h
+hhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhh
+hhhhhhhhhh~hhhhh
+hhhhhhhhhhhhhhhh
+hhhhhh~hhhhhhhhh
+hhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhh~h
+'''
+
+[stamp.openDoor12]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 92.8%
+grid = '''
+##s#ss#hhssss#s#
+++s#h#hww#+hs###
+##+#h+####h+++s#
+##h+#shhh##shh##
+#+#sss#ohssss#+s
+#h+ssss+sssss++#
+#+sssssssssss#+s
+#h#ssssssssss#h#
+s#ssssssssssss+#
+#+#ssssssssss#h#
+#+sssssssssss##s
+#h#ssssssssss#+#
+s#ssssssssssss+#
+#+#ssssssssss#h#
+s+ss########ss#s
+#h#+++++++++##h#
+'''
+
+[stamp.roomFloor32]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 82.8%
+grid = '''
+hhhhrrhhhhrhhhhh
+hhhhhrhhhhhhhhhh
+hhhhhhhhrhhrrhhh
+hhhhhhhhhhorhhhh
+hhrhhhrrrhrhhhhh
+hhhhhhhhrhhhhhhh
+hhhrhhhrhhhrhhhh
+hhhrhhhhhhhhhhhh
+hhhrhhrrhhhrrhhh
+hhhhhhhhhhhhrhhh
+hhhhrhrrhhhrhhhr
+hhhhhhhrhhhhhhhh
+hhhrrhhhhrhhhhrr
+hhhrhhhhhhhhhhhh
+hrhhhhhrhhrrhhhh
+ohooooohohrooooo
+'''
+
+[stamp.openRoomSecretDoor32]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 91.5%
+grid = '''
+woh+ooooh+owoh##
+oho++ohhh+hoho+s
+ohh++oohh#hohh~s
++#+ss####ss~~+ss
+oh+sssssssshh+s#
+ohhsssssssshohsr
+ohhsssssssshhhsr
+ohhsssssssshhhsr
+ohhsssssssshhh#r
+ohhsssssssshhhsr
+ohhsssssssshhhsr
+ohhsssssssshhhsr
+ohhsssssssshhh#r
+ohhsssssssshohsr
+h++ssssssss+++sr
+#ssssssssssssssr
+'''
+
+[stamp.openRoomSecretDoor33]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 90.5%
+grid = '''
+#www#owoowhsowoh
+hwwohwowooohwwoo
++ooohooowoo+owoo
+s+++##h+++#s+h+#
+owo##sssss#+hoo#
+wwo++sssss++hooh
+woh+#sssss#+hoo+
+#h+++sssss#+hh+s
+owh++sssss#+hoo#
+wwo+#sssss#+hooh
+owh+#sssss#+hooh
++h##+sssss+##h+s
+#oo+#sssss+#hooh
+hwoh#sssss#+wwoo
+hwoh#sssss#+owoh
+sh+#sssssss#+++#
+'''
+
+[stamp.roomFloor33]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 91.5%
+grid = '''
+hhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhh
+'''
+
+[stamp.openDoor11]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 92.2%
+grid = '''
+sooo#sh++hsshoo+
+ho+hohhoooho++oo
++hhhoo+hh+ohho+o
+s+oh++ssss+#oo+s
++o+#ssssssss#+h+
+ho+sssssssssshh+
++h#ssssssssss+h#
++o+ssssssssss+o+
+#+#ssssssssss#h#
++o#ssssssssss+o+
++h#ssssssssss+h#
++o+ssssssssss+o+
+#+#ssssssssss#h#
++o#ssssssssss+o+
++h#ssssssssss+h#
++o+ssssssssss+o+
+'''
+
+[stamp.openSecretDoor13]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 91.6%
+grid = '''
+#woo#ooooohsooo+
+hooo+oooooo+wooo
++ooo+oooooh+oohh
+s+++##++++#s+++#
+ooooohssss+oooo#
+woooohsssshoooo+
+ooooohssss+oooo+
+#h++#ssssss++++s
+oooohssssssshoo#
+ooooossssss#ooo+
+ohoohsssssssooo+
+#+++#sssssss+++s
+#ohssssssssooooh
+ooosssssss#ooooo
++ohsssssssshoooh
+s+#ssssssss#+++#
+'''
+
+[stamp.door11]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 86.7%
+grid = '''
+sooo#sh++hsshoo+
+ho+hohhoooho++oo
++hhhoo+hh+ohho+o
+s+oh++ggg++#oo+s
++o+#grroorrg#+h+
+ho+#ooshg#oo#+h+
++h#goooooooog+h#
++o+rooshg#oor+o+
+#+#+ooooooorr+h#
++o#s+++hgroor+o+
++h##gghhhohhr+h#
++o+roooooog#r+o+
+#+#ghohhoooor+h#
++o#s+++hgooor+o+
++h##gghhhooor++#
++o+roooooooor+o+
+'''
+
+[stamp.wall11]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 87.9%
+grid = '''
+#oooshorrh#shoh#
++ohr#ohhhhr#oohr
+#rhr#hrrhrr#hhrr
+s####s####ss###s
+hohoh##hh+#ohhh#
+ohhhrr+ohrhorhr#
+hrrrr#+hrr#rhrr#
+#+###s####s####s
+hhs+ooo+#ooorhr#
+oo+orhrrhorrrrr#
+rr#+rrrr#rrrrrr#
+##s####ss#+##s#s
+#hooh+s+hhoh+#o+
++hrhrr+ohrhhrhor
+#hrrrr#rrhrrr#rr
+s#####ss####ss#s
+'''
+
+[stamp.roadSE]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 85.6%
+grid = '''
+gggggggggogggggg
+ggggggoggggggggo
+ggggggggggoggooo
+ggggggggggggoooo
+gggghgggggghoooo
+gggggggggggooooo
+ggggggghggoooooo
+gggggggggooooooo
+ggggghggoooooooo
+gggggggooooooooo
+ggggggoooooooooo
+gghggooooooooooo
+gggooooooooooooo
+gggooooooooooooo
+ggoooooooooooooo
+gooooooooooooooo
+'''
+
+[stamp.openSecretDoor12]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 93.8%
+grid = '''
+shhh#+hh+h+shhh#
++hhh#hhhhh+#hhh+
+#+hh#+hhhh+#hh++
+s###s######s###s
++hh+#ssss#hhh++#
+hh++#ssss+h+h+++
+h+++#ssss#hhh++#
+#+#sssssss#####s
++hsssssssssss+h#
+hh#sssssssssshh#
+hh#ssssssssss++#
+##sssssssssss##s
+#hh+sssssss+hhh+
++hh+ssssssshhh+h
++h++sssssss+++h+
+s###sssssss#####
+'''
+
+[stamp.waterSW]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 77.2%
+grid = '''
+ggggggggghgggggg
+hgggghgggggggggg
+hhgggggggggggggg
+hhhggggggggggggg
+hhhhhggggggggggg
+hhhhhggggggggggg
+hhhhhhghgghhgggg
+hhhhhhhhgggggggg
+hhhhhhhhgghggggg
+hhhhhh~hhggggghg
+hhhhhhhhhhgggggg
+hhhhhhhhhhhggggg
+hhhhhh~hhhhhgggg
+hhhhhhhhhhhhhgog
+hhhhhhhhhhhhhhhg
+hhhhhhhhhhhhhhhg
+'''
+
+[stamp.door12]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 93.5%
+grid = '''
+##s#ss#hhssss#s#
+++s#h#hww#+hs###
+##+#h+####h+++s#
+##h+#shhh##shh##
+#+#s#s#hh#s#s#+s
+#h##hs++#hsh##+#
+#+s+h#hs#hsh#s+s
+#h##hsh##hsh##h#
+s#s#hsh##h+h#s+#
+#+#+h+h++hh+h#h#
+#+s#h#h+#hhh+s#s
+#hs#hsh##h#h##+#
+s#s#hsh##hsh#s+#
+#+#+h#h##hsh##h#
+s+s+h#h++h#h#s#s
+#h#+h+h++h+h+#h#
+'''
+
+[stamp.wall12]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 92.9%
+grid = '''
+shhh#+hh+h+shhh#
++hhh#hhhhh+#hhh+
+#+hh#+hhhh+#hh++
+s#########ss###s
++hhhh+#hh+#hhh+#
+hhhh+++hh++h+hh+
+hh+h+#+h++#hhh+#
+#+###ss###s####s
++hs+hhh+#hhh+h+#
+hh+hhh+++h+++++#
+hh#+++h+#hh++++#
+##s####ss#++###s
+#hhhh+s+hhhh+#h+
++h+h+++hhhhh++h+
+#h++++#++h+h+#h+
+s#####ss#####s##
+'''
+
+[stamp.wall13]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 90.1%
+grid = '''
+#woo#ooooohsooo+
+hooo+oooooo+wooo
++ooo+oooooh+oohh
+s+++##++++#s+++#
+ooooo+#ooh+oooo#
+woooohhoohooooo+
+ooooo+hooh+oooo+
+#h+++s#++##++++s
+oo#hoooh#oooooo#
+wohoooooooooooo+
+oo+ohhoh+ooooho+
+++s++++#s+h+##+s
+#oooooshooooh#oh
+hohooohooooohooo
++ooooh+hooooh+oh
+s++++#s#++++#s+#
+'''
+
+[stamp.door13]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 88.4%
+grid = '''
+#hhhhhhhhhhhh+h+
++oooooooooooooo+
+#+###+++++++#+##
+sh##hhhhhhhh#hrs
+soh+oh#++#ro+ohs
+soh+oh#r+#ro+oos
+soh+oh#++#ro+ohs
+soh+oh#rr#ro+ohs
+soh#++hhhoho+ohs
+soo#++hhhhh++ohs
+soh+ohhhhh+h+ohs
+soh+ohhhhhho+ohs
+soh#+++hhhho+ohs
+soh#h+hhhhho+ohs
+soh+ohhhhhhh+ohs
+s++ssssssssss++s
+'''
+
+[stamp.openSecretDoor11]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 90.5%
+grid = '''
+#oooshorrh#shoh#
++ohr#ohhhhr#oohr
+#rhr#hrrhrr#hhrr
+s###ss#####ss##s
+hoh+#sssss##hhh#
+ohh++sssss#+hhr#
+hrr+~sssss#+rrr#
+#+##+sssss+#s##s
+hh#++sssss+#ho+#
+oor+~sssss#+orr#
+rhr#+sssss#+rrr#
+##s~+sssss+#s##s
+#oh+#sssss+#hoh+
++hr+#sssss~+ohhr
+#hr##sssss#+rrrr
+s###sssssss####s
+'''
+
+[stamp.floor12]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 91.7%
+grid = '''
+++++++++++h++h++
+++++++h++++++h++
+h++++++++++++++h
+++++++++++++++++
+h+hh+++++h++++++
++++++h+h++++++h+
+++h+++++++++++++
+++h+++++h+++h++h
+hh+h+++hh++h++++
++++++++++++++++h
+++++++++++++h+++
++++hhh++++++++++
++++++++++++h++++
++h++++++++h++h++
+++++++++++++++++
+++++++++++++++++
+'''
+
+[stamp.door0]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 87.2%
+grid = '''
+hh++#shhhhss#h+h
+wh#hwhowwoow+h+h
+hhwhwwhoohwohw+h
+hhwhhhggggh+wwhh
+hoh+rr#hr#hr+ho+
+hwh#oo+ohhoo#hoh
++o+ror+hg+oor+h+
+hwhroo+oh+oorhwh
++h+#oooooooor+o+
+hw+s+++hgroorhwh
++o+#gghhhohhr+h+
+hwhroooooor#rhwh
++h+ghoohoooor+o+
+hw+s+++hgooorhwh
++o+#gghhhooor+h+
+hwhroooooooorhwh
+'''
+
+[stamp.roomWall11]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 90.2%
+grid = '''
+#woo#ooooo+sooo+
+hooo+oooooo+wooo
++ooo+oooooo+oooo
+s+++##++++#s+++#
+ooooo+#ooh+oooo#
+woooohhoooooooo+
+ooooo+hooh+oooo+
+#h+++s#++##++++s
+oo#hoooh#oooooo#
+wohoooooooooooo+
+oo+ooooh+oooooo+
+++s#+++#s+h+##+s
+#oooooshooooh#oh
+hooooohooooohooo
++ooooo+hooooh+oh
+s++++#s#++++#s+#
+'''
+
+[stamp.floor13]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 91.5%
+grid = '''
++h++h+h+#hh+h+h+
+hh+#hhhhhh#hh+hh
+h+h+h+hh#hh+hh++
+hhhhh+h+#hh+h+h+
+h+h+hh+hhhhhh#+h
+++h++h#+hh+#+hh+
+h++hhhhhh+hhhhh+
+hh+h++hh+#h+hh#h
+++hh#h+hh+h+hhhh
+hhhhh+h+hhh+h+h+
+++h#h+hhhh+hhhh+
+hhh+hh+++hh++hhh
+++hh+h+#+h+hhh+h
++hh#+hhhh+hh#hh+
+h+hhh+hh#h+hhhhh
+#hhhh#h+hh#hh#hh
+'''
+
+[stamp.roomWindow31]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 90.6%
+grid = '''
+hh+hh+hhh+hh+h+h
+whhoohoohhoh+o+h
+h+hss+s##s+s+++h
+hhosshs++shsh+ho
++hhsshs++shshhhh
++oosshs++shshwoh
+h+hsshs++shsh+hh
+whhsshs++shsh+ho
++hhs#hs++sh#hhhh
+hwhs++++++++hwhh
+h+hhh+h+hh+hh++h
+hhooh+hhoo+ooh+o
+hhh+hh+hh+hh+hh+
+hohhoo+hohoh+oh+
+h+hh++h++++hh#hh
+whwohhohhohwohoo
+'''
+
+[stamp.floor11]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 85.1%
+grid = '''
+rrrrrhrrrrrrhrrr
+rrrrrrrrrrrrrrrr
+rrrrrrrrrrhrrhrr
+rrrrrrrhrhrrrrrr
+rrhrrrrrrhrrrrrr
+rrrrrrrrhrrrhhrr
+rrrhrrrrhrrrrhhr
+hrrhrrrrhrrrrrrr
+rrhrrhrrrrrrrrhr
+rrrhrrrrrrrrrrrr
+rhrrrrrhrrrhrrhr
+rrrrrrhhrrrrrrrr
+hrhhrhrrrrrrrrrr
+rrrrrhrhrrrrrrhh
+hrrhrhrrrhrrhrrr
+rrrrrrrrrrrrrrrr
+'''
+
+[stamp.roadSW]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 85.9%
+grid = '''
+gggggggggogggggg
+ogggggoggggggggg
+ooggggggggogghgg
+oooggggggggggggg
+oooooggggggggggg
+oooooggggggggggg
+ooooooggggohgoog
+oooooooogghggggg
+oooooooogggggggh
+ooooooooogggggog
+ooooooooooghgggg
+oooooooooooggggg
+oooooooooooogggg
+oooooooooooooohg
+oooooooooooooohg
+ooooooooooooooog
+'''
+
+[stamp.roomWall12]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 94.3%
+grid = '''
+##s#########s#s#
+++#++#+++#++#+#+
+#s+s###s###s####
++#+#+++#+++#+#++
+s###s###s+s#s###
+#+++#+++#hs+#+++
+#s#######s###s##
+h#+#++##+#+++#++
+####s###s###s###
+#++##+++#+++#+++
+#####s########s#
++#++##+#++#+++#+
+#########s##s##s
+++##++#++#++#++#
+#s###s#ss#s##s##
+h#+++#h+#++h+#++
+'''
+
+[stamp.roomWall13]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 88.2%
+grid = '''
+h++hh+hh++h++h+h
+oh+oo+ooh+oh+o+h
+h+h++hh#++h#h++h
+o+o+hoh+hoo+o+ho
+++h+#hh++h++#hh+
++ooo+ooo+o#h+ooh
+h+h++h+++#+hh+hh
+o+o+ooh+o+ooo+ho
++hh+#hh+#+h+#+hh
++oo++ooh+ooh+ooh
+++hh++++hh+hh++h
+h+oo++h+oo+ooh+o
++h++hh+++#++#h++
+ho++oo+ho+oh+oh+
+h#+h#+h#+++h+#+h
+o+ooh+ohhohoo+oo
+'''
+
+[stamp.waterSE]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 77.0%
+grid = '''
+ggggggggghgggggg
+ggggghgggggggggh
+gggggggggggggghh
+ggggggggggggghhh
+gggghggggggghh~h
+ggggggggggghhhhh
+ggggggghgghhhhhh
+gggggggoghhhhhhh
+ggggghgghhhhhhhh
+ggggggghhhhhhhhh
+gggggghhhh~hhhhh
+gghgghhhhhhhhhhh
+ggghhh~hhhhhhhhh
+ggghhhhhhhhhhhhh
+gg~hhhhhhhhhhhhh
+ghhhhhhhhhhhhh~h
+'''

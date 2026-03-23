@@ -1,0 +1,590 @@
+[pax]
+version = "2.0"
+name = "corpus_dungeon"
+
+[palette.dungeon]
+"#" = "#2a1f3dff"
+"+" = "#4a3a6dff"
+"." = "#00000000"
+"g" = "#2d5a27ff"
+"h" = "#6a5a9dff"
+"o" = "#c8a035ff"
+"r" = "#8b1a1aff"
+"s" = "#1a0f2eff"
+"w" = "#e8e0d4ff"
+"~" = "#1a3a5cff"
+
+[stamp.combined_0_14]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 92.7%
+grid = '''
+...+h+++++++....
+..h++++++++++h..
++h++#++++#+#++h.
+h+#h#h+##+h#++#o
+++#+#h+##+o####o
+#+###h+##+h+##so
+s+#++h+++hh+++#o
+##h++h+++ho+++#o
+.s++#hh+++h+++#o
+.##+hhh+#+h+###o
+..s##++##+h++++o
+..#s###+++#++#sh
+...s##########sh
+....#s########s.
+......#sssss##..
+................
+'''
+
+[stamp.combined_14_14]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 89.3%
+grid = '''
+rowrowrowrowrowr
+rowrowrowrowrowr
+rowrowrowrowrowr
+rhorhorhorhorhor
+#+o#hor+h#+orhh#
+#++++++++++++++#
+#++++++++++++++#
+#++++++++++h+++#
+#+++++++++++++++
+#++++++++++++++#
+++h++h+++++++++#
++++++++++++h++++
+++++++++++++++++
+++h+++++++++++++
+++h++h+++h+h++++
+#++++++++++h+++#
+'''
+
+[stamp.combined_12_9]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 92.2%
+grid = '''
+................
+..#...rr........
+.roorrrh..gg....
+.+rorrrr~#g##++.
+#+rrrrorg#s#or+#
+o#horrrr~#gowr#+
+h#hrrroo+#ghrr#h
+#+rrrrooorrhrr#h
+#+rrrrooorowrr+#
+#+#rrrrrrrrrrr+#
+#+g#rrrrrrrrrr+#
+#+++++++++++++##
+#+########+#####
+#+##############
+################
+##+++++++++++++#
+'''
+
+[stamp.combined_14_15]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 90.7%
+grid = '''
+rowrowrowrowrowr
+rowrowrowrowrowr
+rowrowrowrowrowr
+rhorhorhorhorhor
+#+h#+h#+h#+h#+h#
+######shh#######
+######shhs######
+###+###hh##+####
+#+hhhhh##hhhhhh+
+#hhhhhh##hhhhhh#
++++++++##++++++#
++++++####++++##+
++####+##+####+#+
++##############+
++##############+
+#++++++##++++++#
+'''
+
+[stamp.combined_10_15]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 99.1%
+grid = '''
+................
+................
+................
+................
+................
+hh+.............
++ohh............
+#h#.............
+#+#.............
+#+#.............
+#+#h............
+s+#.............
+.h..............
+................
+................
+................
+'''
+
+[stamp.combined_6_10]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 97.9%
+grid = '''
+................
+................
+.......#h.......
+......+hh+......
+......+ho+#.....
+......+hh+#.....
+......+hh##.....
+.....h+hh##.....
+....hs+hh##.....
+......#h+##.....
+......goo##.....
+......hwos......
+......hh+h......
+................
+................
+................
+'''
+
+[stamp.combined_4_14]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 92.5%
+grid = '''
+....ohh++++ho...
+..o++++++++++h..
+.h++#+#++++#h++o
+o#++#h+##+h#h++h
+o####o+##+h#+#+h
+os##+h+##+h###+h
+o#+++hh+++h+++++
+o#+++oh+++h++h#+
+o#+++h+++hh#++s.
+o###+h+#+hhh+##.
+o++++h+##++##s..
+hs#++#+++###s#..
+hs##########s...
+.s########s#....
+.+##sssss#+.....
+.....h+.........
+'''
+
+[stamp.combined_4_10]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 92.7%
+grid = '''
+.......g+#......
+.....gg++##.....
+....+++h++##g...
+...#+++hh###+g..
+..g+hhhh+#+#+g..
+.+++hhoo++h##+..
+..h+hhhh#hh##+#.
+.gohwwh#ho+#++#.
+.+h+h+#hooo++++#
+.go+#+++ooh++++.
+.+h#owo###ho++#.
+.gh++oo##oowh+#.
+.hwoo##hhoooh+#.
+.gowo#ooohhhoo+.
+..+h+showhs+oo+.
+......#+h#..gg..
+'''
+
+[stamp.combined_8_10]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 93.2%
+grid = '''
+................
+................
+................
+.....o....o.....
+...ooooooooooo..
+.oooooowooooooo.
+hooooooooooohoo.
+.#oooooooooooo+.
+.+owoooooooooo+.
+.hoooooooooooh+.
+.hwoooooohoohh+.
+.+woowwwoooooh+.
++owoowwwoooooh+.
+.+owwwooooooo++#
+..hooooooooohs..
+...##++hh+##....
+'''
+
+[stamp.combined_13_9]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 91.4%
+grid = '''
+................
+............oggg
+.orr.......ogooo
++rrr#+++++hggooo
+rrrrr+++++hoogog
+rrrrr#####hgoggg
+rrrrr+####hgooo#
+rrrrr+##+#hooooo
+rooor#+hhh#oooog
+#rrrr#hhhh#ooogg
+###r##++++#ggggg
+++++##+++##+++##
++##+##########+#
+###########+####
+################
++++++#++++#++++#
+'''
+
+[stamp.combined_11_9]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 95.7%
+grid = '''
+................
+................
+......hwo.......
+......ooww......
+.....owgooo.....
+....ogggggoh....
+....goowggoo....
+....gogggogg....
+...goohgogg.....
+....g+wooggh....
+.....hhhgg#.....
+....hwwwoh+.....
+....hwwwwo+.....
+....hhwwoh+.....
+.....#+h++......
+.......h........
+'''
+
+[stamp.combined_10_13]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 91.9%
+grid = '''
+hh............o+
++h............h+
+#h............h#
+#+hhhhhhhhhhoh+#
++++++++++++++#++
++++++++++++++++h
+++++++++++++++++
+++++++++++++++++
++++++++++h++++++
++++++++++h++++++
+++++++++++++++++
+h++++++++h+++++h
+##+#+++++++++++#
++#+++h++++h+++++
+#############+##
+s+............+s
+'''
+
+[stamp.combined_11_8]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 89.7%
+grid = '''
+.....oooooo.....
+....ooooooooho.o
+hroowwwowwwooh#s
+.+woooooooooooh#
+.ooowwwwwoooooh+
+hoooowwwwwooogh+
+oowwwwwwwoooohh+
+howwwwooooooooh+
+ooowwwwwwoooooh#
+howwooowwwoooog#
+.owoooooooooooh#
+.hooooh+hhhoohh#
+ohh+hhohh+++hhg#
+oo##+++++++h#hhs
++#############+#
+..............h#
+'''
+
+[stamp.combined_15_3]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 93.6%
+grid = '''
+....h+h.........
+...howh.........
+...+ooh#........
+...o+h+.........
+..+hhh+h.h......
+.hh++o+hoh#h....
+howhho++ooh#h...
++wwhho++oohhgh..
++ooh+h+oooh..#h.
++howohowo++...#h
+#+hhhoohh++....g
+++h++hh+h++.....
+#++hhhhhh++.....
+h+h+hohhh#o.....
+.hh++hhhh.......
+...ooow.........
+'''
+
+[stamp.combined_15_4]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 94.1%
+grid = '''
+......hh+.......
+......hwo+......
+......hoo+......
+......++++......
+....hh+hh+h.....
+....hh+hh+ooh...
+...hwo+oh#owo...
+..howo+hh#owoh..
+...hooh#+hooh#..
+..++hwo+hwoh+h..
+..++hhh+hohh#o..
+...+hh+ggh+h#h..
+..+#+h+#ghhh#...
+...#hh++goo++...
+....+h+#gooh....
+......o#goh.....
+'''
+
+[stamp.combined_7_11]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 94.9%
+grid = '''
+................
+.........++.....
+........+++#....
+.......+hh+++...
+......+hohh++...
+.....++hh+o+++..
+...+#+++o+hh+...
+...#+hh++++++...
+..h#h+oo++h+#+..
+..++ho+h+ho+++..
+..+ho#hhho+h++..
+..+oohhhhhho++#.
+..oh#o++ho+ho+..
+.......ho+oooh..
+........ohohho..
+................
+'''
+
+[stamp.combined_11_15]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 99.1%
+grid = '''
+................
+................
+................
+................
+................
+.............+hh
+............hho+
+.............#h#
+.............#+#
+.............#+#
+............h#hs
+.............s++
+................
+................
+................
+................
+'''
+
+[stamp.combined_9_15]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 99.1%
+grid = '''
+................
+................
+................
+................
+................
+hh+.............
++ohh............
+#h#.............
+#+#.............
+#+#.............
+#+sh............
+s+#.............
+.h..............
+................
+................
+................
+'''
+
+[stamp.combined_7_10]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 92.3%
+grid = '''
+................
+................
+................
+.....o....o.....
+...ooohhoooooo..
+.ooooohoooghooo.
+hhoggooooggggoo.
+.hoogoogggghoo+.
+.howoooooooooo+.
+.hoooooooooooh+.
+.hwoooooohoohh+.
+.hwwowwwoooooh+.
+howoowwwoooooh+.
+.rowwwooooooo++#
+..hooooooooo+s..
+...+#++hh+##....
+'''
+
+[stamp.combined_12_7]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 91.6%
+grid = '''
+.gg.............
+.~h..........#g#
+.ggh..~..h+..g+r
+ghgggg~~#h+##g++
+ghggghg~+hh+ggr~
+ggggggggooh++rh+
+hhgggggghhohhhrr
+hhhggghg+hhoggr+
+ghgh#hhgho++g+h+
+ghhgghhg+ho+rh+r
+ggggggh##+h+#r##
++++##+##++##+++#
+######+###+#####
+################
+################
++++#+++#+++#++++
+'''
+
+[stamp.combined_14_0]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 90.0%
+grid = '''
+rowrhwrowrowrowr
+rowrowrowrowrowr
+rowrowrowrowrowr
+rowrowrowrowrowr
+rowrowrowrowrowr
+rowrowrowrowrowr
+##gs#gs#gs#gs#gs
+###ssssss#ss#ss#
+###ggg###~#ss+g#
++sgooog#gg#+ooog
+++gooogohghoooh#
+#++ggggh~+ghogg#
+hhh+hh++hhhgghhh
+++++++++++++++++
++hhhhhhhhhhhhhh+
+++++++++++++++++
+'''
+
+[stamp.combined_7_13]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 95.2%
+grid = '''
+................
+................
+.......ho.......
+......oh+ho.....
+.....wooogoo....
+.....oohogho....
+....ogoooggh....
+....hgggooog....
+.....rggrg+oo...
+....hghgggggh...
+....ooorghogg...
+....gwwowoh~h...
+.....owwwoh#....
+.....hhowo+h....
+......oghgo.....
+................
+'''
+
+[stamp.combined_13_14]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 89.5%
+grid = '''
+rrrwwwrrrrrwwwrr
+rrrwwworrrowwwrr
+rrrwworrrrrowwrr
+rrroworrrrroworr
+#r+hoh+rrr+goh##
+##h#+++++++#++#s
+##+++h++h+++hh##
+##h++h++hhh+hg##
++#+++h++hh+#hh##
+#+h++h++hh++h+##
+++h++h++hhh+hh+#
++++++h++hh+#h+++
++#+++h+++h+#++++
++#+++h++h+h+h+++
+++h++h++hh+#h+++
+##h++h+++hh#hh##
+'''
+
+[stamp.combined_5_10]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 95.4%
+grid = '''
+................
+.......#........
+......++g.......
+....g#+ohg......
+....++hog##g....
+...gh+hoh#+#....
+...gh++o+#+##...
+...g+++h+#h+#...
+...+++hh+#h+s...
+...ho#+h+#h+s...
+...h++owh#h+#...
+..g+h+ho+#++#...
+..goooh#+h+##...
+...howh+ooo+s...
+...ghhs+ooo+#...
+........#h+#....
+'''
+
+[stamp.combined_13_15]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 90.8%
+grid = '''
+rrrwwwrrrrrwwwrr
+rrrwwworrrowwwrr
+rrrwworrrrrowwrr
+rrroworrrrroworr
+#r#gog#rrr#gogs#
+####+###########
+################
+######+++###+###
++#+hh+hhhhhhhh+#
++#+hhhhhhhhhhh##
++##++++++++++++#
+++++++++++####++
+++########+++#++
++############s++
+++############++
+##++++++++++++##
+'''

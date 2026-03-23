@@ -1,0 +1,134 @@
+[
+  [
+    "a 16x16 pixel art tile",
+    "...s............\n..s~s...........\n.s###s...#s.....\n.#hohs..s~ss....\ns##h#+#s+h+#....\n#+#o#++shhh#....\n#hhhhhh++hhh#...\n#h+++#s#hghr#...\nshgghhh#hg+r#...\n#hgg+h~+hg+r#...\n#hggg#hhhghr#...\n#hrrhs~~hghr#...\ns+rrh+h+hg+r#...\ns+hhhhhhhgh+#...\n.sssssssssssss..\n...ssssssssssss."
+  ],
+  [
+    "a 16x16 pixel art tile",
+    ".....ssss.......\n....#hhhhs......\n....hhhhh+......\n...#hhhhhhs.....\n..shhhhhhh+.....\n..+hhhhhhhh#....\n.#hhhhhhhhhh....\n.+hh#ssss+hh#...\n.+hhsorrrshh+...\nshh+#ooo+shh+...\nshhhhhhhhhhh+...\ns+hhhhhhhhhh+...\nshhhhhhhhhhh+...\n.ssssssssssssss.\n...sssssssssssss\n......ssssssss.."
+  ],
+  [
+    "a 16x16 pixel art tile",
+    ".......s........\n...s+ohh+s......\n..shwwohhh#.....\n..+owhhhhhhs....\n.shhh+g+hho#....\n.o+oo+o+ho+os...\n.sog+ooogho#....\n..#ooooooog.....\n...srgogr#......\n.ssrooooggss....\n.shhoooohhhs....\n.soh+hhh+hos....\n.s+goooooo+s....\n..s#gggg##ssss..\n.....ssssssssss.\n........s......."
+  ],
+  [
+    "a 16x16 pixel art tile",
+    ".+++............\n#hohs..s+s#+....\n#hhhhhohohhoh...\n.+os+os#h#+hs...\n.hhhhh+.h.#+....\n.hhhhhh.o.#+....\n.hhhhh+gog#+....\n.+hh+hhs..go....\n.hhhhh+...oo#...\n.hhhhhhs.###s...\n.hhh+hh+o+oos...\n.hh+hh++r#+rs...\n.hhh+hh#h+hhs...\n.hhhhhh+orohs...\n.#+##+#sss#sss..\n...ssssssssssss."
+  ],
+  [
+    "a 16x16 pixel art tile",
+    "+hhhhhhhhhhhhh#.\nhwoooooooooooo#s\nhohhhrrrrrhooo#s\nhohooohrhooooo#s\nhoroooohoooooo#s\nhorroooooooroo#s\nhorrrooooorroo#s\nhorrhhoooorroo#s\nhorroohooooroo#s\nhorooooroooooo#s\nhohooorrrooooo#s\nhoroorrrrroooo#s\nhooooooooooooo#s\nhooooooooooooo#s\n##############ss\n.sssssssssssssss"
+  ],
+  [
+    "a 16x16 pixel art tile",
+    "................\n..++##+++###++..\n.+###r####r#s#+.\n.s###r####r####.\n..s#rrrrrrrrss..\n...srr####rrs...\n...#rrrrrrrr#...\n...#rs.ss.sr#...\n...rr++++++rr...\n..srhoooooohrs..\n..#r#ssssss#r#..\n..rrs......srr..\n..rroooooooorr..\n.#rhoooooooohr#.\n.#r#........#r#.\n..s..........s.."
+  ],
+  [
+    "a 16x16 pixel art tile",
+    "........#.......\n........hs#+....\n......#.+###....\n.....#.#h+##....\n....#+++h#......\n.#+#+..+o.......\n.##+#+..h...###.\n......+hh++####.\n.......+os......\n.......#h.......\n.......+h.......\n.......hh.......\n.......oh.......\n......+oh#......\n..sss+++++#sss..\n.....sssssss...."
+  ],
+  [
+    "a 16x16 pixel art tile (hazard type)",
+    "................\n...s.s..........\n..sosr#.........\n.rsroor...#s....\n.#rrroos.rr.....\n..ooroorro#.....\n..#ooooroos.....\n...roooooog.....\n...soowoooos....\n..#hohhorhoh+...\n.hoor##o##+ooo..\n.hh##s#o+ss#+os.\n.#+s#.so+s..#+#.\n...#..sh#s...ss.\n.......s#.......\n................"
+  ],
+  [
+    "a 16x16 pixel art tile",
+    "................\n......o##.+.....\n.....ows+wh#....\n.....woshwhs#...\n....wwwshw#ss...\n..#hwwwhowgs##..\n..o#+wwoowo#s#s.\n..w+s+wwwoh#ss#.\n..wsssowwog+ssss\n.oo#s#s+hhggssss\nswwh#ss##++sss##\n+wwh##s+s##sssss\ngwwos#h+++rsssss\n...o#s+++....sss\n....sss#........\n................"
+  ],
+  [
+    "a 16x16 pixel art tile",
+    ".....hhhhhh.....\n...hhhhhh.ohh...\n..oh+......h.h..\n.hh.....ooo.hh..\n.hhh......h.ohh.\nhhh.ooowwo..h.h+\n.h+.w.wwoo...h.h\n+...owwwwo...hhh\nooh.owowow..o..h\nhh..o.owwwwohhho\nhhhh.owowoo.h.hh\n.hh...o.woo..hh.\n.oo...hh.o..hhh.\n...o..ho.h.hhh..\n...hhh.+h++h....\n.....hhhh+h....."
+  ],
+  [
+    "a 16x16 pixel art tile",
+    "................\n.........h+.....\n........#wh.....\n....+#..hohs....\n...#whs#ooh#....\n...hohs.hh+ss...\n...hhhs..s#+s...\n....ssss##shs...\n.sss.hs#oo+.#h#.\n#ooh#+shoohshohs\n+ohh#.#oooh#s+#s\n.#ssss#ohhhs.sss\n..#+s.s#+h#s....\n..#+s++sssss.h+.\n.....hh#.....ss.\n................"
+  ],
+  [
+    "a 16x16 pixel art tile",
+    "................\n................\n................\n........s......s\nss.....sss.ss##.\n..s#####s####s..\n.s#############.\nss###s#s###s##ss\n.##sssssssssss##\n..s#sssssssss##.\n.s####s####s#...\ns#...s#....#....\n....s#......#...\n....s.........s.\n................\n................"
+  ],
+  [
+    "a 16x16 pixel art tile",
+    ".ss###########s.\n.s+++hh++++++++.\n.sgghwww+##+#+#.\n.sgohhhwhhhhhh#.\n.sgohhhhrrrrrr#.\n.s+ohhhhrrrrrr+.\n.shgggsss~sshh#.\n.shohhrggwh#ww#.\n.shggghgowh+hh#.\n.shgggrgowrrhh#.\n.shoggrgoohrhh+.\n.s+#+h#####~###.\n.shhhwhhhhggoh#.\n.shrhhhhhhggoh#.\n.shrhhhhhhggoh#.\n..#++++++++g++#."
+  ],
+  [
+    "a 16x16 pixel art tile",
+    "......####......\n.....h+gg++.....\n...+hggggs#g#...\n..#hog#gg##s+s..\n..#hoggggggsg#..\n..#hggggggg~g#..\n..#+sggggggg+#..\n..#+#ggggg~~g#..\n..#gs#ggggssg#..\n..#gssgssg#sg#..\n..#+#+ghhgg#+#..\n..s+++++h++#+s..\n..+oo+h+h+h+o#..\n.soo+++h++hh+os.\n.hh++++++++++h+.\n.ssssssssssssss."
+  ],
+  [
+    "a 16x16 pixel art tile",
+    "......###.......\n....++~+++#.....\n...h++hhh#+#....\n..+~hohohhs+#...\n..+shhrhhr+~+...\n.#++#+rrr#+hh...\n.#+hh~srs~~hh...\n.g+h+hss+hh~+#..\n.go#hh~~~~~+o#s.\n.sgooowwoooo#s..\n..gosgooo##o#...\n..oh#######ogs..\n.#ohhhohohohhs..\nshhhhhhhhhhhhhs.\n.#############ss\n..sssssssssssss."
+  ],
+  [
+    "a 16x16 pixel art tile",
+    "....s~..~s......\n...~~.~~s#~.....\n...~..#~..hs....\n...~~~hh~~~s....\n...h~~~~~~h.....\n...h~~~~~+h.....\n...h~hhhhhh.....\n...hh~oo+hh.....\n...hhshhs~hs....\n.#hhhhoohhhh#...\n#whhh~hhhhhhw+..\n.+hhhhhhhhhh+...\n..+wooooohh+....\n...hhhhhhh+ss...\n....sssssssssss.\n....sssssssssss."
+  ],
+  [
+    "a 16x16 pixel art tile",
+    "...s............\n..rrs...........\n#hhhhhhhhhhhs...\n#hhhhhhhhhhhhs..\n#hohhhhhhhhhhs..\n.+hh+ssss#ss+#..\n.+hhhssssgh#h#..\n.+hh+ssssgohhs..\n.+hh+ssssg#sh#..\n.+hhhsssssss+#..\n.+hhhhs~h+ooh#..\n.+hhh+h~s~ggh#..\n.hhhhsssssssh#..\n.#hh+s+++#ssh...\n..s#ssssssssss..\n....sssssssssss."
+  ],
+  [
+    "a 16x16 pixel art tile",
+    "................\n.srrs...........\n..#rrsssss......\n...srrrrrrrs....\n..srrrr#..rrrs..\n..rr..#r#...rr..\n.#r.srsrrr..sr#.\n.rr.rrrrrrrrsrr.\n.rr.rr.rr#srrrr.\n.rr.rrsrs...#rr.\n.srsrrsr....#rs.\n..#rrr.rr..srr..\n...srr#srrrrr...\n....rrrrrr#s....\n....rs..........\n................"
+  ],
+  [
+    "a 16x16 pixel art tile",
+    "oggrhgorogorh#gr\noggroggroggroggr\noghroggrhggroggr\noggrogorogorogor\noggroggroggroggr\noggrhggroggroggr\no#oro+hroggrhgor\noggroggrr+groggr\noggrogghhggroggr\noghro+groghroghr\noggroggroggroggr\noggroggrogghhggr\nogoroggroggro+or\noggrhghro#hroggr\noggroggroggroggr\nogoroggrhggro+hr"
+  ],
+  [
+    "a 16x16 pixel art tile",
+    ".........gg.....\n........hhg.....\n.......ghhh.....\n.......hhhh.....\n.......hhhh.....\n.......h+hh.....\n.......hhgh.....\n..ghhhhhhhhg....\n.goohhhohhhh....\n.hhhhhhhhhhh....\n.hh++hhhhhhh....\ng+hhhhghhhhhg...\n.#s##ss+hohhhhg.\n...~g.ggg+hohh+g\n..........g++ssg\n............g~.."
+  ],
+  [
+    "a 16x16 pixel art tile",
+    "..s+#......#+s..\n...r#......#r...\n...#r++++++r#...\n...#roooooor#...\n...sr#ssss#rs...\n....rr++++rr....\n....#r++++r#.##.\n###.#r####r#~#..\n.s+##rrrrrr#ss..\n.+###rrrrrr#s##.\ns#####r##r#####.\n..s#s#######ss..\n..#sss.s.ss##...\n.##........s+...\n.#..........#+..\ns............s#s"
+  ],
+  [
+    "a 16x16 pixel art tile",
+    ".......+........\n......ho#.......\n....+#++#+s.....\n...#hhh+hhh.....\n..#hs#oohsh+....\n..+h##hh+s#+....\n.#+h+hhhh++###..\n.....#h++.......\n.....+h+os......\n.....#h+h.......\n....#+h#h#......\n...hhh+s+hh#....\n..+hh+++++hh#...\n.s++++++++++#s..\n..sssssssssssss.\n....sssssssssss."
+  ],
+  [
+    "a 16x16 pixel art tile",
+    "................\n.......#hh+s....\n......+ooohhs...\n.....hwooohh#...\n..s++owwohhh#...\n.#oowoowohhh#...\n.hwooohhhhhhs...\n.hoooohhhhh+....\n.hwwwohhhhh+....\n.hoooohhhhh+s...\n.hhhhhhhhh+ssss.\n.shhhhh++#sssss.\n..s++#sssssssss.\n....sssssssssss.\n......sssssss...\n................"
+  ],
+  [
+    "a 16x16 pixel art tile",
+    "................\n......h....o....\n.....hh++hhh....\n...h+#h.#h#.....\n...#h+ohh...+...\n..#.#hhh#.#..h..\n.ohohh.ohhoohhw.\n..++#hhh.#h+.+#.\n....h#hhh.+.....\n...h+.o.#h..+...\n..h##hh.hhh.....\n..h...h#..+.....\n.h##h......+h...\n.....+oh##h+oh..\n......h.....+o..\n................"
+  ],
+  [
+    "a 16x16 pixel art tile",
+    "ss#############s\ns+whhhohhhooooo#\ns+os~sssrs~hhhh#\ns+ohhh+horhhggg#\ns+o#######hhoog#\ns+osrrsrrs~hoo+#\ns+o#or+horhhrr+#\ns+o+++++++hhhr+#\ns+ogg~h~hh+hhh+#\ns+ogo#h#oh#hhhh#\ns+o+hhhhhh+hw+o#\ns+wo+++++hoooho#\ns+wh#####hhoooo#\ns+wooooooooohoh#\ns+woooooooooooo#\n.#+++++++++++++#"
+  ],
+  [
+    "a 16x16 pixel art tile",
+    "................\n.......#........\n.......h#...s...\n......#h+.ssh#..\n......#hs+hhhhs.\n.s..h+s+#h+##+h#\n.+#.hh+hhhhh#hwh\n.+ohhhoohhh++hwh\n.#o+hh++hhhh##+#\n..sssshhsho+sss.\nsshwowh+#shs.sss\ns+ws++#+#h+s..s.\n.#+ss+hhohs.....\n.+s..sh#ss......\n.s....ss........\n................"
+  ],
+  [
+    "a 16x16 pixel art tile",
+    "...#hhhhhhhh#...\n..hwwwwwwwwwwh..\n.+hhoooooohhhh+.\n....hwwwwwo+....\n....hwwwwooh....\n....owwwwwoh....\n....hwwwwwo+....\n....swwwwoos....\n....swwwwoos....\n....#wwwwoos....\n.....wwwwoh.....\n.....hwwwo+.....\n.....hwwwo+.....\n.....hwwwo+.....\n....#hwwooh#....\n...#hhhhhhhh#..."
+  ],
+  [
+    "a 16x16 pixel art tile",
+    "................\n.....#gggg#.....\n....srowwors....\n...ssroooorss...\n..ssssowwossss..\n.sssssgwwgsssss.\n.ssssssoossssss.\n.ssssss##ssssss.\n.rooooo##ooooor.\n.rooooossooooor.\n.sowworssrowwos.\n..owoossssoowo..\n...oorssssroo...\n....rssssssr....\n.....ssssss.....\n................"
+  ],
+  [
+    "a 16x16 pixel art tile",
+    "........ss......\n......shoo+.....\n.....hoooooo+...\n...+ooooooooo...\n.#ooooooooors...\n#oooooooohrss...\nsooooooorssrs...\n.#hooorsss#rs...\n.+#+rss.ss#rss..\n.+r.#rsssss#sss.\n.+r.#rsssssssss.\n..ss#rssssssss..\n...s#rssssss....\n...ssssssss.....\n....sssss.......\n......s........."
+  ],
+  [
+    "a 16x16 pixel art tile",
+    "................\n....#gss........\n...gggogg.......\n..ggggggggg.....\n.sgggogggggg....\n.ggggggggggg#...\nsggggggggggggs..\n.gggggogggggg#..\n.gggggggggggg#..\n.#ggggggggggg~..\n.#ggggggggggggs.\n.srgrrgrgrgrrgs.\n..srrrrrrrrr#ss.\n...ss##rr#ssss..\n.....ssssssss...\n................"
+  ],
+  [
+    "a 16x16 pixel art tile",
+    "................\n......w+........\n.....hwo##......\n.....wwhooh.....\n.....+whoowo#...\n...+hhwhhoohh...\n.#hohhh+hhhh#...\nsooooohhhh++....\n#ohhoohh++hhss..\n.hoohh+#shohsss.\n..+hh+#.ss++ssss\n..hh+h+sssssss..\n...+oh+ssssss...\n....#+#ssss.....\n.....ssss.......\n......s........."
+  ],
+  [
+    "a 16x16 pixel art tile",
+    "................\n.............#s.\n............swh.\n............+h#.\n...........#os..\n..........sos...\n..........o#....\n.....ssssh+.....\n....#ooohs......\n...+ohhhhrs.....\n..#ohohhrrrs....\n..#orrrrrrrs....\n.s#orrrrrrrs....\n.ss#s##ss#sss...\n.ssssssssssss...\n................"
+  ],
+  [
+    "a 16x16 pixel art tile",
+    "...s.......s....\n..oo#.....go+...\n..gr#ghhh+go#...\n..gohooooooos...\n..goooowoooos...\n..gooooooooos...\n..gooooooooo#...\n.#ooooohooooo...\n.oorooooooooog..\n.oorrrrrrrroog..\n.#rrrrrrrrrros..\n.gorrrrrrrrro#..\n.gorr####rrro#..\n.gr+r#...go#o#..\n.og####ss##go+s.\n.ssssssssssssss."
+  ]
+]

@@ -1,0 +1,38 @@
+[pax]
+version = "2.0"
+name = "corpus_dungeon"
+
+[palette.dungeon]
+"#" = "#2a1f3dff"
+"+" = "#4a3a6dff"
+"." = "#00000000"
+"g" = "#2d5a27ff"
+"h" = "#6a5a9dff"
+"o" = "#c8a035ff"
+"r" = "#8b1a1aff"
+"s" = "#1a0f2eff"
+"w" = "#e8e0d4ff"
+"~" = "#1a3a5cff"
+
+[stamp.combined_5_14]
+palette = "dungeon"
+size = "16x16"
+# accuracy: 92.3%
+grid = '''
+++++h+h+#+++h+++
+h++~h++#++~+h+h+
++++#++~#~+h#+o++
+h+h++ss##+++#+++
+++h+h+oooshhs#+h
+++#+hoorrshhssh+
+h++hhhh#ss+hss#+
+++hh+hh#ss#hsssh
+#++++hh#sss##ss#
+++h++hh#sss#ssss
+#++#~+hsssssss#s
+#h+hs+h#ss#sss##
+#+h+ss##ss##sss+
+#hhssss##s###ss+
+#+#sssss#sss#s++
++#sssssss##++#++
+'''

@@ -239,6 +239,32 @@ enum Commands {
         out: PathBuf,
     },
 
+    /// Import a directory of PNG tiles into PAX corpus format
+    Corpus {
+        /// Directory containing PNG tile images
+        dir: PathBuf,
+
+        /// Palette from a .pax file to quantize into
+        #[arg(long)]
+        pax: PathBuf,
+
+        /// Palette name within the .pax file
+        #[arg(long)]
+        palette: String,
+
+        /// Target tile size (e.g., "16x16")
+        #[arg(long, default_value = "16x16")]
+        size: String,
+
+        /// Output .pax file with stamps
+        #[arg(long, short)]
+        out: PathBuf,
+
+        /// Also output training pairs JSON for LoRA fine-tuning
+        #[arg(long)]
+        training: Option<PathBuf>,
+    },
+
     /// Start the MCP server (stdio transport)
     Mcp {
         /// Optional: pre-load a .pax file
@@ -394,6 +420,16 @@ fn main() {
         }
         Commands::Export { file, format, out } => {
             cmd_export(&file, &format, &out);
+        }
+        Commands::Corpus {
+            dir,
+            pax,
+            palette,
+            size,
+            out,
+            training,
+        } => {
+            cmd_corpus(&dir, &pax, &palette, &size, &out, training.as_deref());
         }
         Commands::Mcp { file } => {
             cmd_mcp(file.as_deref());
@@ -621,6 +657,145 @@ fn cmd_project(action: ProjectAction) {
                 process::exit(1);
             }
             println!("style latent saved to {}", project.display());
+        }
+    }
+}
+
+fn cmd_corpus(
+    dir: &PathBuf,
+    pax_file: &PathBuf,
+    palette_name: &str,
+    size_str: &str,
+    out: &PathBuf,
+    training_path: Option<&std::path::Path>,
+) {
+    let (_, palettes) = load_pax(pax_file);
+    let palette = match palettes.get(palette_name) {
+        Some(p) => p,
+        None => {
+            eprintln!("error: palette '{}' not found", palette_name);
+            process::exit(1);
+        }
+    };
+
+    let (tw, th) = match pixl_core::types::parse_size(size_str) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: {}", e);
+            process::exit(1);
+        }
+    };
+
+    // Find all PNG files in the directory
+    let png_files: Vec<PathBuf> = match std::fs::read_dir(dir) {
+        Ok(entries) => entries
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| {
+                p.extension()
+                    .map(|ext| ext == "png" || ext == "PNG")
+                    .unwrap_or(false)
+            })
+            .collect(),
+        Err(e) => {
+            eprintln!("error reading directory: {}", e);
+            process::exit(1);
+        }
+    };
+
+    if png_files.is_empty() {
+        eprintln!("error: no PNG files found in {}", dir.display());
+        process::exit(1);
+    }
+
+    println!("found {} PNG files in {}", png_files.len(), dir.display());
+
+    let mut entries = Vec::new();
+    let mut failed = Vec::new();
+
+    for png_path in &png_files {
+        let file_stem = png_path
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+
+        // Sanitize name for TOML key
+        let name = file_stem
+            .chars()
+            .map(|c| if c.is_alphanumeric() || c == '_' { c } else { '_' })
+            .collect::<String>();
+
+        match image::open(png_path) {
+            Ok(img) => {
+                let resized = img.resize_exact(tw, th, image::imageops::FilterType::Lanczos3);
+                let rgba = resized.to_rgba8();
+
+                let pixels: Vec<(u8, u8, u8, u8)> = rgba
+                    .pixels()
+                    .map(|p| (p.0[0], p.0[1], p.0[2], p.0[3]))
+                    .collect();
+
+                let (grid, accuracy) =
+                    pixl_core::corpus::quantize_pixels(&pixels, tw, th, palette, '.');
+
+                // Try to infer affordance from filename
+                let affordance = pixl_core::corpus::map_affordance(&file_stem);
+
+                entries.push(pixl_core::corpus::CorpusEntry {
+                    name: name.clone(),
+                    source_file: png_path.to_string_lossy().to_string(),
+                    width: tw,
+                    height: th,
+                    grid,
+                    palette_name: palette_name.to_string(),
+                    affordance,
+                    tags: vec![],
+                    color_accuracy: accuracy,
+                });
+
+                println!(
+                    "  {} -> {} ({:.1}% accuracy)",
+                    file_stem,
+                    name,
+                    accuracy * 100.0
+                );
+            }
+            Err(e) => {
+                failed.push((file_stem.clone(), format!("{}", e)));
+                eprintln!("  SKIP {}: {}", file_stem, e);
+            }
+        }
+    }
+
+    let batch = pixl_core::corpus::CorpusBatch {
+        entries,
+        failed,
+        palette: palette.clone(),
+        palette_name: palette_name.to_string(),
+    };
+
+    // Write .pax stamps
+    let pax_output = pixl_core::corpus::generate_pax_stamps(&batch);
+    if let Err(e) = std::fs::write(out, &pax_output) {
+        eprintln!("error writing {}: {}", out.display(), e);
+        process::exit(1);
+    }
+    println!(
+        "\nwrote {} stamps to {} ({} failed)",
+        batch.entries.len(),
+        out.display(),
+        batch.failed.len()
+    );
+
+    // Write training pairs if requested
+    if let Some(tp) = training_path {
+        let pairs = pixl_core::corpus::generate_training_pairs(&batch);
+        let json = serde_json::to_string_pretty(&pairs).unwrap();
+        if let Err(e) = std::fs::write(tp, &json) {
+            eprintln!("error writing training data: {}", e);
+        } else {
+            println!("wrote {} training pairs to {}", pairs.len(), tp.display());
         }
     }
 }

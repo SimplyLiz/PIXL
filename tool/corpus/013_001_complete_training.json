@@ -1,0 +1,30 @@
+[
+  [
+    "a 16x16 pixel art tile",
+    "................\n................\n......+++.......\n.....~hwh~......\n++++..hh...~hw..\n+hwh.......+++..\n.++......+++....\n........++hhh...\n....+++++hhwh~..\n...+hhhh+++++...\n...hhwwhhh......\n...++hh+++......\n.....~++........\n...........+++..\n..........~+hw..\n................"
+  ],
+  [
+    "a 16x16 pixel art tile",
+    "......++........\n....~++++~......\nhh....++........\n..............hh\n....~~..........\n................\n........ww......\n......wwwwww....\n........ww....~+\n................\n......hh........\n......hhhhhhhh..\n....hhhhwwhh....\n......hhhhhhhh..\n........hh......\n................"
+  ],
+  [
+    "a 16x16 pixel art tile",
+    "................\n................\n................\n................\n......+ror+.....\n.....+ooooo+....\n.....++ror++....\n.....+r+++++....\n....~+rorrr+~...\n...~~rro+or+~~..\n...~~roo++rr~~..\n....~~roo+#~~...\n.......~~~......\n................\n................\n................"
+  ],
+  [
+    "a 16x16 pixel art tile",
+    "..o..o.ooo..o...\no...oooooooo...o\n...ooooooooooo.o\n..ooooohhhooo.h.\no.ooohhggghooo..\n.ooohhhgggghooo.\n.ooowhggggggoo..\nooohhgggggggho.o\n.oohggggggggoo.o\n.oohggggggggo...\no.oohggggggoo...\n..ooohgghhoo..h.\n.oo.oohhooo.....\n.....oooo...o...\n..h.ooo..h.h....\n.....o..o......."
+  ],
+  [
+    "a 16x16 pixel art tile",
+    "................\n...........rrrr.\n....r.....rror+.\n...+o....rrorrrr\n...+o...roor++r+\n#..+rorroor++r+.\nrhr++roror++r+~~\n++rr++rrr++++~~~\n.#+r#+++rr++~~~.\n.ro+##rrr++~~...\nror#+#+ror~~....\nr+++r+#+rog~~...\n+~~rr++++rr+~~..\n~.~o++~++~~~~...\n..r+~~~~++~.....\n.~~~....~~~~...."
+  ],
+  [
+    "a 16x16 pixel art tile",
+    ".....g#ggs~~....\n...gggg~~ggg~...\n..ggg######gg#..\n.ggg#######~ggg.\n.ggg########ggg.\n.gg~#######~ggg.\ngggg~######ggggg\nggggg~####~gg~gg\ngggg~####~#ggggg\n#ggggggggggggggs\n.gggggggggggggg.\n.ggggggoggggggg.\n..ggggggggggg#..\n...#gg#++gg~#...\n....#+#.#s++....\n....#+#...+#...."
+  ],
+  [
+    "a 16x16 pixel art tile",
+    "....ww..........\n................\nhh..........~~..\nhhhh............\nhh..............\n......++........\n..~+++++++......\n....++oo+++~....\n..~+++++++....hh\n........++......\n....hh......ww..\n..........wwwwww\n............ww..\n....++..........\n..~++++~....~~..\n....++.........."
+  ]
+]

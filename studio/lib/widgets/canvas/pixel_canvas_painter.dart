@@ -15,8 +15,8 @@ class PixelCanvasPainter extends CustomPainter {
   final double pixelSize;
   final Offset? hoverPixel;
 
-  static const _checkerLight = Color(0xFF3a3a3a);
-  static const _checkerDark = Color(0xFF2a2a2a);
+  static const _checkerLight = Color(0xFF383838);
+  static const _checkerDark = Color(0xFF2c2c2c);
   static const _gridColor = Color(0x30ffffff);
   static const _hoverColor = Color(0x60ffffff);
 
