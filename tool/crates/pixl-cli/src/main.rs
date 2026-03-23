@@ -901,7 +901,7 @@ fn cmd_check_fix(file: &PathBuf) {
             println!("  fixed: '{}' — edge_class generated", name);
             fixed += 1;
         } else {
-            // Warn on mismatch (don't overwrite)
+            // Check for mismatch and auto-update stale edge classes
             let ec = tile_raw.edge_class.as_ref().unwrap();
             let mismatches: Vec<String> = [
                 (&ec.n, &auto.n, "n"),
@@ -917,30 +917,53 @@ fn cmd_check_fix(file: &PathBuf) {
             .collect();
 
             if !mismatches.is_empty() {
+                // Update the stale edge class to match current grid
+                tile_raw.edge_class = Some(pixl_core::types::EdgeClassRaw {
+                    n: auto.n.clone(),
+                    e: auto.e.clone(),
+                    s: auto.s.clone(),
+                    w: auto.w.clone(),
+                });
                 println!(
-                    "  warn: '{}' — edge mismatch: {}",
+                    "  updated: '{}' — edge mismatch fixed: {}",
                     name,
                     mismatches.join(", ")
                 );
+                fixed += 1;
                 warned += 1;
             }
         }
     }
 
     if fixed > 0 {
-        // Append edge_class sections to original source (preserves formatting)
+        // Remove stale edge_class sections from source, then append fresh ones
+        let mut new_source = source.clone();
         let mut appendix = String::new();
+
         for (name, tile_raw) in &pax_file.tile {
             if tile_raw.template.is_some() || tile_raw.grid.is_none() {
                 continue;
             }
-            // Only append for tiles we just fixed (no prior edge_class)
             if let Some(ref ec) = tile_raw.edge_class {
-                // Check if this was in the original source (not our fix)
                 let marker = format!("[tile.{}.edge_class]", name);
-                if source.contains(&marker) {
-                    continue;
+
+                // Remove existing edge_class section if present
+                if let Some(start) = new_source.find(&marker) {
+                    // Find end of section: next [section] or end of file
+                    let after_marker = start + marker.len();
+                    let end = new_source[after_marker..]
+                        .find("\n[")
+                        .map(|pos| after_marker + pos)
+                        .unwrap_or(new_source.len());
+                    // Also trim any leading blank lines before the section
+                    let trimmed_start = new_source[..start]
+                        .rfind(|c: char| c != '\n' && c != '\r')
+                        .map(|pos| pos + 1)
+                        .unwrap_or(start);
+                    new_source = format!("{}{}", &new_source[..trimmed_start], &new_source[end..]);
                 }
+
+                // Append fresh edge_class
                 appendix.push_str(&format!(
                     "\n[tile.{}.edge_class]\nn = \"{}\"\ne = \"{}\"\ns = \"{}\"\nw = \"{}\"\n",
                     name, ec.n, ec.e, ec.s, ec.w
@@ -949,8 +972,8 @@ fn cmd_check_fix(file: &PathBuf) {
         }
 
         if !appendix.is_empty() {
-            let new_source = format!("{}\n{}", source.trim_end(), appendix);
-            if let Err(e) = std::fs::write(file, &new_source) {
+            let final_source = format!("{}\n{}", new_source.trim_end(), appendix);
+            if let Err(e) = std::fs::write(file, &final_source) {
                 eprintln!("error writing {}: {}", file.display(), e);
                 process::exit(1);
             }

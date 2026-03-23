@@ -32,3 +32,7 @@ studio/.flutter-plugins-dependencies
 # Environment
 .env
 .env.local
+training/.venv/
+training/data/
+training/adapters/
+*.venv

@@ -161,6 +161,9 @@ pub struct TileRaw {
     pub edge_class: Option<EdgeClassRaw>,
     #[serde(default)]
     pub tags: Vec<String>,
+    /// Target tilemap layer for AI-driven placement (e.g. "terrain", "walls", "effects").
+    #[serde(default)]
+    pub target_layer: Option<String>,
     #[serde(default = "default_weight")]
     pub weight: f64,
     #[serde(default)]
@@ -225,6 +228,9 @@ pub struct Tile {
     pub auto_rotate: AutoRotate,
     pub edge_class: EdgeClass,
     pub tags: Vec<String>,
+    /// Target tilemap layer for AI-driven placement.
+    /// Values: "background", "terrain", "walls", "platform", "foreground", "effects".
+    pub target_layer: Option<String>,
     pub weight: f64,
     pub palette_swaps: Vec<String>,
     pub cycles: Vec<String>,

@@ -1,0 +1,15 @@
+# LoRA fine-tuning config for mlx-lm
+model: "mlx-community/Qwen2.5-3B-Instruct-4bit"
+train: true
+data: "data"
+adapter_path: "adapters/pixl-lora"
+lora_layers: 16
+lora_rank: 8
+batch_size: 1
+learning_rate: 1e-5
+iters: 7158
+val_batches: 25
+steps_per_eval: 100
+save_every: 200
+max_seq_length: 512
+seed: 42
