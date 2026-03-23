@@ -107,6 +107,32 @@ enum Commands {
         model: String,
     },
 
+    /// Generate a map from a narrative description (or predicate rules)
+    Narrate {
+        /// Path to the .pax file with tileset
+        file: PathBuf,
+
+        /// Map width in tiles
+        #[arg(long, default_value = "12")]
+        width: usize,
+
+        /// Map height in tiles
+        #[arg(long, default_value = "8")]
+        height: usize,
+
+        /// RNG seed
+        #[arg(long, default_value = "42")]
+        seed: u64,
+
+        /// Predicate rules (repeatable). Format: "border:wall", "region:boss:obstacle:3x3:southeast", "path:0,3:11,3"
+        #[arg(long, short)]
+        rule: Vec<String>,
+
+        /// Output PNG path
+        #[arg(long, short)]
+        out: PathBuf,
+    },
+
     /// Generate procedural stamps for a pattern
     GenerateStamps {
         /// Pattern: brick_bond, checkerboard, diagonal, dither_bayer, horizontal_stripe, dots, cross, noise
@@ -210,6 +236,16 @@ fn main() {
         }
         Commands::Blueprint { size, model } => {
             cmd_blueprint(&size, &model);
+        }
+        Commands::Narrate {
+            file,
+            width,
+            height,
+            seed,
+            rule,
+            out,
+        } => {
+            cmd_narrate(&file, width, height, seed, &rule, &out);
         }
         Commands::GenerateStamps {
             pattern,
@@ -555,6 +591,213 @@ fn cmd_preview(file: &PathBuf, tile_name: &str, out: &PathBuf, show_grid: bool) 
         if show_grid { " +grid" } else { "" },
         out.display()
     );
+}
+
+fn cmd_narrate(
+    file: &PathBuf,
+    width: usize,
+    height: usize,
+    seed: u64,
+    rules: &[String],
+    out: &PathBuf,
+) {
+    let (pax_file, palettes) = load_pax(file);
+
+    // Get first palette
+    let palette_name = pax_file
+        .tile
+        .values()
+        .next()
+        .map(|t| t.palette.as_str())
+        .unwrap_or("");
+    let palette = match palettes.get(palette_name) {
+        Some(p) => p,
+        None => {
+            eprintln!("error: no palette found");
+            process::exit(1);
+        }
+    };
+
+    // Build tile edges and affordances from pax file
+    let mut tile_edges = Vec::new();
+    let mut tile_affordances = Vec::new();
+    let mut tile_names_ordered = Vec::new();
+    let mut tile_grids: Vec<Vec<Vec<char>>> = Vec::new();
+
+    for (name, tile_raw) in &pax_file.tile {
+        if tile_raw.template.is_some() || tile_raw.grid.is_none() {
+            continue;
+        }
+        let ec = tile_raw.edge_class.as_ref();
+        tile_edges.push(pixl_wfc::adjacency::TileEdges {
+            name: name.clone(),
+            n: ec.map(|e| e.n.clone()).unwrap_or_default(),
+            e: ec.map(|e| e.e.clone()).unwrap_or_default(),
+            s: ec.map(|e| e.s.clone()).unwrap_or_default(),
+            w: ec.map(|e| e.w.clone()).unwrap_or_default(),
+            weight: tile_raw.weight,
+        });
+        tile_affordances.push(pixl_wfc::semantic::TileAffordance {
+            affordance: tile_raw
+                .semantic
+                .as_ref()
+                .and_then(|s| s.affordance.clone()),
+        });
+        tile_names_ordered.push(name.clone());
+
+        // Parse grid for rendering
+        let size_str = tile_raw.size.as_deref().unwrap_or("16x16");
+        let (w, h) = pixl_core::types::parse_size(size_str).unwrap_or((16, 16));
+        if let Some(ref grid_str) = tile_raw.grid {
+            if let Ok(grid) = pixl_core::grid::parse_grid(grid_str, w, h, palette) {
+                tile_grids.push(grid);
+            } else {
+                tile_grids.push(vec![vec!['.'; w as usize]; h as usize]);
+            }
+        } else {
+            tile_grids.push(vec![vec!['.'; w as usize]; h as usize]);
+        }
+    }
+
+    if tile_edges.is_empty() {
+        eprintln!("error: no tiles with edge classes found");
+        process::exit(1);
+    }
+
+    // Build WFC rules
+    let variant_groups = pax_file
+        .wfc_rules
+        .as_ref()
+        .map(|r| r.variant_groups.clone())
+        .unwrap_or_default();
+    let adj_rules = pixl_wfc::adjacency::AdjacencyRules::build(&tile_edges, &variant_groups);
+
+    // Parse semantic rules
+    let forbids: Vec<pixl_wfc::semantic::SemanticRule> = pax_file
+        .wfc_rules
+        .as_ref()
+        .map(|r| {
+            r.forbids
+                .iter()
+                .filter_map(|s| pixl_wfc::semantic::parse_forbids(s))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let requires: Vec<pixl_wfc::semantic::SemanticRule> = pax_file
+        .wfc_rules
+        .as_ref()
+        .map(|r| {
+            r.requires
+                .iter()
+                .filter_map(|s| pixl_wfc::semantic::parse_requires(s))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let require_boost = pax_file
+        .wfc_rules
+        .as_ref()
+        .map(|r| r.require_boost)
+        .unwrap_or(3.0);
+
+    // Parse predicates from rules
+    let predicates: Vec<pixl_wfc::narrate::Predicate> = rules
+        .iter()
+        .filter_map(|r| pixl_wfc::narrate::parse_predicate(r))
+        .collect();
+
+    if predicates.is_empty() && rules.is_empty() {
+        // Default: border with first obstacle tile
+        eprintln!("hint: no rules provided. Use -r 'border:wall' -r 'region:room:walkable:4x4:center'");
+    }
+
+    let narrate_config = pixl_wfc::narrate::NarrateConfig {
+        width,
+        height,
+        seed,
+        max_retries: 5,
+        predicates,
+    };
+
+    println!("narrate: {}x{} map, seed={}, {} rules", width, height, seed, rules.len());
+
+    match pixl_wfc::narrate::narrate_map(
+        &tile_edges,
+        &tile_affordances,
+        &adj_rules,
+        &forbids,
+        &requires,
+        require_boost,
+        &narrate_config,
+    ) {
+        Ok(result) => {
+            println!(
+                "ok: generated in {} retries, {} pins applied",
+                result.retries, result.pins_applied
+            );
+
+            // Render the map
+            let tile_size = pax_file
+                .tile
+                .values()
+                .next()
+                .and_then(|t| t.size.as_deref())
+                .and_then(|s| pixl_core::types::parse_size(s).ok())
+                .unwrap_or((16, 16));
+
+            let scale = 2u32;
+            let img_w = width as u32 * tile_size.0 * scale;
+            let img_h = height as u32 * tile_size.1 * scale;
+
+            let mut img = image::ImageBuffer::new(img_w, img_h);
+
+            for (ty, row) in result.grid.iter().enumerate() {
+                for (tx, &tile_idx) in row.iter().enumerate() {
+                    if tile_idx < tile_grids.len() {
+                        let tile_img =
+                            pixl_render::renderer::render_grid(&tile_grids[tile_idx], palette, scale);
+                        let ox = tx as u32 * tile_size.0 * scale;
+                        let oy = ty as u32 * tile_size.1 * scale;
+                        for py in 0..tile_img.height() {
+                            for px in 0..tile_img.width() {
+                                let ax = ox + px;
+                                let ay = oy + py;
+                                if ax < img_w && ay < img_h {
+                                    img.put_pixel(ax, ay, *tile_img.get_pixel(px, py));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if let Err(e) = img.save(out) {
+                eprintln!("error: {}", e);
+                process::exit(1);
+            }
+            println!("map -> {}", out.display());
+
+            // Print tile name grid
+            println!();
+            for row in &result.grid {
+                let names: Vec<&str> = row
+                    .iter()
+                    .map(|&idx| {
+                        tile_names_ordered
+                            .get(idx)
+                            .map(|s| s.as_str())
+                            .unwrap_or("?")
+                    })
+                    .collect();
+                println!("  {}", names.join(" "));
+            }
+        }
+        Err(e) => {
+            eprintln!("error: {}", e);
+            process::exit(1);
+        }
+    }
 }
 
 fn cmd_generate_stamps(pattern: &str, size: u32, fg: char, bg: char) {
