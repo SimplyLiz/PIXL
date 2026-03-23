@@ -245,6 +245,96 @@ class CanvasNotifier extends StateNotifier<CanvasState> {
     }
   }
 
+  /// Add a new empty layer above the current active layer.
+  void addLayer(String name, {String? targetLayer}) {
+    final layers = List<PixelLayer>.from(state.layers);
+    final newLayer = PixelLayer(
+      name: name,
+      width: state.width,
+      height: state.height,
+      targetLayer: targetLayer,
+    );
+    layers.insert(state.activeLayerIndex + 1, newLayer);
+    state = state.copyWith(
+      layers: layers,
+      activeLayerIndex: state.activeLayerIndex + 1,
+    );
+    _undoStack.clear();
+    _redoStack.clear();
+  }
+
+  /// Remove a layer by index. Must keep at least 1 layer.
+  void removeLayer(int index) {
+    if (state.layers.length <= 1) return;
+    if (index < 0 || index >= state.layers.length) return;
+    final layers = List<PixelLayer>.from(state.layers)..removeAt(index);
+    var activeIdx = state.activeLayerIndex;
+    if (activeIdx >= layers.length) activeIdx = layers.length - 1;
+    state = state.copyWith(layers: layers, activeLayerIndex: activeIdx);
+    _undoStack.clear();
+    _redoStack.clear();
+  }
+
+  /// Rename a layer.
+  void renameLayer(int index, String name) {
+    if (index < 0 || index >= state.layers.length) return;
+    final layers = List<PixelLayer>.from(state.layers);
+    layers[index] = layers[index].copyWith(name: name);
+    state = state.copyWith(layers: layers);
+  }
+
+  /// Move a layer up (higher z-order).
+  void moveLayerUp(int index) {
+    if (index <= 0 || index >= state.layers.length) return;
+    final layers = List<PixelLayer>.from(state.layers);
+    final layer = layers.removeAt(index);
+    layers.insert(index - 1, layer);
+    state = state.copyWith(
+      layers: layers,
+      activeLayerIndex: state.activeLayerIndex == index
+          ? index - 1
+          : state.activeLayerIndex,
+    );
+  }
+
+  /// Move a layer down (lower z-order).
+  void moveLayerDown(int index) {
+    if (index < 0 || index >= state.layers.length - 1) return;
+    final layers = List<PixelLayer>.from(state.layers);
+    final layer = layers.removeAt(index);
+    layers.insert(index + 1, layer);
+    state = state.copyWith(
+      layers: layers,
+      activeLayerIndex: state.activeLayerIndex == index
+          ? index + 1
+          : state.activeLayerIndex,
+    );
+  }
+
+  /// Set layer opacity (0.0 – 1.0).
+  void setLayerOpacity(int index, double opacity) {
+    if (index < 0 || index >= state.layers.length) return;
+    final layers = List<PixelLayer>.from(state.layers);
+    layers[index] = layers[index].copyWith(opacity: opacity.clamp(0.0, 1.0));
+    state = state.copyWith(layers: layers);
+  }
+
+  /// Set layer blend mode.
+  void setLayerBlendMode(int index, BlendMode mode) {
+    if (index < 0 || index >= state.layers.length) return;
+    final layers = List<PixelLayer>.from(state.layers);
+    layers[index] = layers[index].copyWith(blendMode: mode);
+    state = state.copyWith(layers: layers);
+  }
+
+  /// Set layer target layer role.
+  void setLayerTargetLayer(int index, String? targetLayer) {
+    if (index < 0 || index >= state.layers.length) return;
+    final layers = List<PixelLayer>.from(state.layers);
+    layers[index] = layers[index].copyWith(targetLayer: targetLayer ?? '');
+    state = state.copyWith(layers: layers);
+  }
+
   void setForegroundColor(int index) {
     state = state.copyWith(foregroundColorIndex: index);
   }

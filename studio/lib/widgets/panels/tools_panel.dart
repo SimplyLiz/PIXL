@@ -393,21 +393,57 @@ class _TransparentPainter extends CustomPainter {
 class _LayersSection extends ConsumerWidget {
   const _LayersSection();
 
+  static const _layerRoles = ['background', 'terrain', 'walls', 'platform', 'foreground', 'effects'];
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = ref.watch(canvasProvider);
+    final notifier = ref.read(canvasProvider.notifier);
     final theme = Theme.of(context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('LAYERS', style: theme.textTheme.titleSmall),
+        Row(
+          children: [
+            Text('LAYERS', style: theme.textTheme.titleSmall),
+            const Spacer(),
+            Tooltip(
+              message: 'Add layer',
+              child: InkWell(
+                onTap: () {
+                  final n = cs.layers.length + 1;
+                  notifier.addLayer('Layer $n');
+                },
+                borderRadius: BorderRadius.circular(4),
+                child: const Padding(
+                  padding: EdgeInsets.all(2),
+                  child: Icon(Icons.add, size: 14),
+                ),
+              ),
+            ),
+            Tooltip(
+              message: 'Remove active layer',
+              child: InkWell(
+                onTap: cs.layers.length > 1
+                    ? () => notifier.removeLayer(cs.activeLayerIndex)
+                    : null,
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.all(2),
+                  child: Icon(Icons.remove, size: 14,
+                    color: cs.layers.length > 1 ? null : theme.disabledColor),
+                ),
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 6),
         ...List.generate(cs.layers.length, (i) {
           final layer = cs.layers[i];
           final isActive = i == cs.activeLayerIndex;
           return InkWell(
-            onTap: () => ref.read(canvasProvider.notifier).setActiveLayer(i),
+            onTap: () => notifier.setActiveLayer(i),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
               margin: const EdgeInsets.only(bottom: 2),
@@ -415,20 +451,139 @@ class _LayersSection extends ConsumerWidget {
                 color: isActive ? theme.colorScheme.primary.withValues(alpha: 0.15) : null,
                 borderRadius: BorderRadius.circular(3),
               ),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  InkWell(
-                    onTap: () => ref.read(canvasProvider.notifier).toggleLayerVisibility(i),
-                    child: Icon(
-                      layer.visible ? Icons.visibility : Icons.visibility_off,
-                      size: 14,
-                      color: layer.visible ? null : theme.disabledColor,
-                    ),
+                  Row(
+                    children: [
+                      InkWell(
+                        onTap: () => notifier.toggleLayerVisibility(i),
+                        child: Icon(
+                          layer.visible ? Icons.visibility : Icons.visibility_off,
+                          size: 14,
+                          color: layer.visible ? null : theme.disabledColor,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(layer.name, style: theme.textTheme.bodySmall!.copyWith(
+                          color: isActive ? theme.colorScheme.primary : null,
+                        )),
+                      ),
+                      // Reorder buttons
+                      if (isActive) ...[
+                        InkWell(
+                          onTap: i > 0 ? () => notifier.moveLayerUp(i) : null,
+                          child: Icon(Icons.arrow_upward, size: 10,
+                            color: i > 0 ? null : theme.disabledColor),
+                        ),
+                        InkWell(
+                          onTap: i < cs.layers.length - 1
+                              ? () => notifier.moveLayerDown(i)
+                              : null,
+                          child: Icon(Icons.arrow_downward, size: 10,
+                            color: i < cs.layers.length - 1 ? null : theme.disabledColor),
+                        ),
+                      ],
+                    ],
                   ),
-                  const SizedBox(width: 6),
-                  Text(layer.name, style: theme.textTheme.bodySmall!.copyWith(
-                    color: isActive ? theme.colorScheme.primary : null,
-                  )),
+                  // Layer properties (only for active layer)
+                  if (isActive) ...[
+                    const SizedBox(height: 4),
+                    // Opacity slider
+                    Row(
+                      children: [
+                        Text('Opacity', style: theme.textTheme.bodySmall!.copyWith(fontSize: 9)),
+                        Expanded(
+                          child: SliderTheme(
+                            data: SliderThemeData(
+                              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
+                              trackHeight: 2,
+                              activeTrackColor: theme.colorScheme.primary,
+                              thumbColor: theme.colorScheme.primary,
+                              inactiveTrackColor: theme.dividerColor,
+                            ),
+                            child: Slider(
+                              value: layer.opacity,
+                              onChanged: (v) => notifier.setLayerOpacity(i, v),
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 28,
+                          child: Text(
+                            '${(layer.opacity * 100).round()}%',
+                            style: theme.textTheme.bodySmall!.copyWith(fontSize: 9),
+                          ),
+                        ),
+                      ],
+                    ),
+                    // Blend mode + target layer row
+                    Row(
+                      children: [
+                        // Blend mode
+                        Expanded(
+                          child: PopupMenuButton<BlendMode>(
+                            tooltip: 'Blend mode',
+                            initialValue: layer.blendMode,
+                            onSelected: (mode) => notifier.setLayerBlendMode(i, mode),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(3),
+                                border: Border.all(color: theme.dividerColor),
+                              ),
+                              child: Text(
+                                layer.blendMode.name,
+                                style: theme.textTheme.bodySmall!.copyWith(fontSize: 9),
+                              ),
+                            ),
+                            itemBuilder: (_) => BlendMode.values
+                                .map((m) => PopupMenuItem(
+                                      value: m,
+                                      child: Text(m.name, style: const TextStyle(fontSize: 11)),
+                                    ))
+                                .toList(),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        // Target layer
+                        Expanded(
+                          child: PopupMenuButton<String>(
+                            tooltip: 'Target tilemap layer',
+                            onSelected: (tl) => notifier.setLayerTargetLayer(
+                              i,
+                              tl == 'none' ? null : tl,
+                            ),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(3),
+                                border: Border.all(color: theme.dividerColor),
+                              ),
+                              child: Text(
+                                layer.targetLayer ?? 'layer...',
+                                style: theme.textTheme.bodySmall!.copyWith(
+                                  fontSize: 9,
+                                  color: layer.targetLayer != null ? null : theme.disabledColor,
+                                ),
+                              ),
+                            ),
+                            itemBuilder: (_) => [
+                              const PopupMenuItem(
+                                value: 'none',
+                                child: Text('(none)', style: TextStyle(fontSize: 11)),
+                              ),
+                              ..._layerRoles.map((r) => PopupMenuItem(
+                                    value: r,
+                                    child: Text(r, style: const TextStyle(fontSize: 11)),
+                                  )),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),

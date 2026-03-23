@@ -176,6 +176,11 @@ fn handle_create_tile(state: &Mutex<McpState>, args: &Value) -> Value {
         })
         .unwrap_or_default();
 
+    let target_layer: Option<String> = args
+        .get("target_layer")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
     let edge_class_for_response = edge_class.clone();
 
     st.file.tile.insert(
@@ -193,6 +198,7 @@ fn handle_create_tile(state: &Mutex<McpState>, args: &Value) -> Value {
             template: None,
             edge_class,
             tags,
+            target_layer,
             weight: 1.0,
             palette_swaps: vec![],
             cycles: vec![],
@@ -379,6 +385,7 @@ fn handle_list_tiles(state: &Mutex<McpState>) -> Value {
                 "size": raw.size,
                 "edge_class": raw.edge_class.as_ref().map(|ec| json!({"n": ec.n, "e": ec.e, "s": ec.s, "w": ec.w})),
                 "tags": raw.tags,
+                "target_layer": raw.target_layer,
                 "template": raw.template,
             })
         })
@@ -891,6 +898,7 @@ fn handle_vary_tile(state: &Mutex<McpState>, args: &Value) -> Value {
                     w: auto_edges.w.clone(),
                 }),
                 tags: vec!["variant".to_string(), format!("base:{}", name)],
+                target_layer: None,
                 weight: 1.0,
                 palette_swaps: vec![],
                 cycles: vec![],
@@ -973,6 +981,24 @@ fn handle_generate_context(state: &Mutex<McpState>, args: &Value) -> Value {
         }
     }
 
+    // Build target_layer context — list available layers and existing tile assignments
+    let layer_roles = ["background", "terrain", "walls", "platform", "foreground", "effects"];
+    let mut layer_context = String::from("Available target layers: ");
+    layer_context.push_str(&layer_roles.join(", "));
+    layer_context.push('\n');
+
+    // Show existing tile → layer assignments
+    let mut layer_assignments = String::new();
+    for (name, tile_raw) in &st.file.tile {
+        if let Some(ref tl) = tile_raw.target_layer {
+            layer_assignments.push_str(&format!("  {} → {}\n", name, tl));
+        }
+    }
+    if !layer_assignments.is_empty() {
+        layer_context.push_str("Existing tile layer assignments:\n");
+        layer_context.push_str(&layer_assignments);
+    }
+
     // Build the enriched system prompt
     let system_prompt = format!(
         "You are a pixel art expert generating PAX format tiles.\n\
@@ -983,6 +1009,7 @@ fn handle_generate_context(state: &Mutex<McpState>, args: &Value) -> Value {
          Canvas size: {size_str}\n\
          Type: {tile_type}\n\
          \n\
+         {layer_context}\n\
          Existing tile edge classes:\n\
          {edge_context}\n\
          \n\
@@ -992,7 +1019,8 @@ fn handle_generate_context(state: &Mutex<McpState>, args: &Value) -> Value {
          - Shadows go bottom-right of structures\n\
          - Highlights go top-left of surfaces\n\
          - Grid must be exactly {size_str} characters\n\
-         - For WFC compatibility, edges should match neighboring tiles"
+         - For WFC compatibility, edges should match neighboring tiles\n\
+         - Suggest a target_layer for this tile (background/terrain/walls/platform/foreground/effects)"
     );
 
     // Build the enriched user prompt
@@ -1008,6 +1036,7 @@ fn handle_generate_context(state: &Mutex<McpState>, args: &Value) -> Value {
         "size": size_str,
         "existing_tiles": st.tile_names(),
         "style_latent": style_text,
+        "available_layers": layer_roles,
     })
 }
 

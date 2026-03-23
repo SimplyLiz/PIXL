@@ -35,30 +35,57 @@ enum SymmetryMode {
   both,
 }
 
-/// A single layer of pixel data.
+/// Blend modes for layer compositing.
+enum BlendMode {
+  normal,
+  multiply,
+  screen,
+  add,
+}
+
+/// A single layer of pixel data with properties.
 class PixelLayer {
   PixelLayer({
     required this.name,
     required int width,
     required int height,
     this.visible = true,
+    this.opacity = 1.0,
+    this.blendMode = BlendMode.normal,
+    this.targetLayer,
   }) : pixels = List.filled(width * height, null);
 
   PixelLayer._fromPixels({
     required this.name,
     required List<Color?> source,
     this.visible = true,
+    this.opacity = 1.0,
+    this.blendMode = BlendMode.normal,
+    this.targetLayer,
   }) : pixels = List<Color?>.from(source);
 
   final String name;
   final List<Color?> pixels;
   bool visible;
+  double opacity; // 0.0 – 1.0
+  BlendMode blendMode;
+  /// PAX target layer role for tilemap placement.
+  String? targetLayer;
 
-  PixelLayer copyWith({String? name, bool? visible}) {
+  PixelLayer copyWith({
+    String? name,
+    bool? visible,
+    double? opacity,
+    BlendMode? blendMode,
+    String? targetLayer,
+  }) {
     return PixelLayer._fromPixels(
       name: name ?? this.name,
       source: pixels,
       visible: visible ?? this.visible,
+      opacity: opacity ?? this.opacity,
+      blendMode: blendMode ?? this.blendMode,
+      targetLayer: targetLayer ?? this.targetLayer,
     );
   }
 
@@ -67,6 +94,9 @@ class PixelLayer {
       name: name,
       source: pixels,
       visible: visible,
+      opacity: opacity,
+      blendMode: blendMode,
+      targetLayer: targetLayer,
     );
   }
 }

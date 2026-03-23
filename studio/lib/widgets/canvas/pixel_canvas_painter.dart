@@ -37,15 +37,17 @@ class PixelCanvasPainter extends CustomPainter {
       }
     }
 
-    // Composite layers bottom-up
+    // Composite layers bottom-up with opacity
     final pixelPaint = Paint()..style = PaintingStyle.fill;
     for (final layer in canvasState.layers) {
-      if (!layer.visible) continue;
+      if (!layer.visible || layer.opacity <= 0) continue;
       for (var y = 0; y < h; y++) {
         for (var x = 0; x < w; x++) {
           final color = layer.pixels[y * w + x];
           if (color != null) {
-            pixelPaint.color = color;
+            pixelPaint.color = layer.opacity < 1.0
+                ? color.withValues(alpha: color.a * layer.opacity)
+                : color;
             canvas.drawRect(
               Rect.fromLTWH(x * ps, y * ps, ps, ps),
               pixelPaint,

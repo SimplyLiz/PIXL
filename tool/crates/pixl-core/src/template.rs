@@ -98,6 +98,7 @@ mod tests {
             template: template.map(|s| s.to_string()),
             edge_class: None,
             tags: vec![],
+            target_layer: None,
             weight: 1.0,
             palette_swaps: vec![],
             cycles: vec![],
