@@ -51,6 +51,8 @@ pub fn create_router(state: McpState, inference_config: Option<InferenceConfig>)
         .route("/api/feedback", post(record_feedback))
         .route("/api/feedback/stats", get(feedback_stats))
         .route("/api/feedback/constraints", get(feedback_constraints))
+        .route("/api/training/export", post(export_training))
+        .route("/api/training/stats", get(training_stats))
         .route("/api/tool", post(generic_tool_call))
         .with_state(shared)
 }
@@ -162,6 +164,14 @@ async fn record_feedback(State(state): State<SharedState>, Json(args): Json<Valu
 
 async fn feedback_stats(State(state): State<SharedState>) -> Json<Value> {
     Json(handlers::handle_tool(&state.mcp, "pixl_feedback_stats", &Value::Null))
+}
+
+async fn export_training(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
+    Json(handlers::handle_tool(&state.mcp, "pixl_export_training", &args))
+}
+
+async fn training_stats(State(state): State<SharedState>) -> Json<Value> {
+    Json(handlers::handle_tool(&state.mcp, "pixl_training_stats", &Value::Null))
 }
 
 async fn feedback_constraints(State(state): State<SharedState>) -> Json<Value> {

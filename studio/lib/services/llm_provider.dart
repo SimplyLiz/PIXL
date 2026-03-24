@@ -502,12 +502,16 @@ class LlmService {
   static const _prefOllamaUrl = 'ollama_url';
   static const _prefPixlModel = 'pixl_local_model';
   static const _prefPixlAdapter = 'pixl_local_adapter';
+  static const _prefAutoLearn = 'pixl_auto_learn';
+  static const _prefAutoLearnAsked = 'pixl_auto_learn_asked';
 
   LlmProviderType _provider = LlmProviderType.anthropic;
   String _model = 'claude-sonnet-4-20250514';
   String _ollamaUrl = 'http://localhost:11434';
   String _pixlModel = 'mlx-community/Qwen2.5-3B-Instruct-4bit';
   String _pixlAdapter = '';
+  bool _autoLearn = false;
+  bool _autoLearnAsked = false;
   final Map<LlmProviderType, String> _apiKeys = {};
   final Map<LlmProviderType, List<LlmModel>> _fetchedModels = {};
 
@@ -517,6 +521,8 @@ class LlmService {
   String get pixlModel => _pixlModel;
   String get pixlAdapter => _pixlAdapter;
   bool get hasPixlAdapter => _pixlAdapter.isNotEmpty;
+  bool get autoLearn => _autoLearn;
+  bool get autoLearnAsked => _autoLearnAsked;
   bool get hasApiKey =>
       _provider == LlmProviderType.ollama ||
       _provider == LlmProviderType.pixlLocal ||
@@ -537,6 +543,8 @@ class LlmService {
     _ollamaUrl = prefs.getString(_prefOllamaUrl) ?? _ollamaUrl;
     _pixlModel = prefs.getString(_prefPixlModel) ?? _pixlModel;
     _pixlAdapter = prefs.getString(_prefPixlAdapter) ?? _pixlAdapter;
+    _autoLearn = prefs.getBool(_prefAutoLearn) ?? false;
+    _autoLearnAsked = prefs.getBool(_prefAutoLearnAsked) ?? false;
 
     // Load all API keys
     for (final p in LlmProviderType.values) {
@@ -764,6 +772,18 @@ class LlmService {
     _pixlAdapter = path;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefPixlAdapter, path);
+  }
+
+  Future<void> setAutoLearn(bool enabled) async {
+    _autoLearn = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefAutoLearn, enabled);
+  }
+
+  Future<void> markAutoLearnAsked() async {
+    _autoLearnAsked = true;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefAutoLearnAsked, true);
   }
 
   LlmBackend _createBackend() {

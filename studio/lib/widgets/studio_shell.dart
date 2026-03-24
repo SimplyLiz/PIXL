@@ -10,6 +10,7 @@ import 'panels/chat_panel.dart';
 import 'panels/tools_panel.dart';
 import 'status_bar.dart';
 import 'top_bar.dart';
+import 'training_dialog.dart';
 
 /// The main 3-panel layout: chat | canvas | tools.
 class StudioShell extends ConsumerStatefulWidget {
@@ -34,6 +35,11 @@ class _StudioShellState extends ConsumerState<StudioShell> {
         model: isLocal ? service.pixlModel : null,
         adapter: isLocal && service.hasPixlAdapter ? service.pixlAdapter : null,
       );
+
+      // Show auto-learn opt-in dialog on first launch
+      if (mounted) {
+        AutoLearnOptInDialog.showIfNeeded(context, ref);
+      }
     });
   }
 

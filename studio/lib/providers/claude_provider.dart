@@ -13,6 +13,7 @@ class LlmState {
     this.ollamaModels = const [],
     this.availableModels = const [],
     this.isFetchingModels = false,
+    this.autoLearn = false,
   });
 
   final LlmProviderType provider;
@@ -23,6 +24,7 @@ class LlmState {
   final List<LlmModel> ollamaModels;
   final List<LlmModel> availableModels;
   final bool isFetchingModels;
+  final bool autoLearn;
 
   LlmState copyWith({
     LlmProviderType? provider,
@@ -33,6 +35,7 @@ class LlmState {
     List<LlmModel>? ollamaModels,
     List<LlmModel>? availableModels,
     bool? isFetchingModels,
+    bool? autoLearn,
   }) {
     return LlmState(
       provider: provider ?? this.provider,
@@ -43,6 +46,7 @@ class LlmState {
       ollamaModels: ollamaModels ?? this.ollamaModels,
       availableModels: availableModels ?? this.availableModels,
       isFetchingModels: isFetchingModels ?? this.isFetchingModels,
+      autoLearn: autoLearn ?? this.autoLearn,
     );
   }
 }
@@ -59,6 +63,7 @@ class LlmNotifier extends StateNotifier<LlmState> {
       provider: _service.provider,
       hasApiKey: _service.hasApiKey,
       model: _service.model,
+      autoLearn: _service.autoLearn,
     );
   }
 
@@ -97,6 +102,17 @@ class LlmNotifier extends StateNotifier<LlmState> {
   Future<void> setPixlAdapter(String path) async {
     await _service.setPixlAdapter(path);
   }
+
+  Future<void> setAutoLearn(bool enabled) async {
+    await _service.setAutoLearn(enabled);
+    state = state.copyWith(autoLearn: enabled);
+  }
+
+  Future<void> markAutoLearnAsked() async {
+    await _service.markAutoLearnAsked();
+  }
+
+  bool get autoLearnAsked => _service.autoLearnAsked;
 
   /// Fetch models from the active provider's API and update state.
   Future<void> fetchModels() async {

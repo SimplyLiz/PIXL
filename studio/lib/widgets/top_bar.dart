@@ -13,6 +13,7 @@ import '../theme/studio_theme.dart';
 import 'settings_dialog.dart';
 import 'shortcuts_dialog.dart';
 import 'tilegroup_dialog.dart';
+import 'training_dialog.dart';
 import 'wfc_dialog.dart';
 
 Future<void> _openPaxFile(BuildContext context, WidgetRef ref) async {
@@ -134,6 +135,11 @@ class TopBar extends ConsumerWidget {
             label: 'WFC Map',
             icon: Icons.auto_awesome_mosaic,
             onTap: () => WfcDialog.show(context),
+          ),
+          _BarButton(
+            label: 'Training',
+            icon: Icons.model_training,
+            onTap: () => TrainingDialog.show(context),
           ),
           _BarButton(
             label: 'Settings',

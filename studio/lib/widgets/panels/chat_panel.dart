@@ -263,7 +263,9 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
       );
       final rate = resp['acceptance_rate'];
       final rateStr = rate != null ? ' (${(rate * 100).round()}% acceptance rate)' : '';
-      chat.addAssistantMessage('Accepted **`$_pendingTileName`**.$rateStr');
+      final autoLearn = ref.read(claudeProvider).autoLearn;
+      final learnStr = autoLearn ? ' Saved as training data.' : '';
+      chat.addAssistantMessage('Accepted **`$_pendingTileName`**.$rateStr$learnStr');
       ref.read(backendProvider.notifier).refreshTiles();
     }
     setState(() {
