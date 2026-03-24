@@ -270,11 +270,22 @@ enum Commands {
         /// Optional: pre-load a .pax file
         #[arg(long)]
         file: Option<PathBuf>,
+
+        /// Base model for local inference (e.g. "mlx-community/Qwen2.5-3B-Instruct-4bit")
+        #[arg(long)]
+        model: Option<String>,
+
+        /// Path to LoRA adapter directory (safetensors format)
+        #[arg(long)]
+        adapter: Option<PathBuf>,
+
+        /// Port for the mlx_lm inference sidecar (default: 8099)
+        #[arg(long, default_value = "8099")]
+        inference_port: u16,
     },
 
     /// Start the HTTP API server (for PIXL Studio)
     Serve {
-
         /// Port to listen on
         #[arg(long, default_value = "3742")]
         port: u16,
@@ -282,6 +293,18 @@ enum Commands {
         /// Optional: pre-load a .pax file
         #[arg(long)]
         file: Option<PathBuf>,
+
+        /// Base model for local inference (e.g. "mlx-community/Qwen2.5-3B-Instruct-4bit")
+        #[arg(long)]
+        model: Option<String>,
+
+        /// Path to LoRA adapter directory (safetensors format)
+        #[arg(long)]
+        adapter: Option<PathBuf>,
+
+        /// Port for the mlx_lm inference sidecar (default: 8099)
+        #[arg(long, default_value = "8099")]
+        inference_port: u16,
     },
 }
 
@@ -431,21 +454,51 @@ fn main() {
         } => {
             cmd_corpus(&dir, &pax, &palette, &size, &out, training.as_deref());
         }
-        Commands::Mcp { file } => {
-            cmd_mcp(file.as_deref());
+        Commands::Mcp { file, model, adapter, inference_port } => {
+            let inf = build_inference_config(model, adapter, inference_port);
+            cmd_mcp(file.as_deref(), inf);
         }
-        Commands::Serve { port, file } => {
-            cmd_serve(port, file.as_deref());
+        Commands::Serve { port, file, model, adapter, inference_port } => {
+            let inf = build_inference_config(model, adapter, inference_port);
+            cmd_serve(port, file.as_deref(), inf);
         }
     }
 }
 
+fn build_inference_config(
+    model: Option<String>,
+    adapter: Option<PathBuf>,
+    inference_port: u16,
+) -> Option<pixl_mcp::inference::InferenceConfig> {
+    // Also check env vars as fallback
+    let model = model.or_else(|| std::env::var("PIXL_MODEL").ok());
+    let adapter = adapter.or_else(|| std::env::var("PIXL_ADAPTER").ok().map(PathBuf::from));
+
+    model.map(|m| pixl_mcp::inference::InferenceConfig {
+        model: m,
+        adapter_path: adapter,
+        port: inference_port,
+        ..Default::default()
+    })
+}
+
 #[tokio::main]
-async fn cmd_mcp_async(file: Option<&std::path::Path>) {
-    let result = if let Some(path) = file {
-        pixl_mcp::server::run_stdio_with_file(&path.to_string_lossy()).await
-    } else {
-        pixl_mcp::server::run_stdio().await
+async fn cmd_mcp_async(
+    file: Option<&std::path::Path>,
+    inference: Option<pixl_mcp::inference::InferenceConfig>,
+) {
+    let result = match (file, inference) {
+        (_, Some(config)) => {
+            pixl_mcp::server::run_stdio_with_inference(
+                file.map(|p| p.to_string_lossy().as_ref().to_owned()).as_deref(),
+                config,
+            )
+            .await
+        }
+        (Some(path), None) => {
+            pixl_mcp::server::run_stdio_with_file(&path.to_string_lossy()).await
+        }
+        (None, None) => pixl_mcp::server::run_stdio().await,
     };
 
     if let Err(e) = result {
@@ -454,19 +507,22 @@ async fn cmd_mcp_async(file: Option<&std::path::Path>) {
     }
 }
 
-fn cmd_mcp(file: Option<&std::path::Path>) {
-    cmd_mcp_async(file);
+fn cmd_mcp(
+    file: Option<&std::path::Path>,
+    inference: Option<pixl_mcp::inference::InferenceConfig>,
+) {
+    cmd_mcp_async(file, inference);
 }
 
-fn cmd_serve(port: u16, file: Option<&std::path::Path>) {
+fn cmd_serve(
+    port: u16,
+    file: Option<&std::path::Path>,
+    inference: Option<pixl_mcp::inference::InferenceConfig>,
+) {
     let rt = tokio::runtime::Runtime::new().unwrap();
     rt.block_on(async {
         let state = if let Some(path) = file {
-            let source = std::fs::read_to_string(path).unwrap_or_else(|e| {
-                eprintln!("error: {}", e);
-                process::exit(1);
-            });
-            pixl_mcp::state::McpState::from_source(&source).unwrap_or_else(|e| {
+            pixl_mcp::state::McpState::from_path(path).unwrap_or_else(|e| {
                 eprintln!("error: {}", e);
                 process::exit(1);
             })
@@ -474,7 +530,7 @@ fn cmd_serve(port: u16, file: Option<&std::path::Path>) {
             pixl_mcp::state::McpState::new()
         };
 
-        if let Err(e) = pixl_mcp::http::run_http(state, port).await {
+        if let Err(e) = pixl_mcp::http::run_http(state, port, inference).await {
             eprintln!("server error: {}", e);
             process::exit(1);
         }

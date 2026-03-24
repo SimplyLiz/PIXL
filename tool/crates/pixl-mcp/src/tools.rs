@@ -113,6 +113,14 @@ pub fn tool_definitions() -> Vec<Tool> {
             "pixl_delete_tile",
             "Delete a tile from the session. Args: {name}.",
         ),
+        // ── Local AI Generation ──
+        tool(
+            "pixl_generate_tile",
+            "Generate a tile using the local LoRA-trained model. Args: {name, prompt, size? ('16x16'), \
+             palette? (auto-detected)}. Uses the fine-tuned PAX model to generate a character grid \
+             from a text description, then creates the tile in-session with auto-classified edges \
+             and a preview. Requires local inference to be configured (--model + --adapter flags).",
+        ),
     ]
 }
 

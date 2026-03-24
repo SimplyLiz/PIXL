@@ -1,8 +1,10 @@
+use crate::inference::InferenceConfig;
 use pixl_core::feedback::FeedbackStore;
 use pixl_core::parser::{parse_pax, resolve_all_palettes};
 use pixl_core::style::StyleLatent;
 use pixl_core::types::{Palette, PaxFile};
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 /// In-memory PAX file state for an MCP session.
 /// Tiles are built up incrementally via tool calls.
@@ -12,6 +14,10 @@ pub struct McpState {
     pub refinement_count: HashMap<String, u32>,
     pub style_latent: Option<StyleLatent>,
     pub feedback: FeedbackStore,
+    /// Path to the loaded .pax file, if any. Used for feedback persistence.
+    pub source_path: Option<PathBuf>,
+    /// Local inference configuration (mlx_lm.server + LoRA adapter).
+    pub inference: Option<InferenceConfig>,
 }
 
 impl McpState {
@@ -25,10 +31,12 @@ impl McpState {
             refinement_count: HashMap::new(),
             style_latent: None,
             feedback: FeedbackStore::new(),
+            source_path: None,
+            inference: None,
         }
     }
 
-    /// Load state from a .pax file.
+    /// Load state from a .pax source string.
     pub fn from_source(source: &str) -> Result<Self, String> {
         let file = parse_pax(source).map_err(|e| format!("{}", e))?;
         let palettes = resolve_all_palettes(&file).map_err(|e| format!("{}", e))?;
@@ -38,7 +46,49 @@ impl McpState {
             refinement_count: HashMap::new(),
             style_latent: None,
             feedback: FeedbackStore::new(),
+            source_path: None,
+            inference: None,
         })
+    }
+
+    /// Load state from a .pax file path. Loads feedback from sidecar file.
+    pub fn from_path(path: &std::path::Path) -> Result<Self, String> {
+        let source = std::fs::read_to_string(path)
+            .map_err(|e| format!("cannot read {}: {}", path.display(), e))?;
+        let mut state = Self::from_source(&source)?;
+        state.source_path = Some(path.to_path_buf());
+
+        // Load feedback sidecar if it exists
+        let fb_path = Self::feedback_path(path);
+        if fb_path.exists() {
+            if let Ok(json) = std::fs::read_to_string(&fb_path) {
+                if let Ok(store) = FeedbackStore::from_json(&json) {
+                    state.feedback = store;
+                    eprintln!("loaded {} feedback events from {}",
+                        state.feedback.events().len(), fb_path.display());
+                }
+            }
+        }
+
+        Ok(state)
+    }
+
+    /// Persist feedback to the sidecar JSON file.
+    pub fn save_feedback(&self) {
+        if let Some(ref src) = self.source_path {
+            let fb_path = Self::feedback_path(src);
+            let json = self.feedback.to_json();
+            if let Err(e) = std::fs::write(&fb_path, json) {
+                eprintln!("warning: could not save feedback to {}: {}", fb_path.display(), e);
+            }
+        }
+    }
+
+    fn feedback_path(pax_path: &std::path::Path) -> PathBuf {
+        let mut fb = pax_path.to_path_buf();
+        let stem = fb.file_stem().unwrap_or_default().to_string_lossy().to_string();
+        fb.set_file_name(format!("{}.feedback.json", stem));
+        fb
     }
 
     /// Re-resolve all palettes from current file state.

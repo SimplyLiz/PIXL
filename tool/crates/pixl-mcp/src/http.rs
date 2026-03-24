@@ -1,21 +1,29 @@
 /// HTTP API server for PIXL Studio integration.
 /// Exposes the same handlers as the MCP server over REST endpoints.
 
-use crate::{handlers, state::McpState};
+use crate::{handlers, inference::{InferenceConfig, InferenceServer}, state::McpState};
 use axum::{
     extract::State,
-    http::StatusCode,
     routing::{get, post},
     Json, Router,
 };
 use serde_json::Value;
 use std::sync::{Arc, Mutex};
 
-type SharedState = Arc<Mutex<McpState>>;
+pub struct AppState {
+    pub mcp: Mutex<McpState>,
+    pub inference: tokio::sync::Mutex<Option<InferenceServer>>,
+}
+
+type SharedState = Arc<AppState>;
 
 /// Create the axum router with all endpoints.
-pub fn create_router(state: McpState) -> Router {
-    let shared = Arc::new(Mutex::new(state));
+pub fn create_router(state: McpState, inference_config: Option<InferenceConfig>) -> Router {
+    let inference = inference_config.map(InferenceServer::new);
+    let shared = Arc::new(AppState {
+        mcp: Mutex::new(state),
+        inference: tokio::sync::Mutex::new(inference),
+    });
 
     Router::new()
         .route("/health", get(health))
@@ -34,6 +42,7 @@ pub fn create_router(state: McpState) -> Router {
         .route("/api/sprite/gif", post(render_sprite_gif))
         .route("/api/file", get(get_file))
         .route("/api/generate/context", post(generate_context))
+        .route("/api/generate/tile", post(generate_tile))
         .route("/api/tile/vary", post(vary_tile))
         .route("/api/themes", get(list_themes))
         .route("/api/stamps", get(list_stamps))
@@ -51,47 +60,47 @@ async fn health() -> &'static str {
 }
 
 async fn session_start(State(state): State<SharedState>) -> Json<Value> {
-    Json(handlers::handle_tool(&state, "pixl_session_start", &Value::Null))
+    Json(handlers::handle_tool(&state.mcp, "pixl_session_start", &Value::Null))
 }
 
 async fn get_palette(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
-    Json(handlers::handle_tool(&state, "pixl_get_palette", &args))
+    Json(handlers::handle_tool(&state.mcp, "pixl_get_palette", &args))
 }
 
 async fn create_tile(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
-    Json(handlers::handle_tool(&state, "pixl_create_tile", &args))
+    Json(handlers::handle_tool(&state.mcp, "pixl_create_tile", &args))
 }
 
 async fn render_tile(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
-    Json(handlers::handle_tool(&state, "pixl_render_tile", &args))
+    Json(handlers::handle_tool(&state.mcp, "pixl_render_tile", &args))
 }
 
 async fn delete_tile(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
-    Json(handlers::handle_tool(&state, "pixl_delete_tile", &args))
+    Json(handlers::handle_tool(&state.mcp, "pixl_delete_tile", &args))
 }
 
 async fn check_edge_pair(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
-    Json(handlers::handle_tool(&state, "pixl_check_edge_pair", &args))
+    Json(handlers::handle_tool(&state.mcp, "pixl_check_edge_pair", &args))
 }
 
 async fn list_tiles(State(state): State<SharedState>) -> Json<Value> {
-    Json(handlers::handle_tool(&state, "pixl_list_tiles", &Value::Null))
+    Json(handlers::handle_tool(&state.mcp, "pixl_list_tiles", &Value::Null))
 }
 
 async fn validate(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
-    Json(handlers::handle_tool(&state, "pixl_validate", &args))
+    Json(handlers::handle_tool(&state.mcp, "pixl_validate", &args))
 }
 
 async fn narrate_map(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
-    Json(handlers::handle_tool(&state, "pixl_narrate_map", &args))
+    Json(handlers::handle_tool(&state.mcp, "pixl_narrate_map", &args))
 }
 
 async fn learn_style(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
-    Json(handlers::handle_tool(&state, "pixl_learn_style", &args))
+    Json(handlers::handle_tool(&state.mcp, "pixl_learn_style", &args))
 }
 
 async fn check_style(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
-    Json(handlers::handle_tool(&state, "pixl_check_style", &args))
+    Json(handlers::handle_tool(&state.mcp, "pixl_check_style", &args))
 }
 
 async fn get_blueprint(Json(args): Json<Value>) -> Json<Value> {
@@ -106,50 +115,57 @@ async fn render_sprite_gif(
     State(state): State<SharedState>,
     Json(args): Json<Value>,
 ) -> Json<Value> {
-    Json(handlers::handle_tool(&state, "pixl_render_sprite_gif", &args))
+    Json(handlers::handle_tool(&state.mcp, "pixl_render_sprite_gif", &args))
 }
 
 async fn get_file(State(state): State<SharedState>) -> Json<Value> {
-    Json(handlers::handle_tool(&state, "pixl_get_file", &Value::Null))
+    Json(handlers::handle_tool(&state.mcp, "pixl_get_file", &Value::Null))
 }
 
 async fn generate_context(
     State(state): State<SharedState>,
     Json(args): Json<Value>,
 ) -> Json<Value> {
-    Json(handlers::handle_tool(&state, "pixl_generate_context", &args))
+    Json(handlers::handle_tool(&state.mcp, "pixl_generate_context", &args))
+}
+
+async fn generate_tile(
+    State(state): State<SharedState>,
+    Json(args): Json<Value>,
+) -> Json<Value> {
+    Json(handlers::handle_generate_tile(&state.mcp, &state.inference, &args).await)
 }
 
 async fn list_themes(State(state): State<SharedState>) -> Json<Value> {
-    Json(handlers::handle_tool(&state, "pixl_list_themes", &Value::Null))
+    Json(handlers::handle_tool(&state.mcp, "pixl_list_themes", &Value::Null))
 }
 
 async fn list_stamps(State(state): State<SharedState>) -> Json<Value> {
-    Json(handlers::handle_tool(&state, "pixl_list_stamps", &Value::Null))
+    Json(handlers::handle_tool(&state.mcp, "pixl_list_stamps", &Value::Null))
 }
 
 async fn pack_atlas(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
-    Json(handlers::handle_tool(&state, "pixl_pack_atlas", &args))
+    Json(handlers::handle_tool(&state.mcp, "pixl_pack_atlas", &args))
 }
 
 async fn vary_tile(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
-    Json(handlers::handle_tool(&state, "pixl_vary_tile", &args))
+    Json(handlers::handle_tool(&state.mcp, "pixl_vary_tile", &args))
 }
 
 async fn load_source(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
-    Json(handlers::handle_tool(&state, "pixl_load_source", &args))
+    Json(handlers::handle_tool(&state.mcp, "pixl_load_source", &args))
 }
 
 async fn record_feedback(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
-    Json(handlers::handle_tool(&state, "pixl_record_feedback", &args))
+    Json(handlers::handle_tool(&state.mcp, "pixl_record_feedback", &args))
 }
 
 async fn feedback_stats(State(state): State<SharedState>) -> Json<Value> {
-    Json(handlers::handle_tool(&state, "pixl_feedback_stats", &Value::Null))
+    Json(handlers::handle_tool(&state.mcp, "pixl_feedback_stats", &Value::Null))
 }
 
 async fn feedback_constraints(State(state): State<SharedState>) -> Json<Value> {
-    Json(handlers::handle_tool(&state, "pixl_feedback_constraints", &Value::Null))
+    Json(handlers::handle_tool(&state.mcp, "pixl_feedback_constraints", &Value::Null))
 }
 
 /// Generic tool call endpoint — accepts { "tool": "pixl_xxx", "args": {...} }
@@ -162,15 +178,21 @@ async fn generic_tool_call(
         .and_then(|v| v.as_str())
         .unwrap_or("unknown");
     let args = body.get("args").cloned().unwrap_or(Value::Null);
-    Json(handlers::handle_tool(&state, tool_name, &args))
+
+    if tool_name == "pixl_generate_tile" {
+        return Json(handlers::handle_generate_tile(&state.mcp, &state.inference, &args).await);
+    }
+
+    Json(handlers::handle_tool(&state.mcp, tool_name, &args))
 }
 
 /// Start the HTTP server.
 pub async fn run_http(
     state: McpState,
     port: u16,
+    inference_config: Option<InferenceConfig>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let app = create_router(state);
+    let app = create_router(state, inference_config);
     let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{}", port)).await?;
     eprintln!("pixl http server listening on http://127.0.0.1:{}", port);
     axum::serve(listener, app).await?;

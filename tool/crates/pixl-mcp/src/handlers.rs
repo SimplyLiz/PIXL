@@ -1,3 +1,4 @@
+use crate::inference::InferenceServer;
 use crate::state::McpState;
 use pixl_core::feedback::{FeedbackAction, FeedbackEvent, RejectReason};
 use pixl_core::{blueprint, edges, grid, style::StyleLatent, types::parse_size, validate};
@@ -1355,6 +1356,9 @@ fn handle_record_feedback(state: &Mutex<McpState>, args: &Value) -> Value {
         }
     }
 
+    // Persist to disk
+    st.save_feedback();
+
     let stats = st.feedback.stats();
     json!({
         "ok": true,
@@ -1388,4 +1392,138 @@ fn handle_feedback_constraints(state: &Mutex<McpState>) -> Value {
         "min_style_score": constraints.min_style_score,
         "has_preferred_style": constraints.preferred_style.is_some(),
     })
+}
+
+/// Generate a tile using the local LoRA-powered model (async).
+/// Builds context from session state, sends to mlx_lm.server, parses the
+/// response grid, and creates the tile in-session.
+pub async fn handle_generate_tile(
+    state: &Mutex<McpState>,
+    inference: &tokio::sync::Mutex<Option<InferenceServer>>,
+    args: &Value,
+) -> Value {
+    let prompt = args.get("prompt").and_then(|v| v.as_str()).unwrap_or("");
+    let name = args.get("name").and_then(|v| v.as_str()).unwrap_or("");
+    let size_str = args.get("size").and_then(|v| v.as_str()).unwrap_or("16x16");
+
+    if name.is_empty() {
+        return json!({"ok": false, "error": "name is required"});
+    }
+    if prompt.is_empty() {
+        return json!({"ok": false, "error": "prompt is required"});
+    }
+
+    // Build generation context from session state (sync, hold lock briefly)
+    let context_args = json!({
+        "prompt": prompt,
+        "type": "tile",
+        "size": size_str,
+    });
+    let context = handle_generate_context(state, &context_args);
+
+    let system_prompt = context
+        .get("system_prompt")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let user_prompt = context
+        .get("user_prompt")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
+    // Ensure inference server is running and generate
+    let mut inf_guard = inference.lock().await;
+    let server = match inf_guard.as_mut() {
+        Some(s) => s,
+        None => {
+            return json!({
+                "ok": false,
+                "error": "local inference not configured. Start with --model and --adapter flags.",
+                "hint": "pixl serve --model mlx-community/Qwen2.5-3B-Instruct-4bit --adapter training/adapters/pixl-lora-v2"
+            });
+        }
+    };
+
+    if let Err(e) = server.ensure_running().await {
+        return json!({"ok": false, "error": format!("inference server: {}", e)});
+    }
+
+    let raw_response = match server.generate(system_prompt, user_prompt).await {
+        Ok(r) => r,
+        Err(e) => return json!({"ok": false, "error": format!("generation failed: {}", e)}),
+    };
+    drop(inf_guard);
+
+    // Extract the grid from the response — look for a code block or raw grid lines
+    let grid_str = extract_grid(&raw_response, size_str);
+
+    if grid_str.is_empty() {
+        return json!({
+            "ok": false,
+            "error": "could not parse grid from model response",
+            "raw_response": raw_response,
+        });
+    }
+
+    // Determine the palette to use (first available)
+    let palette_name = {
+        let st = state.lock().unwrap();
+        args.get("palette")
+            .and_then(|v| v.as_str())
+            .map(String::from)
+            .or_else(|| st.palettes.keys().next().cloned())
+            .unwrap_or_default()
+    };
+
+    // Create the tile via the existing handler
+    let create_args = json!({
+        "name": name,
+        "palette": palette_name,
+        "size": size_str,
+        "grid": grid_str,
+    });
+    let mut result = handle_create_tile(state, &create_args);
+
+    // Annotate with generation metadata
+    if let Some(obj) = result.as_object_mut() {
+        obj.insert("generated".to_string(), json!(true));
+        obj.insert("model".to_string(), json!("local-lora"));
+        obj.insert("prompt".to_string(), json!(prompt));
+    }
+
+    result
+}
+
+/// Extract a character grid from the model's raw text response.
+/// Handles code fences, leading/trailing whitespace, and explanatory text.
+fn extract_grid(response: &str, expected_size: &str) -> String {
+    let (w, _h) = parse_size(expected_size).unwrap_or((16, 16));
+    let w = w as usize;
+
+    // Try to find a code block first
+    if let Some(start) = response.find("```") {
+        let after_fence = &response[start + 3..];
+        // Skip optional language tag on the same line
+        let content_start = after_fence.find('\n').map(|i| i + 1).unwrap_or(0);
+        let content = &after_fence[content_start..];
+        if let Some(end) = content.find("```") {
+            let block = content[..end].trim();
+            if !block.is_empty() {
+                return block.to_string();
+            }
+        }
+    }
+
+    // Fallback: find consecutive lines that look like grid rows (length == w, ascii)
+    let mut grid_lines = Vec::new();
+    for line in response.lines() {
+        let trimmed = line.trim();
+        if trimmed.len() == w && trimmed.chars().all(|c| !c.is_whitespace()) {
+            grid_lines.push(trimmed);
+        } else if !grid_lines.is_empty() {
+            // Stop at first non-grid line after we started collecting
+            break;
+        }
+    }
+
+    grid_lines.join("\n")
 }
