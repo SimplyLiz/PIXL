@@ -49,7 +49,7 @@ enum Commands {
         scale: u32,
 
         /// Output PNG path
-        #[arg(long, short)]
+        #[arg(long, short, alias = "output")]
         out: PathBuf,
     },
 
@@ -59,7 +59,7 @@ enum Commands {
         file: PathBuf,
 
         /// Output atlas PNG path
-        #[arg(long, short)]
+        #[arg(long, short, alias = "output")]
         out: PathBuf,
 
         /// Output JSON metadata path
@@ -89,7 +89,7 @@ enum Commands {
         tile: String,
 
         /// Output PNG path
-        #[arg(long, short)]
+        #[arg(long, short, alias = "output")]
         out: PathBuf,
 
         /// Show pixel grid lines
@@ -129,7 +129,7 @@ enum Commands {
         rule: Vec<String>,
 
         /// Output PNG path
-        #[arg(long, short)]
+        #[arg(long, short, alias = "output")]
         out: PathBuf,
     },
 
@@ -151,7 +151,7 @@ enum Commands {
         seed: u64,
 
         /// Output directory for variant PNGs
-        #[arg(long, short)]
+        #[arg(long, short, alias = "output")]
         out: Option<PathBuf>,
     },
 
@@ -205,7 +205,7 @@ enum Commands {
         dither: bool,
 
         /// Output .pax grid to stdout (or --out for PNG preview)
-        #[arg(long, short)]
+        #[arg(long, short, alias = "output")]
         out: Option<PathBuf>,
     },
 
@@ -221,7 +221,7 @@ enum Commands {
         theme: String,
 
         /// Output .pax file path
-        #[arg(long, short)]
+        #[arg(long, short, alias = "output")]
         out: PathBuf,
     },
 
@@ -235,7 +235,7 @@ enum Commands {
         format: String,
 
         /// Output directory
-        #[arg(long, short)]
+        #[arg(long, short, alias = "output")]
         out: PathBuf,
     },
 
@@ -257,7 +257,7 @@ enum Commands {
         size: String,
 
         /// Output .pax file with stamps
-        #[arg(long, short)]
+        #[arg(long, short, alias = "output")]
         out: PathBuf,
 
         /// Also output training pairs JSON for LoRA fine-tuning
@@ -320,7 +320,7 @@ enum ProjectAction {
         theme: Option<String>,
 
         /// Output .pixlproject file
-        #[arg(long, short, default_value = "project.pixlproject")]
+        #[arg(long, short, default_value = "project.pixlproject", alias = "output")]
         out: PathBuf,
     },
 

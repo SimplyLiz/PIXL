@@ -136,58 +136,13 @@ pub fn narrate_map(
     let mut last_contradiction = (0usize, 0usize);
     for retry in 0..=config.max_retries {
         let seed = config.seed + retry as u64;
-        let mut pins: Vec<Pin> = Vec::new();
-
-        // Process predicates into pins
-        for pred in &config.predicates {
-            match pred {
-                Predicate::Border { tile_type } => {
-                    // Find a tile matching the type
-                    if let Some(idx) = find_tile_for_type(tile_type, &name_to_idx, &affordance_to_tiles) {
-                        // Top and bottom rows
-                        for x in 0..config.width {
-                            pins.push(Pin { x, y: 0, tile_idx: idx });
-                            pins.push(Pin { x, y: config.height - 1, tile_idx: idx });
-                        }
-                        // Left and right columns (excluding corners already pinned)
-                        for y in 1..config.height - 1 {
-                            pins.push(Pin { x: 0, y, tile_idx: idx });
-                            pins.push(Pin { x: config.width - 1, y, tile_idx: idx });
-                        }
-                    }
-                }
-
-                Predicate::Region {
-                    tile_type,
-                    min_size,
-                    position,
-                    ..
-                } => {
-                    if let Some(idx) = find_tile_for_type(tile_type, &name_to_idx, &affordance_to_tiles) {
-                        let (bx, by) = position.bias_center();
-                        let cx = (bx * config.width as f64) as usize;
-                        let cy = (by * config.height as f64) as usize;
-
-                        // Place a seed cluster at the biased position
-                        let half_w = min_size.0 / 2;
-                        let half_h = min_size.1 / 2;
-
-                        for dy in 0..min_size.1.min(3) {
-                            for dx in 0..min_size.0.min(3) {
-                                let px = (cx + dx).saturating_sub(half_w).min(config.width - 1);
-                                let py = (cy + dy).saturating_sub(half_h).min(config.height - 1);
-                                pins.push(Pin { x: px, y: py, tile_idx: idx });
-                            }
-                        }
-                    }
-                }
-
-                Predicate::PathRequired { .. } => {
-                    // Path validation happens after WFC
-                }
-            }
-        }
-
+        let pins = build_pins_from_predicates(
+            &config.predicates,
+            &name_to_idx,
+            &affordance_to_tiles,
+            config.width,
+            config.height,
+        );
         let pins_count = pins.len();
 
         // Run WFC
@@ -197,6 +152,7 @@ pub fn narrate_map(
             seed,
             max_retries: 0, // we handle retries ourselves
             weights: weights.clone(),
+            tile_names: tiles.iter().map(|t| t.name.clone()).collect(),
             affordances: affordances.to_vec(),
             forbids_rules: forbids.to_vec(),
             requires_rules: requires.to_vec(),
@@ -245,13 +201,70 @@ pub fn narrate_map(
         }
     }
 
+    // Build diagnostic pins from the last retry's predicates
+    let tile_names: Vec<String> = tiles.iter().map(|t| t.name.clone()).collect();
+    let last_pins = build_pins_from_predicates(
+        &config.predicates,
+        &name_to_idx,
+        &affordance_to_tiles,
+        config.width,
+        config.height,
+    );
+    let diagnostics = wfc::diagnose_wfc_failure(rules, &tile_names, &last_pins, config.width, config.height);
+
     Err(WfcError::ExhaustedRetries {
         retries: config.max_retries,
         last_x: last_contradiction.0,
         last_y: last_contradiction.1,
         compatible_pairs,
         total_pairs,
+        diagnostics,
     })
+}
+
+/// Build pins from predicates (extracted for reuse in diagnostics).
+fn build_pins_from_predicates(
+    predicates: &[Predicate],
+    name_to_idx: &HashMap<&str, usize>,
+    affordance_to_tiles: &HashMap<&str, Vec<usize>>,
+    width: usize,
+    height: usize,
+) -> Vec<Pin> {
+    let mut pins = Vec::new();
+    for pred in predicates {
+        match pred {
+            Predicate::Border { tile_type } => {
+                if let Some(idx) = find_tile_for_type(tile_type, name_to_idx, affordance_to_tiles) {
+                    for x in 0..width {
+                        pins.push(Pin { x, y: 0, tile_idx: idx });
+                        pins.push(Pin { x, y: height - 1, tile_idx: idx });
+                    }
+                    for y in 1..height - 1 {
+                        pins.push(Pin { x: 0, y, tile_idx: idx });
+                        pins.push(Pin { x: width - 1, y, tile_idx: idx });
+                    }
+                }
+            }
+            Predicate::Region { tile_type, min_size, position, .. } => {
+                if let Some(idx) = find_tile_for_type(tile_type, name_to_idx, affordance_to_tiles) {
+                    let (bx, by) = position.bias_center();
+                    let cx = (bx * width as f64) as usize;
+                    let cy = (by * height as f64) as usize;
+                    let half_w = min_size.0 / 2;
+                    let half_h = min_size.1 / 2;
+                    for dy in 0..min_size.1.min(3) {
+                        for dx in 0..min_size.0.min(3) {
+                            let px = (cx + dx).saturating_sub(half_w).min(width - 1);
+                            let py = (cy + dy).saturating_sub(half_h).min(height - 1);
+                            pins.push(Pin { x: px, y: py, tile_idx: idx });
+                        }
+                    }
+                }
+            }
+            Predicate::PathRequired { .. } => {}
+        }
+    }
+    pins
 }
 
 /// Find a tile index matching a type string (tile name or affordance).

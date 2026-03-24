@@ -86,3 +86,110 @@ grid = '''
 ~~~~
 ~+~~
 '''
+
+# --- Starter Tiles ---
+
+[tile.wall_solid]
+palette    = "forest"
+size       = "16x16"
+edge_class = { n = "solid", e = "solid", s = "solid", w = "solid" }
+tags       = ["wall", "hedge"]
+weight     = 1.0
+semantic   = { affordance = "obstacle", collision = "full", tags = { biome = "forest" } }
+grid = '''
+ggGgggGggGggGggg
+gGGgGGgGGgGGgGGg
+GgGGGgGGGgGGGgGG
+gGgggGgggGgggGgg
+ggGgggGggGggGggg
+gGGgGGgGGgGGgGGg
+GgGGGgGGGgGGGgGG
+gGgggGgggGgggGgg
+ggGgggGggGggGggg
+gGGgGGgGGgGGgGGg
+GgGGGgGGGgGGGgGG
+gGgggGgggGgggGgg
+ggGgggGggGggGggg
+gGGgGGgGGgGGgGGg
+GgGGGgGGGgGGGgGG
+gGgggGgggGgggGgg
+'''
+
+[tile.floor_stone]
+palette    = "forest"
+size       = "16x16"
+edge_class = { n = "floor", e = "floor", s = "floor", w = "floor" }
+tags       = ["floor", "path"]
+weight     = 3.0
+semantic   = { affordance = "walkable", collision = "none", tags = { biome = "forest" } }
+grid = '''
+++++++++++++++++
+++++++++++#+++++
+++++#+++++++++++
+++++++++++++++++
+++++++++#+++++++
+++++++++++++++++
++#++++++++++++++
++++++++++++++#++
+++++++++++++++++
+++++++#+++++++++
+++++++++++++++++
+++++++++++++++++
+++#+++++++++++++
+++++++++++#+++++
+++++++++++++++++
+++++++++++++++++
+'''
+
+[tile.wall_floor_n]
+palette    = "forest"
+size       = "16x16"
+edge_class = { n = "solid", e = "solid", s = "floor", w = "solid" }
+tags       = ["transition", "tree_edge"]
+weight     = 1.0
+semantic   = { affordance = "obstacle", collision = "full", tags = { biome = "forest" } }
+grid = '''
+ggGgggGggGggGggg
+gGGgGGgGGgGGgGGg
+GgGGGgGGGgGGGgGG
+gGgggGgggGgggGgg
+ggGgggGggGggGggg
+gGGgGGgGGgGGgGGg
+GgGGGgGGGgGGGgGG
+gGgggGgggGgggGgg
+ggGgggGggGggGggg
+gGg+++++++++gGGg
++++++++++++++++G
+++++++++++++++++
+++++++++++++++++
+++++++++++++++++
+++++++++++++++++
+++++++++++++++++
+'''
+
+[tile.wall_corner_ne]
+palette     = "forest"
+size        = "16x16"
+auto_rotate = "4way"
+edge_class  = { n = "solid", e = "solid", s = "floor", w = "floor" }
+tags        = ["wall", "corner"]
+weight      = 1.0
+semantic    = { affordance = "obstacle", collision = "full", tags = { biome = "forest" } }
+grid = '''
+ggGgggGggGggGggg
+gGGgGGgGGgGGgGGg
+GgGGGgGGGgGGGgGG
+gGgggGgggGgggGgg
+ggGgggGggGggGggg
+gGGgGGgGGgGGgGGg
+GgGGGgGGGgGGGgGG
+gGgggGgggGgggGgg
+++++++++++ggGggg
+++++++++++++gGGg
++++++++++++++gGG
+++++++++++++++gG
++++++++++++++++g
+++++++++++++++++
+++++++++++++++++
+++++++++++++++++
+'''

@@ -88,3 +88,110 @@ grid = '''
 +s++
 ++s+
 '''
+
+# --- Starter Tiles ---
+
+[tile.wall_solid]
+palette    = "dungeon"
+size       = "16x16"
+edge_class = { n = "solid", e = "solid", s = "solid", w = "solid" }
+tags       = ["wall", "interior"]
+weight     = 1.0
+semantic   = { affordance = "obstacle", collision = "full", tags = { biome = "dungeon" } }
+grid = '''
+################
+##++##++##++####
+#+++++++++++++##
+##++########++##
+################
+##++++++++####++
+#++++##+++++++++
+##++##++##++####
+################
+##++##++########
+#+++++++++++++##
+##++##++##++####
+################
+##++##++##++####
+#+++++++++++++##
+################
+'''
+
+[tile.floor_stone]
+palette    = "dungeon"
+size       = "16x16"
+edge_class = { n = "floor", e = "floor", s = "floor", w = "floor" }
+tags       = ["floor", "interior"]
+weight     = 3.0
+semantic   = { affordance = "walkable", collision = "none", tags = { biome = "dungeon" } }
+grid = '''
+++++++++++++++++
++++++++++++s++++
+++++s+++++++++++
+++++++++++++++++
+++++++++s+++++++
+++++++++++++++++
++s++++++++++++++
++++++++++++++s++
+++++++++++++++++
+++++++s+++++++++
+++++++++++++++++
+++++++++++++++++
+++s+++++++++++++
+++++++++++s+++++
+++++++++++++++++
+++++++++++++++++
+'''
+
+[tile.wall_floor_n]
+palette    = "dungeon"
+size       = "16x16"
+edge_class = { n = "solid", e = "solid", s = "floor", w = "solid" }
+tags       = ["transition", "wall_base"]
+weight     = 1.0
+semantic   = { affordance = "obstacle", collision = "full", tags = { biome = "dungeon" } }
+grid = '''
+################
+################
+################
+################
+################
+##++##++##++####
+#+++++++++++++##
+##++##++##++####
+################
+###+++++++++####
+++++++++++++++##
+++++++++++++++++
+++++++++++++++++
+++++++++++++++++
+++++++++++++++++
+++++++++++++++++
+'''
+
+[tile.wall_corner_ne]
+palette     = "dungeon"
+size        = "16x16"
+auto_rotate = "4way"
+edge_class  = { n = "solid", e = "solid", s = "floor", w = "floor" }
+tags        = ["wall", "corner"]
+weight      = 1.0
+semantic    = { affordance = "obstacle", collision = "full", tags = { biome = "dungeon" } }
+grid = '''
+################
+################
+################
+################
+################
+################
+################
+################
+++++++++++######
+++++++++++++####
++++++++++++++###
+++++++++++++++##
++++++++++++++++#
+++++++++++++++++
+++++++++++++++++
+++++++++++++++++
+'''

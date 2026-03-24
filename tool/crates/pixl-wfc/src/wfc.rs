@@ -9,13 +9,14 @@ pub enum WfcError {
     #[error("contradiction at ({x}, {y}): no valid tiles remaining")]
     Contradiction { x: usize, y: usize },
 
-    #[error("WFC failed after {retries} retries (last contradiction at ({last_x}, {last_y}), {compatible_pairs} compatible tile pairs out of {total_pairs} possible)")]
+    #[error("WFC failed after {retries} retries (last contradiction at ({last_x}, {last_y}), {compatible_pairs} compatible tile pairs out of {total_pairs} possible)\n{}", diagnostics.join("\n"))]
     ExhaustedRetries {
         retries: u32,
         last_x: usize,
         last_y: usize,
         compatible_pairs: usize,
         total_pairs: usize,
+        diagnostics: Vec<String>,
     },
 
     #[error("empty tileset")]
@@ -38,6 +39,7 @@ pub struct WfcConfig {
     pub seed: u64,
     pub max_retries: u32,
     pub weights: Vec<f64>,
+    pub tile_names: Vec<String>,
     pub affordances: Vec<TileAffordance>,
     pub forbids_rules: Vec<SemanticRule>,
     pub requires_rules: Vec<SemanticRule>,
@@ -95,12 +97,16 @@ pub fn run_wfc(
         }
     }
 
+    // Build diagnostics from tile names and pin info
+    let diagnostics = diagnose_wfc_failure(rules, &config.tile_names, pins, config.width, config.height);
+
     Err(WfcError::ExhaustedRetries {
         retries: config.max_retries,
         last_x: last_contradiction.0,
         last_y: last_contradiction.1,
         compatible_pairs,
         total_pairs,
+        diagnostics,
     })
 }
 
@@ -373,6 +379,138 @@ fn propagate(
     Ok(())
 }
 
+/// Diagnose why WFC failed. Returns human-readable diagnostic lines.
+///
+/// Analyzes: which tiles are isolated (no neighbors in some direction),
+/// which pins create unsatisfiable constraints, and what edge classes
+/// are missing from the tileset.
+pub fn diagnose_wfc_failure(
+    rules: &AdjacencyRules,
+    tile_names: &[String],
+    pins: &[Pin],
+    width: usize,
+    height: usize,
+) -> Vec<String> {
+    use std::collections::HashSet;
+    let mut diags = Vec::new();
+    let n = rules.num_tiles();
+
+    // 1. Find isolated tiles: tiles with zero compatible neighbors in some direction
+    let mut isolated = Vec::new();
+    for idx in 0..n {
+        for dir in Direction::all() {
+            if rules.compatible(idx, dir).count_ones(..) == 0 {
+                let name = tile_names.get(idx).map(|s| s.as_str()).unwrap_or("?");
+                isolated.push(format!(
+                    "  tile '{}' has NO compatible neighbor to the {:?}",
+                    name, dir
+                ));
+            }
+        }
+    }
+    if !isolated.is_empty() {
+        diags.push("Isolated tiles (no valid neighbor in at least one direction):".to_string());
+        diags.extend(isolated);
+    }
+
+    // 2. Analyze pins: which tiles are pinned and what they require from neighbors
+    if !pins.is_empty() {
+        let mut pin_issues = Vec::new();
+        for pin in pins {
+            let name = tile_names.get(pin.tile_idx).map(|s| s.as_str()).unwrap_or("?");
+            let is_border = pin.x == 0 || pin.y == 0 || pin.x == width - 1 || pin.y == height - 1;
+            let is_corner = (pin.x == 0 || pin.x == width - 1) && (pin.y == 0 || pin.y == height - 1);
+
+            // Check interior-facing directions for compatibility
+            let dirs_to_check: Vec<Direction> = Direction::all()
+                .iter()
+                .filter(|dir| {
+                    let (dx, dy) = dir.delta();
+                    let nx = pin.x as i32 + dx;
+                    let ny = pin.y as i32 + dy;
+                    nx >= 0 && ny >= 0 && (nx as usize) < width && (ny as usize) < height
+                })
+                .copied()
+                .collect();
+
+            for dir in &dirs_to_check {
+                let compat = rules.compatible(pin.tile_idx, *dir);
+                // Check if any compatible tile is also compatible with what other pins demand
+                let compat_count = compat.count_ones(..);
+                if compat_count == 0 {
+                    pin_issues.push(format!(
+                        "  pin '{}' at ({},{}) needs a {:?} neighbor but no tile is compatible",
+                        name, pin.x, pin.y, dir
+                    ));
+                } else if is_corner || is_border {
+                    // Check if any compatible neighbor can also satisfy the adjacent pin
+                    let (dx, dy) = dir.delta();
+                    let nx = (pin.x as i32 + dx) as usize;
+                    let ny = (pin.y as i32 + dy) as usize;
+                    // Find if this neighbor cell is also pinned
+                    let neighbor_pin = pins.iter().find(|p| p.x == nx && p.y == ny);
+                    if let Some(np) = neighbor_pin {
+                        let opp = dir.opposite();
+                        let np_compat = rules.compatible(np.tile_idx, opp);
+                        // The neighbor must be compatible with BOTH pins
+                        let mut shared = compat.clone();
+                        shared.intersect_with(np_compat);
+                        if shared.count_ones(..) == 0 {
+                            let np_name = tile_names.get(np.tile_idx).map(|s| s.as_str()).unwrap_or("?");
+                            pin_issues.push(format!(
+                                "  pin '{}' at ({},{}) and pin '{}' at ({},{}) are adjacent but have no compatible tile between them",
+                                name, pin.x, pin.y, np_name, np.x, np.y
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+
+        if !pin_issues.is_empty() {
+            diags.push("Pin constraint issues:".to_string());
+            diags.extend(pin_issues);
+        }
+
+        // 3. Summarize: count pinned vs total cells
+        let total_cells = width * height;
+        let pinned_cells: HashSet<(usize, usize)> = pins.iter().map(|p| (p.x, p.y)).collect();
+        let pinned_pct = (pinned_cells.len() * 100) / total_cells;
+        if pinned_pct > 40 {
+            diags.push(format!(
+                "High pin density: {}% of cells are pinned ({}/{}). Try a larger map or fewer constraints.",
+                pinned_pct, pinned_cells.len(), total_cells
+            ));
+        }
+    }
+
+    // 4. Connectivity summary
+    let mut edge_pairs: std::collections::HashMap<(String, String), usize> = std::collections::HashMap::new();
+    for idx in 0..n {
+        for dir in Direction::all() {
+            let count = rules.compatible(idx, dir).count_ones(..);
+            let name = tile_names.get(idx).map(|s| s.as_str()).unwrap_or("?");
+            let key = (name.to_string(), format!("{:?}", dir));
+            edge_pairs.insert(key, count);
+        }
+    }
+    let poorly_connected: Vec<_> = edge_pairs
+        .iter()
+        .filter(|(_, count)| **count == 1) // only self-compatible
+        .map(|((name, dir), _)| format!("  '{}' {:?}: only 1 option", name, dir))
+        .collect();
+    if !poorly_connected.is_empty() {
+        diags.push("Poorly connected tiles (only 1 compatible neighbor):".to_string());
+        diags.extend(poorly_connected);
+    }
+
+    if diags.is_empty() {
+        diags.push("hint: try adding transition tiles with mixed edge classes, or increase max_retries.".to_string());
+    }
+
+    diags
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -421,6 +559,7 @@ mod tests {
             seed: 42,
             max_retries: 5,
             weights,
+            tile_names: vec!["wall".to_string(), "floor".to_string()],
             affordances,
             forbids_rules: vec![],
             requires_rules: vec![],
@@ -450,6 +589,7 @@ mod tests {
             seed: 123,
             max_retries: 5,
             weights: weights.clone(),
+            tile_names: vec!["wall".to_string(), "floor".to_string()],
             affordances: affordances.clone(),
             forbids_rules: vec![],
             requires_rules: vec![],
@@ -461,6 +601,7 @@ mod tests {
             seed: 123,
             max_retries: 5,
             weights,
+            tile_names: vec!["wall".to_string(), "floor".to_string()],
             affordances,
             forbids_rules: vec![],
             requires_rules: vec![],
@@ -483,6 +624,7 @@ mod tests {
             seed: 42,
             max_retries: 5,
             weights,
+            tile_names: vec!["wall".to_string(), "floor".to_string()],
             affordances,
             forbids_rules: vec![],
             requires_rules: vec![],
@@ -520,6 +662,7 @@ mod tests {
             seed: 42,
             max_retries: 5,
             weights,
+            tile_names: vec!["wall".to_string(), "floor".to_string()],
             affordances,
             forbids_rules: vec![],
             requires_rules: vec![],

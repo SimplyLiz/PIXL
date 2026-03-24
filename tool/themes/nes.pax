@@ -43,3 +43,78 @@ w+++
 ++++
 +++.
 '''
+
+# --- Starter Tiles ---
+
+[tile.wall_solid]
+palette    = "nes"
+size       = "8x8"
+edge_class = { n = "solid", e = "solid", s = "solid", w = "solid" }
+tags       = ["wall"]
+weight     = 1.0
+semantic   = { affordance = "obstacle", collision = "full" }
+grid = '''
+.#.#.#.#
+#++##++#
+.#.#.#.#
+#++##++#
+.#.#.#.#
+#++##++#
+.#.#.#.#
+#++##++#
+'''
+
+[tile.floor_stone]
+palette    = "nes"
+size       = "8x8"
+edge_class = { n = "floor", e = "floor", s = "floor", w = "floor" }
+tags       = ["floor"]
+weight     = 3.0
+semantic   = { affordance = "walkable", collision = "none" }
+grid = '''
+++w+++w+
+++++++++
++w+++w++
+++++++++
+++w+++w+
+++++++++
++w+++w++
+++++++++
+'''
+
+[tile.wall_floor_n]
+palette    = "nes"
+size       = "8x8"
+edge_class = { n = "solid", e = "solid", s = "floor", w = "solid" }
+tags       = ["transition"]
+weight     = 1.0
+semantic   = { affordance = "obstacle", collision = "full" }
+grid = '''
+.#.#.#.#
+#++##++#
+.#.#.#.#
+#++##++#
+.#++++++
+++++++++
++w+++w++
+++++++++
+'''
+
+[tile.wall_corner_ne]
+palette     = "nes"
+size        = "8x8"
+auto_rotate = "4way"
+edge_class  = { n = "solid", e = "solid", s = "floor", w = "floor" }
+tags        = ["wall", "corner"]
+weight      = 1.0
+semantic    = { affordance = "obstacle", collision = "full" }
+grid = '''
+.#.#.#.#
+#++##++#
+.#.#.#.#
+#++##++#
+++++.#.#
+++++#++#
++w++++++
+++++++++
+'''
