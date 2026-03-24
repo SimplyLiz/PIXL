@@ -375,9 +375,28 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> {
                         ),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text(m.label, style: theme.textTheme.bodySmall!.copyWith(
-                            color: isSelected ? theme.colorScheme.primary : null,
-                          )),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(m.label, style: theme.textTheme.bodySmall!.copyWith(
+                                color: isSelected ? theme.colorScheme.primary : null,
+                              )),
+                              const SizedBox(height: 2),
+                              Row(
+                                children: [
+                                  _capBadge(m.costLabel, _costColor(m.cost), theme),
+                                  if (m.contextLabel.isNotEmpty)
+                                    _capBadge(m.contextLabel, theme.dividerColor, theme),
+                                  if (m.vision)
+                                    _capBadge('vision', const Color(0xFF6a1b9a), theme),
+                                  if (m.thinking)
+                                    _capBadge('thinking', const Color(0xFF0277bd), theme),
+                                  if (m.local)
+                                    _capBadge('local', const Color(0xFF2e7d32), theme),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                         if (isOllama)
                           InkWell(
@@ -513,4 +532,28 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> {
     LlmProviderType.gemini => 'AIza...',
     LlmProviderType.ollama => '',
   };
+
+  Color _costColor(ModelCost cost) => switch (cost) {
+    ModelCost.free => const Color(0xFF2e7d32),
+    ModelCost.cheap => const Color(0xFF558b2f),
+    ModelCost.medium => const Color(0xFFf9a825),
+    ModelCost.high => const Color(0xFFe65100),
+  };
+
+  Widget _capBadge(String text, Color color, ThemeData theme) {
+    return Container(
+      margin: const EdgeInsets.only(right: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(3),
+        border: Border.all(color: color.withValues(alpha: 0.4), width: 0.5),
+      ),
+      child: Text(text, style: TextStyle(
+        fontSize: 9,
+        color: color,
+        fontWeight: FontWeight.w600,
+      )),
+    );
+  }
 }

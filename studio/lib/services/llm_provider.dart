@@ -44,7 +44,8 @@ enum LlmProviderType {
   anthropic('Anthropic (Claude)'),
   openai('OpenAI (GPT)'),
   gemini('Google (Gemini)'),
-  ollama('Ollama (Local)');
+  ollama('Ollama (Local)'),
+  pixlLocal('PIXL LoRA (On-Device)');
 
   const LlmProviderType(this.displayName);
   final String displayName;
@@ -52,40 +53,68 @@ enum LlmProviderType {
 
 // ── Model definitions ──────────────────────────────────────
 
+enum ModelCost { free, cheap, medium, high }
+
 class LlmModel {
-  const LlmModel(this.id, this.label);
+  const LlmModel(this.id, this.label, {
+    this.contextLength = 0,
+    this.vision = false,
+    this.thinking = false,
+    this.cost = ModelCost.medium,
+    this.local = false,
+    this.parameterSize = '',
+  });
   final String id;
   final String label;
+  final int contextLength; // max input tokens, 0 = unknown
+  final bool vision;
+  final bool thinking;
+  final ModelCost cost;
+  final bool local;
+  final String parameterSize; // e.g. "7B", "70B" (Ollama)
+
+  String get contextLabel {
+    if (contextLength <= 0) return '';
+    if (contextLength >= 1000000) return '${contextLength ~/ 1000000}M';
+    return '${contextLength ~/ 1000}k';
+  }
+
+  String get costLabel => switch (cost) {
+    ModelCost.free => 'Free',
+    ModelCost.cheap => '\$',
+    ModelCost.medium => '\$\$',
+    ModelCost.high => '\$\$\$',
+  };
 }
 
 const anthropicFallbackModels = [
-  LlmModel('claude-sonnet-4-20250514', 'Sonnet 4 (recommended)'),
-  LlmModel('claude-haiku-4-5-20251001', 'Haiku 4.5 (fast)'),
-  LlmModel('claude-opus-4-6-20250527', 'Opus 4.6 (most capable)'),
+  LlmModel('claude-sonnet-4-20250514', 'Sonnet 4', contextLength: 200000, vision: true, thinking: true, cost: ModelCost.medium),
+  LlmModel('claude-haiku-4-5-20251001', 'Haiku 4.5', contextLength: 200000, vision: true, cost: ModelCost.cheap),
+  LlmModel('claude-opus-4-6-20250527', 'Opus 4.6', contextLength: 200000, vision: true, thinking: true, cost: ModelCost.high),
 ];
 
 const openaiFallbackModels = [
-  LlmModel('gpt-4o', 'GPT-4o (recommended)'),
-  LlmModel('gpt-4o-mini', 'GPT-4o Mini (fast)'),
-  LlmModel('o3-mini', 'o3-mini (reasoning)'),
+  LlmModel('gpt-4o', 'GPT-4o', contextLength: 128000, vision: true, cost: ModelCost.high),
+  LlmModel('gpt-4o-mini', 'GPT-4o Mini', contextLength: 128000, vision: true, cost: ModelCost.cheap),
+  LlmModel('o3-mini', 'o3-mini', contextLength: 200000, thinking: true, cost: ModelCost.medium),
 ];
 
 const geminiFallbackModels = [
-  LlmModel('gemini-2.5-flash', 'Gemini 2.5 Flash (recommended)'),
-  LlmModel('gemini-2.5-pro', 'Gemini 2.5 Pro'),
-  LlmModel('gemini-2.0-flash', 'Gemini 2.0 Flash (fast)'),
+  LlmModel('gemini-2.5-flash', 'Gemini 2.5 Flash', contextLength: 1000000, vision: true, thinking: true, cost: ModelCost.cheap),
+  LlmModel('gemini-2.5-pro', 'Gemini 2.5 Pro', contextLength: 1000000, vision: true, thinking: true, cost: ModelCost.medium),
+  LlmModel('gemini-2.0-flash', 'Gemini 2.0 Flash', contextLength: 1000000, vision: true, cost: ModelCost.cheap),
 ];
 
 /// Curated suggestions for Ollama models users might want to pull.
 const ollamaSuggestions = [
-  LlmModel('llama3.2', 'Llama 3.2 3B'),
-  LlmModel('llama3.1:8b', 'Llama 3.1 8B'),
-  LlmModel('qwen3:8b', 'Qwen 3 8B'),
-  LlmModel('gemma3:4b', 'Gemma 3 4B'),
-  LlmModel('mistral', 'Mistral 7B'),
-  LlmModel('deepseek-coder:6.7b', 'DeepSeek Coder 6.7B'),
-  LlmModel('phi3', 'Phi-3 Mini'),
-  LlmModel('codellama:7b', 'Code Llama 7B'),
+  LlmModel('llama3.2', 'Llama 3.2 3B', cost: ModelCost.free, local: true, parameterSize: '3B'),
+  LlmModel('llama3.1:8b', 'Llama 3.1 8B', cost: ModelCost.free, local: true, parameterSize: '8B'),
+  LlmModel('qwen3:8b', 'Qwen 3 8B', thinking: true, cost: ModelCost.free, local: true, parameterSize: '8B'),
+  LlmModel('gemma3:4b', 'Gemma 3 4B', vision: true, cost: ModelCost.free, local: true, parameterSize: '4B'),
+  LlmModel('mistral', 'Mistral 7B', cost: ModelCost.free, local: true, parameterSize: '7B'),
+  LlmModel('deepseek-coder:6.7b', 'DeepSeek Coder 6.7B', cost: ModelCost.free, local: true, parameterSize: '6.7B'),
+  LlmModel('phi3', 'Phi-3 Mini', cost: ModelCost.free, local: true, parameterSize: '3.8B'),
+  LlmModel('codellama:7b', 'Code Llama 7B', cost: ModelCost.free, local: true, parameterSize: '7B'),
 ];
 
 /// Fallback if Ollama is unreachable — empty list means "connect to see models".
@@ -351,7 +380,11 @@ class OllamaModelInfo {
 
   LlmModel toLlmModel() {
     final label = parameterSize.isNotEmpty ? '$name ($parameterSize)' : name;
-    return LlmModel(name, label);
+    return LlmModel(name, label,
+      cost: ModelCost.free,
+      local: true,
+      parameterSize: parameterSize,
+    );
   }
 }
 
@@ -539,7 +572,7 @@ class LlmService {
     final key = _apiKeys[LlmProviderType.anthropic];
     if (key == null || key.isEmpty) return [];
     final resp = await http.get(
-      Uri.parse('https://api.anthropic.com/v1/models'),
+      Uri.parse('https://api.anthropic.com/v1/models?limit=100'),
       headers: {
         'x-api-key': key,
         'anthropic-version': '2023-06-01',
@@ -553,9 +586,20 @@ class LlmService {
       final id = item['id'] as String? ?? '';
       final displayName = item['display_name'] as String? ?? id;
       if (id.isEmpty) continue;
-      // Skip batch-only, deprecated, or non-chat models
       if (id.contains('batch') || id.contains('deprecated')) continue;
-      models.add(LlmModel(id, displayName));
+      final caps = item['capabilities'] as Map<String, dynamic>? ?? {};
+      final thinkingCap = caps['thinking'] as Map<String, dynamic>?;
+      final imageCap = caps['image_input'] as Map<String, dynamic>?;
+      final maxInput = item['max_input_tokens'] as int? ?? 0;
+      final idLower = id.toLowerCase();
+      models.add(LlmModel(id, displayName,
+        contextLength: maxInput,
+        vision: imageCap?['supported'] == true,
+        thinking: thinkingCap?['supported'] == true,
+        cost: idLower.contains('opus') ? ModelCost.high
+            : idLower.contains('haiku') ? ModelCost.cheap
+            : ModelCost.medium,
+      ));
     }
     return models;
   }
@@ -570,8 +614,8 @@ class LlmService {
     if (resp.statusCode != 200) return [];
     final json = jsonDecode(resp.body) as Map<String, dynamic>;
     final data = json['data'] as List? ?? [];
-    final chatPrefixes = ['gpt-4', 'gpt-3.5', 'o1', 'o3', 'o4'];
-    final skipPrefixes = ['whisper', 'dall-e', 'tts', 'embedding', 'text-embedding'];
+    final chatPrefixes = ['gpt-4', 'gpt-3.5', 'o1', 'o3', 'o4', 'chatgpt'];
+    final skipPrefixes = ['whisper', 'dall-e', 'tts', 'embedding', 'text-embedding', 'davinci', 'babbage'];
     final models = <LlmModel>[];
     for (final item in data) {
       final id = item['id'] as String? ?? '';
@@ -579,10 +623,40 @@ class LlmService {
       final lower = id.toLowerCase();
       if (skipPrefixes.any((s) => lower.contains(s))) continue;
       if (!chatPrefixes.any((p) => lower.startsWith(p))) continue;
-      models.add(LlmModel(id, id));
+      final isReasoning = lower.startsWith('o1') || lower.startsWith('o3') || lower.startsWith('o4');
+      final isMini = lower.contains('mini');
+      final hasVision = lower.contains('gpt-4o') || lower.contains('gpt-4-turbo') || lower.contains('chatgpt');
+      final ctxLen = isReasoning ? 200000
+          : lower.contains('gpt-3.5') ? 16385
+          : 128000;
+      models.add(LlmModel(id, id,
+        contextLength: ctxLen,
+        vision: hasVision,
+        thinking: isReasoning,
+        cost: isMini ? ModelCost.cheap
+            : isReasoning ? ModelCost.high
+            : lower.contains('gpt-4o') ? ModelCost.high
+            : lower.contains('gpt-3.5') ? ModelCost.cheap
+            : ModelCost.medium,
+      ));
     }
-    // Sort: newest/best first — rough heuristic by name
-    models.sort((a, b) => b.id.compareTo(a.id));
+    // Sort: reasoning first, then gpt-4o, then rest
+    int priority(String id) {
+      if (id.startsWith('o4')) return 0;
+      if (id.startsWith('o3')) return 1;
+      if (id.startsWith('o1')) return 2;
+      if (id.startsWith('gpt-4o') && !id.contains('mini')) return 3;
+      if (id.startsWith('chatgpt')) return 4;
+      if (id.contains('mini')) return 5;
+      if (id.startsWith('gpt-4')) return 6;
+      return 7;
+    }
+    models.sort((a, b) {
+      final pa = priority(a.id);
+      final pb = priority(b.id);
+      if (pa != pb) return pa.compareTo(pb);
+      return b.id.compareTo(a.id);
+    });
     return models;
   }
 
@@ -590,7 +664,7 @@ class LlmService {
     final key = _apiKeys[LlmProviderType.gemini];
     if (key == null || key.isEmpty) return [];
     final resp = await http.get(
-      Uri.parse('https://generativelanguage.googleapis.com/v1beta/models?key=$key'),
+      Uri.parse('https://generativelanguage.googleapis.com/v1beta/models?key=$key&pageSize=100'),
     ).timeout(const Duration(seconds: 5));
     if (resp.statusCode != 200) return [];
     final json = jsonDecode(resp.body) as Map<String, dynamic>;
@@ -604,7 +678,15 @@ class LlmService {
           [];
       if (name.isEmpty) continue;
       if (!methods.contains('generateContent')) continue;
-      models.add(LlmModel(name, displayName));
+      final inputLimit = item['inputTokenLimit'] as int? ?? 0;
+      final hasThinking = item['thinking'] == true;
+      final nameLower = name.toLowerCase();
+      models.add(LlmModel(name, displayName,
+        contextLength: inputLimit,
+        vision: true, // all Gemini generateContent models support vision
+        thinking: hasThinking || nameLower.contains('2.5'),
+        cost: nameLower.contains('pro') ? ModelCost.medium : ModelCost.cheap,
+      ));
     }
     return models;
   }
