@@ -1725,6 +1725,8 @@ Excluded: `pixl-mcp`, `pixl-cli` (not applicable to WASM).
 | V1.5 Narrate Pipeline | DONE | `pixl narrate` / `pixl_narrate_map` |
 | Studio Integration | DONE | generate/context, pixl_backend.dart |
 | MCP Tool Descriptions | DONE | 19 tools with LLM-optimized descriptions |
+| WASM Playground | DONE | 8 wasm-bindgen exports, live PAX editor in browser |
+| Dogfood Fixes | DONE | 10 bugs found + fixed from first real usage session |
 
 ### Remaining — Future
 
@@ -1732,10 +1734,6 @@ Excluded: `pixl-mcp`, `pixl-cli` (not applicable to WASM).
 - Auto-generate N tile variants conditioned on style latent
 - Crack placement, moss/erosion density, color jitter
 - `pixl vary <tile> --count 4 --seed 42`
-
-**WASM Playground:**
-- Compile `pixl-core` + `pixl-render` to wasm32
-- Browser-based .pax editor with live preview
 
 **Skeletal Animation (V2):**
 - Body part sprites + RotSprite rotation + bone interpolation
