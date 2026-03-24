@@ -33,6 +33,8 @@ pub fn handle_tool(state: &Mutex<McpState>, tool_name: &str, args: &Value) -> Va
         "pixl_record_feedback" => handle_record_feedback(state, args),
         "pixl_feedback_stats" => handle_feedback_stats(state),
         "pixl_feedback_constraints" => handle_feedback_constraints(state),
+        "pixl_export_training" => handle_export_training(state, args),
+        "pixl_training_stats" => handle_training_stats(state),
         _ => json!({"error": format!("unknown tool: {}", tool_name)}),
     }
 }
@@ -938,6 +940,10 @@ fn handle_generate_context(state: &Mutex<McpState>, args: &Value) -> Value {
     let prompt = args.get("prompt").and_then(|v| v.as_str()).unwrap_or("");
     let tile_type = args.get("type").and_then(|v| v.as_str()).unwrap_or("tile");
     let size_str = args.get("size").and_then(|v| v.as_str()).unwrap_or("16x16");
+    let knowledge_enabled = args
+        .get("knowledge_enabled")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true); // on by default
 
     // Build palette constraint text
     let mut palette_text = String::new();
@@ -1040,12 +1046,37 @@ fn handle_generate_context(state: &Mutex<McpState>, args: &Value) -> Value {
         String::new()
     };
 
+    // Search knowledge base for relevant technique knowledge (opt-in, default on)
+    let knowledge_text = if knowledge_enabled {
+        if let Some(ref kb) = st.knowledge {
+            let results = kb.search(prompt, 3);
+            if results.is_empty() {
+                String::new()
+            } else {
+                let mut text = String::from("\nRelevant pixel art technique knowledge:\n");
+                for r in &results {
+                    if !r.summary.is_empty() {
+                        text.push_str(&format!("\n### {}\n", r.summary));
+                    }
+                    text.push_str(&r.content);
+                    text.push('\n');
+                }
+                text
+            }
+        } else {
+            String::new()
+        }
+    } else {
+        String::new()
+    };
+
     // Build the enriched system prompt
     let system_prompt = format!(
         "You are a pixel art expert generating PAX format tiles.\n\
          \n\
          {palette_text}\n\
          {theme_text}\n\
+         {knowledge_text}\n\
          {style_text}\n\
          {preference_text}\n\
          Canvas size: {size_str}\n\
@@ -1089,6 +1120,12 @@ fn handle_generate_context(state: &Mutex<McpState>, args: &Value) -> Value {
             "total_feedback": stats.total_accepts + stats.total_rejects,
             "example_count": constraints.examples.len(),
             "avoid_count": constraints.avoid.len(),
+        },
+        "knowledge": {
+            "available": st.knowledge.is_some(),
+            "enabled": knowledge_enabled && st.knowledge.is_some(),
+            "passages": st.knowledge.as_ref().map(|kb| kb.passage_count()).unwrap_or(0),
+            "concepts": st.knowledge.as_ref().map(|kb| kb.concept_count()).unwrap_or(0),
         },
     })
 }
@@ -1391,6 +1428,130 @@ fn handle_feedback_constraints(state: &Mutex<McpState>) -> Value {
         "examples": constraints.examples,
         "min_style_score": constraints.min_style_score,
         "has_preferred_style": constraints.preferred_style.is_some(),
+    })
+}
+
+/// Export accepted tiles as training JSONL for LoRA fine-tuning.
+/// Each accepted tile becomes a (system, user, assistant) training pair
+/// in the same format as prepare_matched.py.
+fn handle_export_training(state: &Mutex<McpState>, args: &Value) -> Value {
+    let st = state.lock().unwrap();
+    let output_path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+
+    // Collect accepted events that have grids
+    let accepted: Vec<_> = st.feedback.events().iter()
+        .filter(|e| e.action == FeedbackAction::Accept || e.action == FeedbackAction::Edit)
+        .filter(|e| e.grid.is_some())
+        .collect();
+
+    if accepted.is_empty() {
+        return json!({"ok": false, "error": "no accepted tiles with grids to export"});
+    }
+
+    // Build palette context from current session
+    let mut palette_text = String::new();
+    for (pal_name, palette) in &st.palettes {
+        palette_text.push_str(&format!("Palette '{}':\n", pal_name));
+        for (sym, rgba) in &palette.symbols {
+            palette_text.push_str(&format!(
+                "  '{}' = ({},{},{})\n", sym, rgba.r, rgba.g, rgba.b
+            ));
+        }
+    }
+
+    let system_prompt = "You are a pixel art tile generator. Given a description, output a PAX-format character grid.\n\
+        Rules:\n\
+        - Use only the symbols from the palette provided\n\
+        - Each row must be exactly the specified width\n\
+        - Total rows must equal the specified height\n\
+        - '.' means transparent/void\n\
+        - Output ONLY the grid, no explanation";
+
+    let mut pairs = Vec::new();
+    for event in &accepted {
+        let grid = event.grid.as_ref().unwrap();
+        let h = grid.len();
+        let w = if h > 0 { grid[0].len() } else { 0 };
+
+        // Build grid string
+        let grid_str: String = grid.iter()
+            .map(|row| row.iter().collect::<String>())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        // Build user prompt with palette + description
+        let tags_str = if event.tags.is_empty() {
+            event.tile_name.replace('_', " ")
+        } else {
+            event.tags.join(", ")
+        };
+        let user_prompt = format!(
+            "{}\n\nGenerate a {}x{} pixel art tile: {}",
+            palette_text.trim(), w, h, tags_str
+        );
+
+        let pair = json!({
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+                {"role": "assistant", "content": grid_str},
+            ]
+        });
+        pairs.push(pair);
+    }
+
+    // Write to file if path provided, otherwise return inline
+    if !output_path.is_empty() {
+        let jsonl: String = pairs.iter()
+            .map(|p| serde_json::to_string(p).unwrap_or_default())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        if let Err(e) = std::fs::write(output_path, &jsonl) {
+            return json!({"ok": false, "error": format!("write failed: {}", e)});
+        }
+
+        json!({
+            "ok": true,
+            "exported": pairs.len(),
+            "path": output_path,
+        })
+    } else {
+        json!({
+            "ok": true,
+            "exported": pairs.len(),
+            "pairs": pairs,
+        })
+    }
+}
+
+/// Get training data statistics from feedback.
+fn handle_training_stats(state: &Mutex<McpState>) -> Value {
+    let st = state.lock().unwrap();
+
+    let accepted_with_grids = st.feedback.events().iter()
+        .filter(|e| e.action == FeedbackAction::Accept || e.action == FeedbackAction::Edit)
+        .filter(|e| e.grid.is_some())
+        .count();
+
+    let total_feedback = st.feedback.events().len();
+    let stats = st.feedback.stats();
+
+    // Check adapter info
+    let adapter_info = st.inference.as_ref().map(|inf| {
+        json!({
+            "model": inf.model,
+            "adapter_path": inf.adapter_path.as_ref().map(|p| p.display().to_string()),
+        })
+    });
+
+    json!({
+        "training_pairs": accepted_with_grids,
+        "total_feedback": total_feedback,
+        "acceptance_rate": stats.acceptance_rate,
+        "total_accepts": stats.total_accepts,
+        "total_rejects": stats.total_rejects,
+        "adapter": adapter_info,
     })
 }
 

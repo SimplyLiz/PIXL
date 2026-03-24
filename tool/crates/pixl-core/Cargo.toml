@@ -13,6 +13,7 @@ fnv = { workspace = true }
 thiserror = { workspace = true }
 rand = { workspace = true }
 serde_json = { workspace = true }
+bm25 = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = "1"

@@ -5,6 +5,7 @@ pub mod cycle;
 pub mod edges;
 pub mod feedback;
 pub mod grid;
+pub mod knowledge;
 pub mod parser;
 pub mod rle;
 pub mod rotate;

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../providers/backend_provider.dart';
 import '../providers/claude_provider.dart';
 import '../services/llm_provider.dart';
 import '../theme/studio_theme.dart';
+import 'training_dialog.dart';
 
 /// Settings dialog — LLM provider selection, API keys, model config.
 class SettingsDialog extends ConsumerStatefulWidget {
@@ -607,6 +609,131 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> {
                   )),
                 ],
               ],
+
+              // Knowledge Base toggle
+              Builder(builder: (_) {
+                final backend = ref.watch(backendProvider);
+                if (!backend.knowledgeAvailable) return const SizedBox.shrink();
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 20),
+                    Text('KNOWLEDGE BASE', style: theme.textTheme.titleSmall),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Inject relevant pixel art technique knowledge into generation prompts.',
+                      style: theme.textTheme.bodySmall!.copyWith(fontSize: 10),
+                    ),
+                    const SizedBox(height: 6),
+                    InkWell(
+                      onTap: () {
+                        ref.read(backendProvider.notifier)
+                            .setKnowledgeEnabled(!backend.knowledgeEnabled);
+                      },
+                      borderRadius: BorderRadius.circular(6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: backend.knowledgeEnabled
+                                ? theme.colorScheme.primary
+                                : theme.dividerColor,
+                          ),
+                          color: backend.knowledgeEnabled
+                              ? theme.colorScheme.primary.withValues(alpha: 0.15)
+                              : null,
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              backend.knowledgeEnabled
+                                  ? Icons.auto_stories
+                                  : Icons.auto_stories_outlined,
+                              size: 16,
+                              color: backend.knowledgeEnabled
+                                  ? theme.colorScheme.primary
+                                  : theme.dividerColor,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                backend.knowledgeEnabled
+                                    ? 'Knowledge injection enabled'
+                                    : 'Knowledge injection disabled',
+                                style: theme.textTheme.bodySmall!.copyWith(
+                                  color: backend.knowledgeEnabled
+                                      ? theme.colorScheme.primary
+                                      : null,
+                                  fontWeight: backend.knowledgeEnabled
+                                      ? FontWeight.w600
+                                      : null,
+                                ),
+                              ),
+                            ),
+                            Switch(
+                              value: backend.knowledgeEnabled,
+                              onChanged: (v) {
+                                ref.read(backendProvider.notifier)
+                                    .setKnowledgeEnabled(v);
+                              },
+                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              }),
+
+              // Auto-learn + Training link
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Icon(
+                    llm.autoLearn ? Icons.auto_awesome : Icons.auto_awesome_outlined,
+                    size: 14,
+                    color: llm.autoLearn ? theme.colorScheme.primary : theme.dividerColor,
+                  ),
+                  const SizedBox(width: 6),
+                  Text('Auto-Learn', style: theme.textTheme.bodySmall!.copyWith(
+                    fontSize: 11, fontWeight: FontWeight.w600,
+                  )),
+                  const SizedBox(width: 4),
+                  Text(
+                    '(accepted tiles become training data)',
+                    style: theme.textTheme.bodySmall!.copyWith(fontSize: 9),
+                  ),
+                  const Spacer(),
+                  Switch(
+                    value: llm.autoLearn,
+                    onChanged: (v) => notifier.setAutoLearn(v),
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ],
+              ),
+              InkWell(
+                onTap: () {
+                  Navigator.of(context).pop();
+                  TrainingDialog.show(context);
+                },
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Icon(Icons.model_training, size: 14, color: theme.colorScheme.primary),
+                      const SizedBox(width: 6),
+                      Text('Open Training...', style: theme.textTheme.bodySmall!.copyWith(
+                        fontSize: 11,
+                        color: theme.colorScheme.primary,
+                        decoration: TextDecoration.underline,
+                      )),
+                    ],
+                  ),
+                ),
+              ),
 
               if (llm.lastTokenUsage > 0) ...[
                 const SizedBox(height: 12),

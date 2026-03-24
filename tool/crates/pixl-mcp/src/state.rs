@@ -1,5 +1,6 @@
 use crate::inference::InferenceConfig;
 use pixl_core::feedback::FeedbackStore;
+use pixl_core::knowledge::KnowledgeBase;
 use pixl_core::parser::{parse_pax, resolve_all_palettes};
 use pixl_core::style::StyleLatent;
 use pixl_core::types::{Palette, PaxFile};
@@ -18,6 +19,8 @@ pub struct McpState {
     pub source_path: Option<PathBuf>,
     /// Local inference configuration (mlx_lm.server + LoRA adapter).
     pub inference: Option<InferenceConfig>,
+    /// Pixel art knowledge base for context-aware prompt enrichment.
+    pub knowledge: Option<KnowledgeBase>,
 }
 
 impl McpState {
@@ -33,6 +36,7 @@ impl McpState {
             feedback: FeedbackStore::new(),
             source_path: None,
             inference: None,
+            knowledge: Self::load_knowledge(None),
         }
     }
 
@@ -48,6 +52,7 @@ impl McpState {
             feedback: FeedbackStore::new(),
             source_path: None,
             inference: None,
+            knowledge: Self::load_knowledge(None),
         })
     }
 
@@ -57,6 +62,8 @@ impl McpState {
             .map_err(|e| format!("cannot read {}: {}", path.display(), e))?;
         let mut state = Self::from_source(&source)?;
         state.source_path = Some(path.to_path_buf());
+        // Try to load knowledge relative to the pax file's directory
+        state.knowledge = Self::load_knowledge(Some(path));
 
         // Load feedback sidecar if it exists
         let fb_path = Self::feedback_path(path);
@@ -82,6 +89,39 @@ impl McpState {
                 eprintln!("warning: could not save feedback to {}: {}", fb_path.display(), e);
             }
         }
+    }
+
+    /// Try to find and load the pixel art knowledge base.
+    /// Search order:
+    /// 1. Next to the .pax file: `knowledge/pixelart-knowledge-base.json`
+    /// 2. Relative to the binary: `knowledge/pixelart-knowledge-base.json`
+    /// 3. Well-known path from the PIXL repo layout
+    fn load_knowledge(pax_path: Option<&std::path::Path>) -> Option<KnowledgeBase> {
+        let filename = "pixelart-knowledge-base.json";
+        let candidates: Vec<PathBuf> = [
+            // Next to the .pax file
+            pax_path.and_then(|p| p.parent()).map(|d| d.join("knowledge").join(filename)),
+            // Relative to current working directory
+            Some(PathBuf::from("knowledge").join(filename)),
+            // Relative to the binary
+            std::env::current_exe().ok().and_then(|p| {
+                p.parent().map(|d| d.join("knowledge").join(filename))
+            }),
+            // PIXL repo layout: tool/knowledge/
+            Some(PathBuf::from("tool/knowledge").join(filename)),
+            // Corpus output directory
+            Some(PathBuf::from("corpus").join(filename)),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+
+        for path in &candidates {
+            if path.exists() {
+                return KnowledgeBase::load(path);
+            }
+        }
+        None
     }
 
     fn feedback_path(pax_path: &std::path::Path) -> PathBuf {

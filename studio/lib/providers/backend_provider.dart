@@ -22,6 +22,8 @@ class BackendState {
     this.sessionPalette,
     this.tiles = const [],
     this.stamps = const [],
+    this.knowledgeAvailable = false,
+    this.knowledgeEnabled = true,
   });
 
   final BackendStatus status;
@@ -30,6 +32,10 @@ class BackendState {
   final String? sessionPalette;
   final List<TileInfo> tiles;
   final List<String> stamps;
+  /// Whether the knowledge base is loaded on the backend.
+  final bool knowledgeAvailable;
+  /// Whether to inject knowledge into generation prompts.
+  final bool knowledgeEnabled;
 
   bool get isConnected => status == BackendStatus.connected;
 
@@ -43,6 +49,8 @@ class BackendState {
     String? sessionPalette,
     List<TileInfo>? tiles,
     List<String>? stamps,
+    bool? knowledgeAvailable,
+    bool? knowledgeEnabled,
   }) {
     return BackendState(
       status: status ?? this.status,
@@ -51,6 +59,8 @@ class BackendState {
       sessionPalette: sessionPalette ?? this.sessionPalette,
       tiles: tiles ?? this.tiles,
       stamps: stamps ?? this.stamps,
+      knowledgeAvailable: knowledgeAvailable ?? this.knowledgeAvailable,
+      knowledgeEnabled: knowledgeEnabled ?? this.knowledgeEnabled,
     );
   }
 }
@@ -285,13 +295,31 @@ class BackendNotifier extends StateNotifier<BackendState> {
     return resp;
   }
 
+  /// Toggle knowledge base injection on/off.
+  void setKnowledgeEnabled(bool enabled) {
+    state = state.copyWith(knowledgeEnabled: enabled);
+  }
+
   /// Get enriched generation context.
   Future<Map<String, dynamic>> getGenerationContext({
     required String prompt,
     String type = 'tile',
     String size = '16x16',
   }) async {
-    return _backend.generateContext(prompt: prompt, type: type, size: size);
+    final ctx = await _backend.generateContext(
+      prompt: prompt,
+      type: type,
+      size: size,
+      knowledgeEnabled: state.knowledgeEnabled,
+    );
+    // Update knowledge availability from backend response
+    final kb = ctx['knowledge'] as Map<String, dynamic>?;
+    if (kb != null) {
+      state = state.copyWith(
+        knowledgeAvailable: kb['available'] as bool? ?? false,
+      );
+    }
+    return ctx;
   }
 
   /// Delete a tile.

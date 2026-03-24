@@ -173,11 +173,13 @@ class PixlBackend {
     required String prompt,
     String type = 'tile',
     String size = '16x16',
+    bool knowledgeEnabled = true,
   }) async {
     return _post('/api/generate/context', {
       'prompt': prompt,
       'type': type,
       'size': size,
+      'knowledge_enabled': knowledgeEnabled,
     });
   }
 
@@ -297,6 +299,20 @@ class PixlBackend {
   /// Get feedback constraints for generation.
   Future<Map<String, dynamic>> feedbackConstraints() async {
     return _get('/api/feedback/constraints');
+  }
+
+  // ── Training ────────────────────────────────────────────
+
+  /// Get training data statistics.
+  Future<Map<String, dynamic>> trainingStats() async {
+    return _get('/api/training/stats');
+  }
+
+  /// Export accepted tiles as training JSONL.
+  Future<Map<String, dynamic>> exportTraining({String? path}) async {
+    return _post('/api/training/export', {
+      if (path != null) 'path': path,
+    });
   }
 
   // ── Generic ────────────────────────────────────────────

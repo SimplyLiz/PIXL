@@ -36,3 +36,6 @@ training/.venv/
 training/data/
 training/adapters/
 *.venv
+corpus/documents/
+dataset/
+tool/knowledge/pixelart-knowledge-base.json

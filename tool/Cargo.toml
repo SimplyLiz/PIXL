@@ -29,6 +29,9 @@ toml = "0.8"
 # Hashing
 fnv = "1.0"              # FNV-1a for edge classification (DefaultHasher uses SipHash, not FNV)
 
+# Search
+bm25 = "2.3"             # In-memory BM25 search engine for knowledge retrieval
+
 # Error handling
 thiserror = "2"
 
