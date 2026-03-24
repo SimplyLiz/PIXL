@@ -332,7 +332,13 @@ class OllamaBackend implements LlmBackend {
 class LlmService {
   LlmService();
 
-  static const _secureStorage = FlutterSecureStorage();
+  static const _secureStorage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    lOptions: LinuxOptions(),
+    wOptions: WindowsOptions(),
+    mOptions: MacOsOptions(),
+    iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
+  );
   static const _prefProvider = 'llm_provider';
   static const _prefModel = 'llm_model';
   static const _prefOllamaUrl = 'ollama_url';

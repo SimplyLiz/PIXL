@@ -15,7 +15,13 @@ class ClaudeApi {
   static const _prefKeyModel = 'claude_model';
   static const _timeout = Duration(seconds: 120);
 
-  final _secureStorage = const FlutterSecureStorage();
+  final _secureStorage = const FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    lOptions: LinuxOptions(),
+    wOptions: WindowsOptions(),
+    mOptions: MacOsOptions(),
+    iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
+  );
 
   String? _apiKey;
   String _model = 'claude-sonnet-4-20250514';
