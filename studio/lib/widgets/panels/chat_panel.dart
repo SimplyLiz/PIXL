@@ -38,6 +38,11 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
   String? _pendingPreviewB64;
   String? _lastGenerationPrompt;
 
+  // Variation system — multiple alternatives shown side by side
+  List<_TileVariation> _variations = [];
+  int _selectedVariation = -1;
+  bool _isGeneratingVariations = false;
+
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
@@ -98,10 +103,18 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     }
     if (!claude.hasApiKey) {
       chat.addAssistantMessage(
-        'No API key configured. Click **Settings** in the top bar to add your Anthropic API key.',
+        'No API key configured. Click **Settings** in the top bar to configure a provider.',
       );
       return;
     }
+
+    // ── Local LoRA path — server-side generation ──
+    if (claude.provider == LlmProviderType.pixlLocal) {
+      await _handleLocalGeneration(prompt, sizeStr);
+      return;
+    }
+
+    // ── Cloud LLM path — client-side generation ──
 
     // Step 2: Get enriched context from backend
     chat.addAssistantMessage('Getting generation context...', isStatus: true);
@@ -149,7 +162,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     final grid = extractGrid(resp.content);
     if (grid == null) {
       chat.addAssistantMessage(
-        'Claude responded but I couldn\'t extract a valid grid.\n\n'
+        'The model responded but I couldn\'t extract a valid grid.\n\n'
         '**Response:**\n${resp.content}\n\n'
         '*${resp.totalTokens} tokens used*',
       );
@@ -179,7 +192,6 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     setState(() {
       _pendingTileName = tileName;
       _pendingPreviewB64 = previewB64;
-
     });
 
     final validationInfo = createResp['validation'] as Map<String, dynamic>?;
@@ -189,6 +201,52 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
       '**Generated: `$tileName`** ($sizeStr)\n\n'
       '${isValid ? 'Validation passed.' : 'Validation warnings — check the validation panel.'}\n\n'
       '*${resp.totalTokens} tokens*\n\n'
+      'Use the buttons below to **accept** or **reject**, or request **variations**.',
+    );
+    _scrollToBottom();
+  }
+
+  // ── Local LoRA Generation ─────────────────────────────────
+  // Entire pipeline runs server-side: context building, inference, grid
+  // extraction, and tile creation — all in a single /api/generate/tile call.
+
+  Future<void> _handleLocalGeneration(String prompt, String sizeStr) async {
+    final chat = ref.read(chatProvider.notifier);
+    final tileName = generateTileName(prompt);
+
+    chat.addAssistantMessage(
+      'Generating $sizeStr tile with **PIXL LoRA** (on-device)...',
+      isStatus: true,
+    );
+    _scrollToBottom();
+
+    final resp = await ref.read(backendProvider.notifier).generateTile(
+      name: tileName,
+      prompt: prompt,
+      size: sizeStr,
+    );
+
+    if (resp['ok'] != true) {
+      final error = resp['error'] as String? ?? 'Unknown error';
+      final hint = resp['hint'] as String?;
+      chat.addAssistantMessage(
+        'Generation failed: $error'
+        '${hint != null ? '\n\n**Hint:** `$hint`' : ''}',
+      );
+      return;
+    }
+
+    final previewB64 = resp['preview_b64'] as String?;
+
+    setState(() {
+      _pendingTileName = tileName;
+      _pendingPreviewB64 = previewB64;
+    });
+
+    final generated = resp['generated'] == true;
+    chat.addAssistantMessage(
+      '**Generated: `$tileName`** ($sizeStr)\n\n'
+      '${generated ? 'Generated on-device with LoRA adapter.' : 'Created.'}\n\n'
       'Use the buttons below to **accept** or **reject**, or request **variations**.',
     );
     _scrollToBottom();
@@ -275,26 +333,214 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     _scrollToBottom();
   }
 
-  /// Re-generate with the same prompt (variation).
+  /// Re-generate with the same prompt (single variation).
   Future<void> _generateVariation() async {
     // Record reject + delete current pending tile
     if (_pendingTileName != null) {
       await ref.read(backendProvider.notifier).backend.recordFeedback(
         name: _pendingTileName!,
         action: 'reject',
-        rejectReason: 'wrong_style', // variation implies style mismatch
+        rejectReason: 'wrong_style',
       );
       ref.read(backendProvider.notifier).deleteTile(_pendingTileName!);
     }
     setState(() {
       _pendingTileName = null;
       _pendingPreviewB64 = null;
-
     });
 
     if (_lastGenerationPrompt != null) {
       await _handleGeneration(_lastGenerationPrompt!);
     }
+  }
+
+  /// Generate 3 variations in parallel, show as selectable strip.
+  Future<void> _generateVariations() async {
+    if (_lastGenerationPrompt == null) return;
+    final prompt = _lastGenerationPrompt!;
+
+    // Clean up current pending tile
+    if (_pendingTileName != null) {
+      await ref.read(backendProvider.notifier).backend.recordFeedback(
+        name: _pendingTileName!,
+        action: 'reject',
+        rejectReason: 'wrong_style',
+      );
+      ref.read(backendProvider.notifier).deleteTile(_pendingTileName!);
+    }
+
+    setState(() {
+      _pendingTileName = null;
+      _pendingPreviewB64 = null;
+      _variations = [];
+      _selectedVariation = -1;
+      _isGeneratingVariations = true;
+    });
+
+    final chat = ref.read(chatProvider.notifier);
+    final backend = ref.read(backendProvider);
+    final claude = ref.read(claudeProvider);
+    final canvasSize = ref.read(canvasProvider).canvasSize;
+    final sizeStr = '${canvasSize.width}x${canvasSize.height}';
+
+    if (!backend.isConnected || !claude.hasApiKey) return;
+
+    // Local LoRA path — generate sequentially (server handles one at a time)
+    if (claude.provider == LlmProviderType.pixlLocal) {
+      chat.addAssistantMessage('Generating 3 variations with **PIXL LoRA**...', isStatus: true);
+      _scrollToBottom();
+
+      final results = <_TileVariation>[];
+      for (var i = 0; i < 3; i++) {
+        final tileName = '${generateTileName(prompt)}_v${i + 1}';
+        final resp = await ref.read(backendProvider.notifier).generateTile(
+          name: tileName,
+          prompt: prompt,
+          size: sizeStr,
+        );
+        if (resp['ok'] == true) {
+          results.add(_TileVariation(
+            name: tileName,
+            previewB64: resp['preview_b64'] as String?,
+          ));
+        }
+        if (mounted) setState(() => _variations = List.of(results));
+        _scrollToBottom();
+      }
+      if (mounted) setState(() => _isGeneratingVariations = false);
+      if (results.isNotEmpty) {
+        chat.addAssistantMessage(
+          '**${results.length} variations** generated. Pick the one you like.',
+        );
+      }
+      _scrollToBottom();
+      return;
+    }
+
+    // Cloud LLM path — 3 parallel calls
+    chat.addAssistantMessage(
+      'Generating 3 variations with **${claude.model.split('-').take(2).join(' ')}**...',
+      isStatus: true,
+    );
+    _scrollToBottom();
+
+    final ctx = await ref.read(backendProvider.notifier).getGenerationContext(
+      prompt: prompt,
+      size: sizeStr,
+    );
+    if (ctx.containsKey('error')) {
+      chat.addAssistantMessage('Engine error: ${ctx['error']}');
+      setState(() => _isGeneratingVariations = false);
+      return;
+    }
+
+    final backendContext = ctx['system_prompt'] as String? ?? '';
+    final userPrompt = ctx['user_prompt'] as String? ?? prompt;
+    final style = ref.read(styleProvider);
+    final systemPrompt = await KnowledgeBase.buildSystemPrompt(
+      backendContext: backendContext,
+      styleFragment: style.toPromptFragment(),
+    );
+
+    // Fire 3 generation calls in parallel
+    final futures = List.generate(3, (i) async {
+      final resp = await ref.read(claudeProvider.notifier).service.generate(
+        systemPrompt: systemPrompt,
+        userPrompt: userPrompt,
+        temperature: 0.5 + (i * 0.15), // slight temperature variation
+      );
+      if (resp.isError) return null;
+
+      final grid = extractGrid(resp.content);
+      if (grid == null) return null;
+
+      final tileName = '${generateTileName(prompt)}_v${i + 1}';
+      final createResp = await ref.read(backendProvider.notifier).createTile(
+        name: tileName,
+        palette: ctx['palette'] as String? ?? 'default',
+        size: sizeStr,
+        grid: grid,
+      );
+      if (createResp.containsKey('error')) return null;
+
+      return _TileVariation(
+        name: tileName,
+        previewB64: createResp['preview'] as String?,
+      );
+    });
+
+    final results = await Future.wait(futures);
+    final valid = results.whereType<_TileVariation>().toList();
+
+    if (mounted) {
+      setState(() {
+        _variations = valid;
+        _isGeneratingVariations = false;
+      });
+    }
+
+    if (valid.isEmpty) {
+      chat.addAssistantMessage('All 3 variations failed. Try a simpler prompt or different model.');
+    } else {
+      chat.addAssistantMessage(
+        '**${valid.length} variation${valid.length > 1 ? 's' : ''}** generated. Pick the one you like.',
+      );
+    }
+    _scrollToBottom();
+  }
+
+  /// Accept one variation, delete the rest.
+  Future<void> _acceptVariation(int index) async {
+    final chat = ref.read(chatProvider.notifier);
+    final pick = _variations[index];
+
+    // Record accept for chosen
+    final resp = await ref.read(backendProvider.notifier).backend.recordFeedback(
+      name: pick.name,
+      action: 'accept',
+    );
+    final rate = resp['acceptance_rate'];
+    final rateStr = rate != null ? ' (${(rate * 100).round()}% acceptance rate)' : '';
+
+    // Delete unchosen variations
+    for (var i = 0; i < _variations.length; i++) {
+      if (i != index) {
+        await ref.read(backendProvider.notifier).backend.recordFeedback(
+          name: _variations[i].name,
+          action: 'reject',
+          rejectReason: 'variation_not_chosen',
+        );
+        ref.read(backendProvider.notifier).deleteTile(_variations[i].name);
+      }
+    }
+
+    chat.addAssistantMessage('Accepted **`${pick.name}`**.$rateStr');
+    ref.read(backendProvider.notifier).refreshTiles();
+
+    setState(() {
+      _variations = [];
+      _selectedVariation = -1;
+    });
+    _scrollToBottom();
+  }
+
+  /// Reject all variations.
+  Future<void> _rejectAllVariations() async {
+    final chat = ref.read(chatProvider.notifier);
+    for (final v in _variations) {
+      await ref.read(backendProvider.notifier).backend.recordFeedback(
+        name: v.name,
+        action: 'reject',
+        rejectReason: 'variation_not_chosen',
+      );
+      ref.read(backendProvider.notifier).deleteTile(v.name);
+    }
+    chat.addAssistantMessage('Rejected all variations.');
+    setState(() {
+      _variations = [];
+      _selectedVariation = -1;
+    });
+    _scrollToBottom();
   }
 
   // ── Chat Flow ────────────────────────────────────────────
@@ -516,8 +762,126 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
             ),
           ),
 
-          // Pending tile accept/reject/variation bar
-          if (_pendingTileName != null)
+          // Variation strip — multiple alternatives to pick from
+          if (_variations.isNotEmpty || _isGeneratingVariations)
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: const BoxDecoration(
+                border: Border(top: StudioTheme.panelBorder),
+                color: StudioTheme.recessedBg,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text('VARIATIONS', style: theme.textTheme.titleSmall),
+                      if (_isGeneratingVariations) ...[
+                        const SizedBox(width: 8),
+                        const SizedBox(
+                          width: 10, height: 10,
+                          child: CircularProgressIndicator(strokeWidth: 1.5),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      for (var i = 0; i < _variations.length; i++) ...[
+                        if (i > 0) const SizedBox(width: 6),
+                        GestureDetector(
+                          onTap: () => setState(() => _selectedVariation = i),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: _selectedVariation == i
+                                    ? theme.colorScheme.primary
+                                    : theme.dividerColor,
+                                width: _selectedVariation == i ? 2 : 1,
+                              ),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(3),
+                              child: _variations[i].previewB64 != null
+                                  ? Image.memory(
+                                      base64Decode(_variations[i].previewB64!),
+                                      width: 64, height: 64,
+                                      filterQuality: FilterQuality.none,
+                                      fit: BoxFit.contain,
+                                    )
+                                  : Container(
+                                      width: 64, height: 64,
+                                      color: StudioTheme.codeBg,
+                                      child: const Center(
+                                        child: Icon(Icons.image_not_supported, size: 16),
+                                      ),
+                                    ),
+                            ),
+                          ),
+                        ),
+                      ],
+                      // Placeholder slots while generating
+                      for (var i = _variations.length; i < 3 && _isGeneratingVariations; i++) ...[
+                        if (i > 0 || _variations.isNotEmpty) const SizedBox(width: 6),
+                        Container(
+                          width: 64, height: 64,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: theme.dividerColor),
+                            color: StudioTheme.codeBg,
+                          ),
+                          child: const Center(
+                            child: SizedBox(
+                              width: 14, height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 1.5),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  if (_selectedVariation >= 0 && _selectedVariation < _variations.length) ...[
+                    const SizedBox(height: 4),
+                    Center(
+                      child: Text(
+                        _variations[_selectedVariation].name,
+                        style: theme.textTheme.bodySmall!.copyWith(fontSize: 9),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  if (!_isGeneratingVariations && _variations.isNotEmpty)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _ActionButton(
+                            label: 'Accept',
+                            color: StudioTheme.success,
+                            onTap: _selectedVariation >= 0
+                                ? () => _acceptVariation(_selectedVariation)
+                                : null,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: _ActionButton(
+                            label: 'Reject All',
+                            color: StudioTheme.error,
+                            onTap: _rejectAllVariations,
+                          ),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+
+          // Pending tile accept/reject/variation bar (single tile)
+          if (_pendingTileName != null && _variations.isEmpty)
             Container(
               padding: const EdgeInsets.all(8),
               decoration: const BoxDecoration(
@@ -572,6 +936,12 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 4),
+                  _ActionButton(
+                    label: 'Variations (3)',
+                    color: theme.colorScheme.secondary,
+                    onTap: isGenerating ? null : _generateVariations,
                   ),
                 ],
               ),
@@ -666,6 +1036,12 @@ class _IconBtn extends StatelessWidget {
       ),
     );
   }
+}
+
+class _TileVariation {
+  const _TileVariation({required this.name, this.previewB64});
+  final String name;
+  final String? previewB64;
 }
 
 class _ActionButton extends StatelessWidget {
