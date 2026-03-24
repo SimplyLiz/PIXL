@@ -23,9 +23,13 @@ class SettingsDialog extends ConsumerStatefulWidget {
 class _SettingsDialogState extends ConsumerState<SettingsDialog> {
   final _apiKeyController = TextEditingController();
   final _ollamaUrlController = TextEditingController();
+  final _pullModelController = TextEditingController();
   bool _obscureKey = true;
   bool _saved = false;
   LlmProviderType? _editingProvider;
+  bool _isPulling = false;
+  double _pullProgress = 0;
+  String? _pullError;
 
   @override
   void initState() {
@@ -34,6 +38,8 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> {
     _editingProvider = llm.provider;
     _loadKeyForProvider(llm.provider);
     _ollamaUrlController.text = ref.read(claudeProvider.notifier).service.ollamaUrl;
+    // Kick off model fetch for the current provider
+    Future.microtask(() => ref.read(claudeProvider.notifier).fetchModels());
   }
 
   void _loadKeyForProvider(LlmProviderType provider) {
@@ -62,10 +68,38 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> {
     setState(() {});
   }
 
+  Future<void> _startPull(String name) async {
+    if (name.trim().isEmpty || _isPulling) return;
+    setState(() {
+      _isPulling = true;
+      _pullProgress = 0;
+      _pullError = null;
+    });
+    final notifier = ref.read(claudeProvider.notifier);
+    await for (final progress in notifier.pullOllamaModel(name.trim())) {
+      if (!mounted) return;
+      if (progress < 0) {
+        setState(() {
+          _isPulling = false;
+          _pullError = 'Failed to pull $name';
+        });
+        return;
+      }
+      setState(() => _pullProgress = progress);
+    }
+    if (mounted) {
+      setState(() {
+        _isPulling = false;
+        _pullModelController.clear();
+      });
+    }
+  }
+
   @override
   void dispose() {
     _apiKeyController.dispose();
     _ollamaUrlController.dispose();
+    _pullModelController.dispose();
     super.dispose();
   }
 
@@ -74,7 +108,10 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> {
     final llm = ref.watch(claudeProvider);
     final notifier = ref.read(claudeProvider.notifier);
     final theme = Theme.of(context);
-    final models = modelsForProvider(llm.provider);
+    // Use fetched models if available, otherwise fall back to hardcoded
+    final models = llm.availableModels.isNotEmpty
+        ? llm.availableModels
+        : modelsForProvider(llm.provider);
 
     return Dialog(
       backgroundColor: theme.cardColor,
@@ -117,10 +154,11 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> {
                   final isActive = llm.provider == p;
                   final hasKey = notifier.service.hasKeyFor(p);
                   return InkWell(
-                    onTap: () {
-                      notifier.setProvider(p);
+                    onTap: () async {
+                      await notifier.setProvider(p);
                       setState(() => _editingProvider = p);
                       _loadKeyForProvider(p);
+                      notifier.fetchModels();
                     },
                     borderRadius: BorderRadius.circular(6),
                     child: Container(
@@ -274,10 +312,47 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> {
               ],
 
               // Model Selection
-              Text('MODEL', style: theme.textTheme.titleSmall),
+              Row(
+                children: [
+                  Text('MODEL', style: theme.textTheme.titleSmall),
+                  if (llm.isFetchingModels) ...[
+                    const SizedBox(width: 8),
+                    const SizedBox(
+                      width: 12, height: 12,
+                      child: CircularProgressIndicator(strokeWidth: 1.5),
+                    ),
+                  ],
+                ],
+              ),
               const SizedBox(height: 8),
+              if (llm.provider == LlmProviderType.ollama &&
+                  models.isEmpty &&
+                  !llm.isFetchingModels) ...[
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.errorContainer.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: theme.dividerColor),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.warning_amber_rounded, size: 14, color: StudioTheme.error),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Ollama not running or no models installed. Pull a model below.',
+                          style: theme.textTheme.bodySmall!.copyWith(fontSize: 11),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
               ...models.map((m) {
                 final isSelected = llm.model == m.id;
+                final isOllama = llm.provider == LlmProviderType.ollama;
                 return InkWell(
                   onTap: () => notifier.setModel(m.id),
                   borderRadius: BorderRadius.circular(4),
@@ -299,14 +374,111 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> {
                           color: isSelected ? theme.colorScheme.primary : theme.dividerColor,
                         ),
                         const SizedBox(width: 8),
-                        Text(m.label, style: theme.textTheme.bodySmall!.copyWith(
-                          color: isSelected ? theme.colorScheme.primary : null,
-                        )),
+                        Expanded(
+                          child: Text(m.label, style: theme.textTheme.bodySmall!.copyWith(
+                            color: isSelected ? theme.colorScheme.primary : null,
+                          )),
+                        ),
+                        if (isOllama)
+                          InkWell(
+                            onTap: () async {
+                              final confirm = await showDialog<bool>(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  title: const Text('Delete model?'),
+                                  content: Text('Remove ${m.id} from Ollama?'),
+                                  actions: [
+                                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                                    TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+                                  ],
+                                ),
+                              );
+                              if (confirm == true) {
+                                await notifier.deleteOllamaModel(m.id);
+                              }
+                            },
+                            child: Icon(Icons.delete_outline, size: 14, color: theme.dividerColor),
+                          ),
                       ],
                     ),
                   ),
                 );
               }),
+
+              // Ollama pull section
+              if (llm.provider == LlmProviderType.ollama) ...[
+                const SizedBox(height: 16),
+                Text('PULL MODEL', style: theme.textTheme.titleSmall),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _pullModelController,
+                        enabled: !_isPulling,
+                        style: theme.textTheme.bodyMedium!.copyWith(fontSize: 12),
+                        decoration: InputDecoration(
+                          hintText: 'e.g. llama3.2, qwen3:8b',
+                          hintStyle: theme.textTheme.bodySmall,
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(4),
+                            borderSide: StudioTheme.panelBorder,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: _isPulling ? null : () => _startPull(_pullModelController.text),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: theme.colorScheme.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        textStyle: const TextStyle(fontSize: 12),
+                      ),
+                      child: const Text('Pull'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                // Suggested models (only show ones not already installed)
+                Builder(builder: (_) {
+                  final installedIds = models.map((m) => m.id).toSet();
+                  final suggestions = ollamaSuggestions
+                      .where((s) => !installedIds.contains(s.id))
+                      .toList();
+                  if (suggestions.isEmpty) return const SizedBox.shrink();
+                  return Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: suggestions.map((s) => ActionChip(
+                      label: Text(s.label, style: const TextStyle(fontSize: 10)),
+                      onPressed: _isPulling ? null : () => _startPull(s.id),
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      visualDensity: VisualDensity.compact,
+                    )).toList(),
+                  );
+                }),
+                if (_isPulling) ...[
+                  const SizedBox(height: 8),
+                  LinearProgressIndicator(value: _pullProgress > 0 ? _pullProgress : null),
+                  const SizedBox(height: 4),
+                  Text(
+                    _pullProgress > 0
+                        ? '${(_pullProgress * 100).toStringAsFixed(0)}%'
+                        : 'Starting download...',
+                    style: theme.textTheme.bodySmall!.copyWith(fontSize: 10),
+                  ),
+                ],
+                if (_pullError != null) ...[
+                  const SizedBox(height: 4),
+                  Text(_pullError!, style: theme.textTheme.bodySmall!.copyWith(
+                    fontSize: 10, color: StudioTheme.error,
+                  )),
+                ],
+              ],
 
               if (llm.lastTokenUsage > 0) ...[
                 const SizedBox(height: 12),

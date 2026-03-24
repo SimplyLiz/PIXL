@@ -58,36 +58,44 @@ class LlmModel {
   final String label;
 }
 
-const anthropicModels = [
+const anthropicFallbackModels = [
   LlmModel('claude-sonnet-4-20250514', 'Sonnet 4 (recommended)'),
   LlmModel('claude-haiku-4-5-20251001', 'Haiku 4.5 (fast)'),
   LlmModel('claude-opus-4-6-20250527', 'Opus 4.6 (most capable)'),
 ];
 
-const openaiModels = [
+const openaiFallbackModels = [
   LlmModel('gpt-4o', 'GPT-4o (recommended)'),
   LlmModel('gpt-4o-mini', 'GPT-4o Mini (fast)'),
   LlmModel('o3-mini', 'o3-mini (reasoning)'),
 ];
 
-const geminiModels = [
+const geminiFallbackModels = [
   LlmModel('gemini-2.5-flash', 'Gemini 2.5 Flash (recommended)'),
   LlmModel('gemini-2.5-pro', 'Gemini 2.5 Pro'),
   LlmModel('gemini-2.0-flash', 'Gemini 2.0 Flash (fast)'),
 ];
 
-const ollamaModels = [
-  LlmModel('llama3.3', 'Llama 3.3 70B'),
-  LlmModel('qwen2.5-coder:32b', 'Qwen 2.5 Coder 32B'),
-  LlmModel('gemma2:27b', 'Gemma 2 27B'),
-  LlmModel('mistral', 'Mistral 7B (fast)'),
+/// Curated suggestions for Ollama models users might want to pull.
+const ollamaSuggestions = [
+  LlmModel('llama3.2', 'Llama 3.2 3B'),
+  LlmModel('llama3.1:8b', 'Llama 3.1 8B'),
+  LlmModel('qwen3:8b', 'Qwen 3 8B'),
+  LlmModel('gemma3:4b', 'Gemma 3 4B'),
+  LlmModel('mistral', 'Mistral 7B'),
+  LlmModel('deepseek-coder:6.7b', 'DeepSeek Coder 6.7B'),
+  LlmModel('phi3', 'Phi-3 Mini'),
+  LlmModel('codellama:7b', 'Code Llama 7B'),
 ];
 
+/// Fallback if Ollama is unreachable — empty list means "connect to see models".
+const ollamaFallbackModels = <LlmModel>[];
+
 List<LlmModel> modelsForProvider(LlmProviderType type) => switch (type) {
-  LlmProviderType.anthropic => anthropicModels,
-  LlmProviderType.openai => openaiModels,
-  LlmProviderType.gemini => geminiModels,
-  LlmProviderType.ollama => ollamaModels,
+  LlmProviderType.anthropic => anthropicFallbackModels,
+  LlmProviderType.openai => openaiFallbackModels,
+  LlmProviderType.gemini => geminiFallbackModels,
+  LlmProviderType.ollama => ollamaFallbackModels,
 };
 
 // ── Abstract provider ──────────────────────────────────────
@@ -327,6 +335,117 @@ class OllamaBackend implements LlmBackend {
   }
 }
 
+// ── Ollama model management ────────────────────────────────
+
+class OllamaModelInfo {
+  const OllamaModelInfo({required this.name, required this.size, this.parameterSize = ''});
+  final String name;
+  final int size; // bytes
+  final String parameterSize;
+
+  String get sizeLabel {
+    if (size > 1e9) return '${(size / 1e9).toStringAsFixed(1)} GB';
+    if (size > 1e6) return '${(size / 1e6).toStringAsFixed(0)} MB';
+    return '$size B';
+  }
+
+  LlmModel toLlmModel() {
+    final label = parameterSize.isNotEmpty ? '$name ($parameterSize)' : name;
+    return LlmModel(name, label);
+  }
+}
+
+class OllamaClient {
+  OllamaClient({this.baseUrl = 'http://localhost:11434'});
+  final String baseUrl;
+
+  /// Fetch locally installed models from Ollama's /api/tags endpoint.
+  Future<List<OllamaModelInfo>> fetchModels() async {
+    try {
+      final resp = await http.get(
+        Uri.parse('$baseUrl/api/tags'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 5));
+
+      if (resp.statusCode != 200) return [];
+
+      final json = jsonDecode(resp.body) as Map<String, dynamic>;
+      final models = json['models'] as List? ?? [];
+      return models.map((m) {
+        final details = m['details'] as Map<String, dynamic>? ?? {};
+        return OllamaModelInfo(
+          name: m['name'] as String? ?? '',
+          size: m['size'] as int? ?? 0,
+          parameterSize: details['parameter_size'] as String? ?? '',
+        );
+      }).where((m) => m.name.isNotEmpty).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Pull a model from the Ollama library with progress reporting.
+  /// Returns a stream of progress values (0.0 to 1.0).
+  Stream<double> pullModel(String name) async* {
+    final client = http.Client();
+    try {
+      final request = http.Request('POST', Uri.parse('$baseUrl/api/pull'));
+      request.headers['Content-Type'] = 'application/json';
+      request.body = jsonEncode({'name': name, 'stream': true});
+
+      final response = await client.send(request)
+          .timeout(const Duration(minutes: 30));
+
+      if (response.statusCode != 200) {
+        yield -1; // signal error
+        return;
+      }
+
+      final stream = response.stream.transform(utf8.decoder);
+      String buffer = '';
+
+      await for (final chunk in stream) {
+        buffer += chunk;
+        // Ollama sends newline-delimited JSON
+        while (buffer.contains('\n')) {
+          final idx = buffer.indexOf('\n');
+          final line = buffer.substring(0, idx).trim();
+          buffer = buffer.substring(idx + 1);
+
+          if (line.isEmpty) continue;
+          try {
+            final json = jsonDecode(line) as Map<String, dynamic>;
+            final total = json['total'] as int? ?? 0;
+            final completed = json['completed'] as int? ?? 0;
+            if (total > 0) {
+              yield completed / total;
+            }
+          } catch (_) {}
+        }
+      }
+      yield 1.0; // done
+    } catch (_) {
+      yield -1; // error
+    } finally {
+      client.close();
+    }
+  }
+
+  /// Delete a model.
+  Future<bool> deleteModel(String name) async {
+    try {
+      final resp = await http.delete(
+        Uri.parse('$baseUrl/api/delete'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'name': name}),
+      ).timeout(const Duration(seconds: 10));
+      return resp.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+}
+
 // ── Unified LLM Service ────────────────────────────────────
 
 class LlmService {
@@ -347,6 +466,7 @@ class LlmService {
   String _model = 'claude-sonnet-4-20250514';
   String _ollamaUrl = 'http://localhost:11434';
   final Map<LlmProviderType, String> _apiKeys = {};
+  final Map<LlmProviderType, List<LlmModel>> _fetchedModels = {};
 
   LlmProviderType get provider => _provider;
   String get model => _model;
@@ -378,11 +498,127 @@ class LlmService {
     }
   }
 
+  /// Dynamically discovered Ollama models (populated by fetchOllamaModels).
+  List<LlmModel> _ollamaInstalledModels = [];
+  List<LlmModel> get ollamaInstalledModels => _ollamaInstalledModels;
+
+  OllamaClient get ollamaClient => OllamaClient(baseUrl: _ollamaUrl);
+
+  /// Fetch installed Ollama models from the running server.
+  Future<List<LlmModel>> fetchOllamaModels() async {
+    final client = OllamaClient(baseUrl: _ollamaUrl);
+    final models = await client.fetchModels();
+    _ollamaInstalledModels = models.map((m) => m.toLlmModel()).toList();
+    return _ollamaInstalledModels;
+  }
+
+  /// Cached fetched models for a provider (empty if not yet fetched).
+  List<LlmModel> fetchedModelsFor(LlmProviderType provider) =>
+      _fetchedModels[provider] ?? [];
+
+  /// Fetch available models from a cloud provider's API.
+  /// Returns the fetched list, or empty on failure (caller falls back to hardcoded).
+  Future<List<LlmModel>> fetchModelsForProvider(LlmProviderType provider) async {
+    try {
+      final models = await switch (provider) {
+        LlmProviderType.anthropic => _fetchAnthropicModels(),
+        LlmProviderType.openai => _fetchOpenAiModels(),
+        LlmProviderType.gemini => _fetchGeminiModels(),
+        LlmProviderType.ollama => fetchOllamaModels(),
+      };
+      if (models.isNotEmpty) {
+        _fetchedModels[provider] = models;
+      }
+      return models;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<List<LlmModel>> _fetchAnthropicModels() async {
+    final key = _apiKeys[LlmProviderType.anthropic];
+    if (key == null || key.isEmpty) return [];
+    final resp = await http.get(
+      Uri.parse('https://api.anthropic.com/v1/models'),
+      headers: {
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+      },
+    ).timeout(const Duration(seconds: 5));
+    if (resp.statusCode != 200) return [];
+    final json = jsonDecode(resp.body) as Map<String, dynamic>;
+    final data = json['data'] as List? ?? [];
+    final models = <LlmModel>[];
+    for (final item in data) {
+      final id = item['id'] as String? ?? '';
+      final displayName = item['display_name'] as String? ?? id;
+      if (id.isEmpty) continue;
+      // Skip batch-only, deprecated, or non-chat models
+      if (id.contains('batch') || id.contains('deprecated')) continue;
+      models.add(LlmModel(id, displayName));
+    }
+    return models;
+  }
+
+  Future<List<LlmModel>> _fetchOpenAiModels() async {
+    final key = _apiKeys[LlmProviderType.openai];
+    if (key == null || key.isEmpty) return [];
+    final resp = await http.get(
+      Uri.parse('https://api.openai.com/v1/models'),
+      headers: {'Authorization': 'Bearer $key'},
+    ).timeout(const Duration(seconds: 5));
+    if (resp.statusCode != 200) return [];
+    final json = jsonDecode(resp.body) as Map<String, dynamic>;
+    final data = json['data'] as List? ?? [];
+    final chatPrefixes = ['gpt-4', 'gpt-3.5', 'o1', 'o3', 'o4'];
+    final skipPrefixes = ['whisper', 'dall-e', 'tts', 'embedding', 'text-embedding'];
+    final models = <LlmModel>[];
+    for (final item in data) {
+      final id = item['id'] as String? ?? '';
+      if (id.isEmpty) continue;
+      final lower = id.toLowerCase();
+      if (skipPrefixes.any((s) => lower.contains(s))) continue;
+      if (!chatPrefixes.any((p) => lower.startsWith(p))) continue;
+      models.add(LlmModel(id, id));
+    }
+    // Sort: newest/best first — rough heuristic by name
+    models.sort((a, b) => b.id.compareTo(a.id));
+    return models;
+  }
+
+  Future<List<LlmModel>> _fetchGeminiModels() async {
+    final key = _apiKeys[LlmProviderType.gemini];
+    if (key == null || key.isEmpty) return [];
+    final resp = await http.get(
+      Uri.parse('https://generativelanguage.googleapis.com/v1beta/models?key=$key'),
+    ).timeout(const Duration(seconds: 5));
+    if (resp.statusCode != 200) return [];
+    final json = jsonDecode(resp.body) as Map<String, dynamic>;
+    final data = json['models'] as List? ?? [];
+    final models = <LlmModel>[];
+    for (final item in data) {
+      final name = (item['name'] as String? ?? '').replaceFirst('models/', '');
+      final displayName = item['displayName'] as String? ?? name;
+      final methods = (item['supportedGenerationMethods'] as List?)
+              ?.cast<String>() ??
+          [];
+      if (name.isEmpty) continue;
+      if (!methods.contains('generateContent')) continue;
+      models.add(LlmModel(name, displayName));
+    }
+    return models;
+  }
+
   Future<void> setProvider(LlmProviderType provider) async {
     _provider = provider;
     // Auto-select first model for the new provider if current model doesn't match
-    final models = modelsForProvider(provider);
-    if (!models.any((m) => m.id == _model)) {
+    final fetched = _fetchedModels[provider] ?? [];
+    final models = fetched.isNotEmpty
+        ? fetched
+        : provider == LlmProviderType.ollama && _ollamaInstalledModels.isNotEmpty
+            ? _ollamaInstalledModels
+            : modelsForProvider(provider);
+    if (models.isNotEmpty && !models.any((m) => m.id == _model)) {
       _model = models.first.id;
     }
     final prefs = await SharedPreferences.getInstance();
