@@ -10,6 +10,7 @@ import '../../providers/backend_provider.dart';
 import '../../providers/canvas_provider.dart';
 import '../../providers/claude_provider.dart';
 import '../../providers/chat_provider.dart';
+import '../../services/llm_provider.dart';
 import '../../providers/palette_provider.dart';
 import '../../providers/style_provider.dart';
 import '../../services/knowledge_base.dart';
@@ -953,7 +954,14 @@ class _BackendSection extends ConsumerWidget {
             if (backend.status == BackendStatus.disconnected ||
                 backend.status == BackendStatus.error)
               InkWell(
-                onTap: () => ref.read(backendProvider.notifier).connect(),
+                onTap: () {
+                  final service = ref.read(claudeProvider.notifier).service;
+                  final isLocal = service.provider == LlmProviderType.pixlLocal;
+                  ref.read(backendProvider.notifier).connect(
+                    model: isLocal ? service.pixlModel : null,
+                    adapter: isLocal && service.hasPixlAdapter ? service.pixlAdapter : null,
+                  );
+                },
                 borderRadius: BorderRadius.circular(4),
                 child: const Padding(
                   padding: EdgeInsets.all(4),

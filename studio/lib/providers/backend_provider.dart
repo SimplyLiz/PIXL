@@ -125,10 +125,19 @@ class BackendNotifier extends StateNotifier<BackendState> {
   }
 
   /// Start the backend server and initialize session.
-  Future<void> connect({String? paxFile}) async {
+  /// Pass [model] and [adapter] to enable local LoRA inference on the backend.
+  Future<void> connect({
+    String? paxFile,
+    String? model,
+    String? adapter,
+  }) async {
     state = state.copyWith(status: BackendStatus.connecting, clearError: true);
 
-    final started = await _backend.start(paxFile: paxFile);
+    final started = await _backend.start(
+      paxFile: paxFile,
+      model: model,
+      adapter: adapter,
+    );
     if (!started) {
       // Server might already be running externally
       final healthy = await _backend.isHealthy;
@@ -255,6 +264,25 @@ class BackendNotifier extends StateNotifier<BackendState> {
       );
     }
     return ValidationReport.fromJson(resp);
+  }
+
+  /// Generate a tile using the local LoRA model (server-side).
+  Future<Map<String, dynamic>> generateTile({
+    required String name,
+    required String prompt,
+    String size = '16x16',
+    String? palette,
+  }) async {
+    final resp = await _backend.generateTile(
+      name: name,
+      prompt: prompt,
+      size: size,
+      palette: palette,
+    );
+    if (resp['ok'] == true) {
+      await refreshTiles();
+    }
+    return resp;
   }
 
   /// Get enriched generation context.

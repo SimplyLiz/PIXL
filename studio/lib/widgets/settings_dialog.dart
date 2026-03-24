@@ -24,6 +24,8 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> {
   final _apiKeyController = TextEditingController();
   final _ollamaUrlController = TextEditingController();
   final _pullModelController = TextEditingController();
+  final _pixlModelController = TextEditingController();
+  final _pixlAdapterController = TextEditingController();
   bool _obscureKey = true;
   bool _saved = false;
   LlmProviderType? _editingProvider;
@@ -38,6 +40,8 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> {
     _editingProvider = llm.provider;
     _loadKeyForProvider(llm.provider);
     _ollamaUrlController.text = ref.read(claudeProvider.notifier).service.ollamaUrl;
+    _pixlModelController.text = ref.read(claudeProvider.notifier).service.pixlModel;
+    _pixlAdapterController.text = ref.read(claudeProvider.notifier).service.pixlAdapter;
     // Kick off model fetch for the current provider
     Future.microtask(() => ref.read(claudeProvider.notifier).fetchModels());
   }
@@ -100,6 +104,8 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> {
     _apiKeyController.dispose();
     _ollamaUrlController.dispose();
     _pullModelController.dispose();
+    _pixlModelController.dispose();
+    _pixlAdapterController.dispose();
     super.dispose();
   }
 
@@ -184,7 +190,7 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> {
                             color: isActive ? theme.colorScheme.primary : null,
                             fontWeight: isActive ? FontWeight.w700 : null,
                           )),
-                          if (hasKey && p != LlmProviderType.ollama) ...[
+                          if (hasKey && p != LlmProviderType.ollama && p != LlmProviderType.pixlLocal) ...[
                             const SizedBox(width: 4),
                             const Icon(Icons.check_circle, size: 10, color: Color(0xFF4caf50)),
                           ],
@@ -196,8 +202,9 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> {
               ),
               const SizedBox(height: 20),
 
-              // API Key (not for Ollama)
-              if (llm.provider != LlmProviderType.ollama) ...[
+              // API Key (not for Ollama or PIXL Local)
+              if (llm.provider != LlmProviderType.ollama &&
+                  llm.provider != LlmProviderType.pixlLocal) ...[
                 Text('API KEY', style: theme.textTheme.titleSmall),
                 const SizedBox(height: 4),
                 _apiKeyHint(llm.provider, theme),
@@ -308,6 +315,108 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 20),
+              ],
+
+              // PIXL Local LoRA settings
+              if (llm.provider == LlmProviderType.pixlLocal) ...[
+                Text('ON-DEVICE INFERENCE', style: theme.textTheme.titleSmall),
+                const SizedBox(height: 4),
+                Text(
+                  'Runs locally via mlx_lm.server with your trained LoRA adapter. '
+                  'Requires pip install mlx-lm.',
+                  style: theme.textTheme.bodySmall!.copyWith(fontSize: 10),
+                ),
+                const SizedBox(height: 10),
+                Text('Base Model', style: theme.textTheme.bodySmall!.copyWith(
+                  fontWeight: FontWeight.w600, fontSize: 11,
+                )),
+                const SizedBox(height: 4),
+                TextField(
+                  controller: _pixlModelController,
+                  style: theme.textTheme.bodyMedium!.copyWith(fontSize: 12),
+                  decoration: InputDecoration(
+                    hintText: 'mlx-community/Qwen2.5-3B-Instruct-4bit',
+                    hintStyle: theme.textTheme.bodySmall,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: StudioTheme.panelBorder,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: theme.colorScheme.primary),
+                    ),
+                    prefixIcon: const Icon(Icons.memory, size: 16),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text('LoRA Adapter Path', style: theme.textTheme.bodySmall!.copyWith(
+                  fontWeight: FontWeight.w600, fontSize: 11,
+                )),
+                const SizedBox(height: 4),
+                TextField(
+                  controller: _pixlAdapterController,
+                  style: theme.textTheme.bodyMedium!.copyWith(fontSize: 12),
+                  decoration: InputDecoration(
+                    hintText: 'training/adapters/pixl-lora-v2',
+                    hintStyle: theme.textTheme.bodySmall,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: StudioTheme.panelBorder,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: theme.colorScheme.primary),
+                    ),
+                    prefixIcon: const Icon(Icons.folder_open, size: 16),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () async {
+                          await notifier.setPixlModel(_pixlModelController.text.trim());
+                          await notifier.setPixlAdapter(_pixlAdapterController.text.trim());
+                          setState(() => _saved = true);
+                          Future.delayed(const Duration(seconds: 2), () {
+                            if (mounted) setState(() => _saved = false);
+                          });
+                        },
+                        icon: Icon(_saved ? Icons.check : Icons.save, size: 14),
+                        label: Text(_saved ? 'Saved' : 'Save Configuration'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: theme.colorScheme.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          textStyle: const TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (notifier.service.hasPixlAdapter) ...[
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Icon(Icons.check_circle, size: 12, color: Color(0xFF4caf50)),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          'Adapter configured. Engine will auto-start mlx_lm.server on first generate.',
+                          style: theme.textTheme.bodySmall!.copyWith(
+                            color: const Color(0xFF4caf50), fontSize: 10,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 20),
               ],
 
@@ -519,6 +628,7 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> {
       LlmProviderType.openai => ('platform.openai.com', 'API Keys'),
       LlmProviderType.gemini => ('aistudio.google.com', 'Get API Key'),
       LlmProviderType.ollama => ('', ''),
+      LlmProviderType.pixlLocal => ('', ''),
     };
     return Text(
       'Get your key at $url > $hint',
@@ -531,6 +641,7 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> {
     LlmProviderType.openai => 'sk-...',
     LlmProviderType.gemini => 'AIza...',
     LlmProviderType.ollama => '',
+    LlmProviderType.pixlLocal => '',
   };
 
   Color _costColor(ModelCost cost) => switch (cost) {

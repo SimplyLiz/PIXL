@@ -29,11 +29,22 @@ class PixlBackend {
   }
 
   /// Start the backend server. Call this on app launch.
-  Future<bool> start({String? paxFile}) async {
+  /// Pass [model] and [adapter] to enable local LoRA inference.
+  Future<bool> start({
+    String? paxFile,
+    String? model,
+    String? adapter,
+  }) async {
     try {
       final args = ['serve', '--port', '$port'];
       if (paxFile != null) {
         args.addAll(['--file', paxFile]);
+      }
+      if (model != null && model.isNotEmpty) {
+        args.addAll(['--model', model]);
+      }
+      if (adapter != null && adapter.isNotEmpty) {
+        args.addAll(['--adapter', adapter]);
       }
       _serverProcess = await Process.start(_binaryPath, args);
 
@@ -167,6 +178,22 @@ class PixlBackend {
       'prompt': prompt,
       'type': type,
       'size': size,
+    });
+  }
+
+  /// Generate a tile using the local LoRA model (server-side).
+  /// Returns the created tile with preview, edges, and generation metadata.
+  Future<Map<String, dynamic>> generateTile({
+    required String name,
+    required String prompt,
+    String size = '16x16',
+    String? palette,
+  }) async {
+    return _post('/api/generate/tile', {
+      'name': name,
+      'prompt': prompt,
+      'size': size,
+      if (palette != null) 'palette': palette,
     });
   }
 

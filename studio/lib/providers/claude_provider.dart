@@ -90,6 +90,14 @@ class LlmNotifier extends StateNotifier<LlmState> {
     await _service.setOllamaUrl(url);
   }
 
+  Future<void> setPixlModel(String model) async {
+    await _service.setPixlModel(model);
+  }
+
+  Future<void> setPixlAdapter(String path) async {
+    await _service.setPixlAdapter(path);
+  }
+
   /// Fetch models from the active provider's API and update state.
   Future<void> fetchModels() async {
     state = state.copyWith(isFetchingModels: true);

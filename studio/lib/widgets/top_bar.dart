@@ -45,7 +45,13 @@ Future<void> _openPaxFile(BuildContext context, WidgetRef ref) async {
       content: Text('Starting engine with ${path.split('/').last}...'),
       duration: const Duration(seconds: 4),
     ));
-    await ref.read(backendProvider.notifier).connect(paxFile: path);
+    final service = ref.read(claudeProvider.notifier).service;
+    final isLocal = service.provider == LlmProviderType.pixlLocal;
+    await ref.read(backendProvider.notifier).connect(
+      paxFile: path,
+      model: isLocal ? service.pixlModel : null,
+      adapter: isLocal && service.hasPixlAdapter ? service.pixlAdapter : null,
+    );
 
     if (!ref.read(backendProvider).isConnected) {
       messenger.showSnackBar(const SnackBar(
@@ -271,6 +277,7 @@ class _ApiKeyBadge extends ConsumerWidget {
         LlmProviderType.openai => 'GPT',
         LlmProviderType.gemini => 'Gemini',
         LlmProviderType.ollama => 'Ollama',
+        LlmProviderType.pixlLocal => 'LoRA',
       };
       return InkWell(
         onTap: () => SettingsDialog.show(context),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/backend_provider.dart';
 import '../providers/claude_provider.dart';
+import '../services/llm_provider.dart';
 import 'canvas/canvas_viewport.dart';
 import 'canvas/variant_strip.dart';
 import 'panels/chat_panel.dart';
@@ -22,10 +23,17 @@ class _StudioShellState extends ConsumerState<StudioShell> {
   @override
   void initState() {
     super.initState();
-    // Connect to the PIXL backend on startup
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(backendProvider.notifier).connect();
-      ref.read(claudeProvider.notifier).init();
+    // Initialize LLM settings first, then connect backend with inference config
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final llmNotifier = ref.read(claudeProvider.notifier);
+      await llmNotifier.init();
+      final service = llmNotifier.service;
+      // Pass model/adapter if PIXL Local is the active provider
+      final isLocal = service.provider == LlmProviderType.pixlLocal;
+      ref.read(backendProvider.notifier).connect(
+        model: isLocal ? service.pixlModel : null,
+        adapter: isLocal && service.hasPixlAdapter ? service.pixlAdapter : null,
+      );
     });
   }
 

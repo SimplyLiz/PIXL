@@ -120,11 +120,17 @@ const ollamaSuggestions = [
 /// Fallback if Ollama is unreachable — empty list means "connect to see models".
 const ollamaFallbackModels = <LlmModel>[];
 
+const pixlLocalModels = [
+  LlmModel('pixl-lora-v2', 'PIXL LoRA v2 (Qwen2.5-3B)',
+    cost: ModelCost.free, local: true, parameterSize: '3B'),
+];
+
 List<LlmModel> modelsForProvider(LlmProviderType type) => switch (type) {
   LlmProviderType.anthropic => anthropicFallbackModels,
   LlmProviderType.openai => openaiFallbackModels,
   LlmProviderType.gemini => geminiFallbackModels,
   LlmProviderType.ollama => ollamaFallbackModels,
+  LlmProviderType.pixlLocal => pixlLocalModels,
 };
 
 // ── Abstract provider ──────────────────────────────────────
@@ -494,18 +500,26 @@ class LlmService {
   static const _prefProvider = 'llm_provider';
   static const _prefModel = 'llm_model';
   static const _prefOllamaUrl = 'ollama_url';
+  static const _prefPixlModel = 'pixl_local_model';
+  static const _prefPixlAdapter = 'pixl_local_adapter';
 
   LlmProviderType _provider = LlmProviderType.anthropic;
   String _model = 'claude-sonnet-4-20250514';
   String _ollamaUrl = 'http://localhost:11434';
+  String _pixlModel = 'mlx-community/Qwen2.5-3B-Instruct-4bit';
+  String _pixlAdapter = '';
   final Map<LlmProviderType, String> _apiKeys = {};
   final Map<LlmProviderType, List<LlmModel>> _fetchedModels = {};
 
   LlmProviderType get provider => _provider;
   String get model => _model;
   String get ollamaUrl => _ollamaUrl;
+  String get pixlModel => _pixlModel;
+  String get pixlAdapter => _pixlAdapter;
+  bool get hasPixlAdapter => _pixlAdapter.isNotEmpty;
   bool get hasApiKey =>
       _provider == LlmProviderType.ollama ||
+      _provider == LlmProviderType.pixlLocal ||
       (_apiKeys[_provider]?.isNotEmpty ?? false);
 
   String _secureKey(LlmProviderType p) => 'llm_api_key_${p.name}';
@@ -521,6 +535,8 @@ class LlmService {
     }
     _model = prefs.getString(_prefModel) ?? _model;
     _ollamaUrl = prefs.getString(_prefOllamaUrl) ?? _ollamaUrl;
+    _pixlModel = prefs.getString(_prefPixlModel) ?? _pixlModel;
+    _pixlAdapter = prefs.getString(_prefPixlAdapter) ?? _pixlAdapter;
 
     // Load all API keys
     for (final p in LlmProviderType.values) {
@@ -558,6 +574,7 @@ class LlmService {
         LlmProviderType.openai => _fetchOpenAiModels(),
         LlmProviderType.gemini => _fetchGeminiModels(),
         LlmProviderType.ollama => fetchOllamaModels(),
+        LlmProviderType.pixlLocal => Future.value(pixlLocalModels),
       };
       if (models.isNotEmpty) {
         _fetchedModels[provider] = models;
@@ -728,6 +745,7 @@ class LlmService {
 
   bool hasKeyFor(LlmProviderType provider) =>
       provider == LlmProviderType.ollama ||
+      provider == LlmProviderType.pixlLocal ||
       (_apiKeys[provider]?.isNotEmpty ?? false);
 
   Future<void> setOllamaUrl(String url) async {
@@ -736,12 +754,27 @@ class LlmService {
     await prefs.setString(_prefOllamaUrl, url);
   }
 
+  Future<void> setPixlModel(String model) async {
+    _pixlModel = model;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefPixlModel, model);
+  }
+
+  Future<void> setPixlAdapter(String path) async {
+    _pixlAdapter = path;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefPixlAdapter, path);
+  }
+
   LlmBackend _createBackend() {
     return switch (_provider) {
       LlmProviderType.anthropic => AnthropicBackend(_apiKeys[_provider] ?? ''),
       LlmProviderType.openai => OpenAiBackend(_apiKeys[_provider] ?? ''),
       LlmProviderType.gemini => GeminiBackend(_apiKeys[_provider] ?? ''),
       LlmProviderType.ollama => OllamaBackend(baseUrl: _ollamaUrl),
+      // pixlLocal bypasses the LLM backend — generation goes through the PIXL engine.
+      // This fallback should never be called; the chat panel routes locally.
+      LlmProviderType.pixlLocal => OllamaBackend(baseUrl: 'http://127.0.0.1:8099'),
     };
   }
 
