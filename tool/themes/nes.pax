@@ -18,6 +18,7 @@ accent = "w"
 [theme.nes.constraints]
 max_colors_per_tile = 4
 
+# Classic NES brick palette
 [palette.nes]
 "." = "#000000"
 "#" = "#7c3f00"
@@ -29,9 +30,9 @@ palette = "nes"
 size    = "4x4"
 grid = '''
 .#.#
+#w+#
 #++#
 .#.#
-#++#
 '''
 
 [stamp.block_nes_4x4]
@@ -45,23 +46,24 @@ w+++
 '''
 
 # --- Starter Tiles ---
+# NES: 4 colors, 8x8. . = black (mortar/void), # = brown (brick), + = grey, w = white (highlight).
 
 [tile.wall_solid]
 palette    = "nes"
 size       = "8x8"
 edge_class = { n = "solid", e = "solid", s = "solid", w = "solid" }
 tags       = ["wall"]
-weight     = 1.0
+weight     = 0.4
 semantic   = { affordance = "obstacle", collision = "full" }
 grid = '''
-.#.#.#.#
-#++##++#
-.#.#.#.#
-#++##++#
-.#.#.#.#
-#++##++#
-.#.#.#.#
-#++##++#
+.w++#.w+
+.+++#.++
+........
+w+.w+++#
+++.+++.#
+........
+.w++#.w+
+.+++#.++
 '''
 
 [tile.floor_stone]
@@ -72,32 +74,33 @@ tags       = ["floor"]
 weight     = 3.0
 semantic   = { affordance = "walkable", collision = "none" }
 grid = '''
-++w+++w+
-++++++++
-+w+++w++
-++++++++
-++w+++w+
-++++++++
-+w+++w++
-++++++++
+w++++.w+
+++++++.+
+......++
+w++.w+++
+++++.+++
+........
+w+++.w++
+++++.+++
 '''
 
 [tile.wall_floor_n]
-palette    = "nes"
-size       = "8x8"
-edge_class = { n = "solid", e = "solid", s = "floor", w = "solid" }
-tags       = ["transition"]
-weight     = 1.0
-semantic   = { affordance = "obstacle", collision = "full" }
+palette     = "nes"
+size        = "8x8"
+auto_rotate = "4way"
+edge_class  = { n = "solid", e = "solid", s = "floor", w = "solid" }
+tags        = ["transition"]
+weight      = 2.0
+semantic    = { affordance = "obstacle", collision = "full" }
 grid = '''
-.#.#.#.#
-#++##++#
-.#.#.#.#
-#++##++#
-.#++++++
-++++++++
-+w+++w++
-++++++++
+.w++#.w+
+.+++#.++
+........
+w+.w+++#
+++.+++.#
+........
+w++++.w+
+++++++.+
 '''
 
 [tile.wall_corner_ne]
@@ -106,15 +109,15 @@ size        = "8x8"
 auto_rotate = "4way"
 edge_class  = { n = "solid", e = "solid", s = "floor", w = "floor" }
 tags        = ["wall", "corner"]
-weight      = 1.0
+weight      = 1.5
 semantic    = { affordance = "obstacle", collision = "full" }
 grid = '''
-.#.#.#.#
-#++##++#
-.#.#.#.#
-#++##++#
-++++.#.#
-++++#++#
-+w++++++
-++++++++
+.w++#.w+
+.+++#.++
+......w+
+w+....++
+++..#.w+
+....#.++
+w++.#.w+
++++...++
 '''

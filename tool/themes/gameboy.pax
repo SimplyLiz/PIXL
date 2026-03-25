@@ -18,6 +18,7 @@ accent = "3"
 [theme.gameboy.constraints]
 max_colors_per_tile = 4
 
+# Classic Game Boy 4-shade green
 [palette.gb]
 "." = "#0f380f"
 "1" = "#306230"
@@ -40,8 +41,8 @@ size    = "4x4"
 grid = '''
 .1.1
 1221
-.1.1
 1221
+.1.1
 '''
 
 [stamp.dot_gb_4x4]
@@ -55,23 +56,25 @@ grid = '''
 '''
 
 # --- Starter Tiles ---
+# Game Boy: 4 colors, 8x8. Every pixel counts.
+# Brick: . = mortar, 1 = brick shadow, 2 = brick face, 3 = highlight
 
 [tile.wall_solid]
 palette    = "gb"
 size       = "8x8"
 edge_class = { n = "solid", e = "solid", s = "solid", w = "solid" }
 tags       = ["wall"]
-weight     = 1.0
+weight     = 0.4
 semantic   = { affordance = "obstacle", collision = "full" }
 grid = '''
-.1.1.1.1
-12211221
-.1.1.1.1
-12211221
-.1.1.1.1
-12211221
-.1.1.1.1
-12211221
+.3221.32
+.2221.22
+........
+32.32212
+22.22212
+........
+.3221.32
+.2221.22
 '''
 
 [tile.floor_stone]
@@ -82,32 +85,33 @@ tags       = ["floor"]
 weight     = 3.0
 semantic   = { affordance = "walkable", collision = "none" }
 grid = '''
-22322232
-22222222
-23222322
-22222222
-22322232
-22222222
-23222322
-22222222
+3222.322
+2222.222
+....1...
+3221322.
+2221222.
+........
+322.3222
+222.2222
 '''
 
 [tile.wall_floor_n]
-palette    = "gb"
-size       = "8x8"
-edge_class = { n = "solid", e = "solid", s = "floor", w = "solid" }
-tags       = ["transition"]
-weight     = 1.0
-semantic   = { affordance = "obstacle", collision = "full" }
+palette     = "gb"
+size        = "8x8"
+auto_rotate = "4way"
+edge_class  = { n = "solid", e = "solid", s = "floor", w = "solid" }
+tags        = ["transition"]
+weight      = 2.0
+semantic    = { affordance = "obstacle", collision = "full" }
 grid = '''
-.1.1.1.1
-12211221
-.1.1.1.1
-12211221
-.1222221
-22222222
-23222322
-22222222
+.3221.32
+.2221.22
+........
+32.32212
+22.22211
+.......1
+3222.322
+2222.222
 '''
 
 [tile.wall_corner_ne]
@@ -116,15 +120,15 @@ size        = "8x8"
 auto_rotate = "4way"
 edge_class  = { n = "solid", e = "solid", s = "floor", w = "floor" }
 tags        = ["wall", "corner"]
-weight      = 1.0
+weight      = 1.5
 semantic    = { affordance = "obstacle", collision = "full" }
 grid = '''
-.1.1.1.1
-12211221
-.1.1.1.1
-12211221
-2222.1.1
-22221221
-23222222
-22222222
+.3221.32
+.2221.22
+......32
+32..1.22
+221...32
+...1..22
+322.1.32
+222...22
 '''

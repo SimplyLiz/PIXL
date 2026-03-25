@@ -359,6 +359,27 @@ class PixlBackend {
     });
   }
 
+  // ── New & Export ──────────────────────────────────────
+
+  /// Create a new PAX file from a built-in theme template.
+  /// Returns the PAX source string which can be passed to [loadSource].
+  Future<Map<String, dynamic>> newFromTemplate(String theme) async {
+    return _post('/api/new', {'theme': theme});
+  }
+
+  /// Export the current session to a game engine format.
+  /// [format] is one of: texturepacker, tiled, godot.
+  /// [outDir] is the absolute path to write export files.
+  Future<Map<String, dynamic>> exportToEngine({
+    required String format,
+    required String outDir,
+  }) async {
+    return _post('/api/export', {
+      'format': format,
+      'out_dir': outDir,
+    });
+  }
+
   // ── Generic ────────────────────────────────────────────
 
   /// Call any tool by name.

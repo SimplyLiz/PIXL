@@ -9,6 +9,7 @@ description = "PIXL MCP server — AI integration layer"
 [dependencies]
 pixl-core = { workspace = true }
 pixl-render = { workspace = true }
+pixl-export = { workspace = true }
 pixl-wfc = { workspace = true }
 rmcp = { workspace = true }
 tokio = { workspace = true }

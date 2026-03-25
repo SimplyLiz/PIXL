@@ -1,0 +1,174 @@
+[pax]
+version = "2.0"
+name    = "gba"
+theme   = "gba"
+
+[theme.gba]
+palette          = "gba16"
+scale            = 2
+canvas           = 16
+max_palette_size = 16
+light_source     = "top-left"
+
+[theme.gba.roles]
+void   = "."
+bg     = "#"
+fg     = "+"
+accent = "o"
+danger = "r"
+shadow = "s"
+life   = "g"
+hi     = "h"
+bone   = "w"
+
+[theme.gba.constraints]
+fg_brighter_than_bg         = true
+shadow_darker_than_bg       = true
+max_colors_per_tile         = 16
+
+# GBA palette — Pokémon RSE / Golden Sun style
+# Saturated warm stone + vivid greens. GBA's 15-bit color gives punchy contrast.
+[palette.gba16]
+"." = "#00000000"
+"s" = "#383018"
+"#" = "#584830"
+"m" = "#786848"
+"+" = "#a89068"
+"h" = "#d0b888"
+"w" = "#f0e8c8"
+"g" = "#286020"
+"G" = "#48a830"
+"L" = "#70e048"
+"o" = "#f0a818"
+"r" = "#c83028"
+"~" = "#2868b8"
+"W" = "#48a8e0"
+
+[stamp.stone_gba_4x4]
+palette = "gba16"
+size    = "4x4"
+grid = '''
+h+ms
++m++
+++m+
+sm+h
+'''
+
+[stamp.grass_gba_4x4]
+palette = "gba16"
+size    = "4x4"
+grid = '''
+gGLG
+GgGg
+LGgG
+GgLg
+'''
+
+# --- Starter Tiles ---
+# GBA: warm saturated stone with 6-shade ramp. Punchy contrast, clean reads at 1x.
+
+[tile.wall_solid]
+palette    = "gba16"
+size       = "16x16"
+edge_class = { n = "solid", e = "solid", s = "solid", w = "solid" }
+tags       = ["wall", "interior"]
+weight     = 0.4
+semantic   = { affordance = "obstacle", collision = "full" }
+grid = '''
+#wh++ms#wh++ms##
+#h+m++s#h+m++s##
+#++++ms#+++m+s##
+#m++ms##m++ms###
+################
+##wh++ms#wh+m+ms
+##h+m++s#h+m++ms
+##++++ms#++++m+s
+##m++ms##m++mss#
+################
+#wh++ms#wh++ms##
+#h+m++s#h+m++s##
+#++++ms#+++m+s##
+#m++ms##m++ms###
+################
+##wh++ms#wh+m+ms
+'''
+
+[tile.floor_stone]
+palette    = "gba16"
+size       = "16x16"
+edge_class = { n = "floor", e = "floor", s = "floor", w = "floor" }
+tags       = ["floor", "interior"]
+weight     = 3.0
+semantic   = { affordance = "walkable", collision = "none" }
+grid = '''
+wh+++ms#wh+++m+s
+h+m++++s#+m++++s
+++h+m++s#+++m++s
+################
+wh+ms#wh+++++m+s
+h+++##h+m++++m+s
++m++##++h+++m++s
+++ms##sm++m+mss#
+################
+wh++++++ms#wh+ms
+h+m+h+++++h+m++s
++++++m+m++++m+ms
+sm+++ms#sm+m+ms#
+################
+wh++ms#wh++++m+s
+h+++##h+m+h+++ms
+'''
+
+[tile.wall_floor_n]
+palette     = "gba16"
+size        = "16x16"
+auto_rotate = "4way"
+edge_class  = { n = "solid", e = "solid", s = "floor", w = "solid" }
+tags        = ["transition"]
+weight      = 2.0
+semantic    = { affordance = "obstacle", collision = "full" }
+grid = '''
+#wh++ms#wh++ms##
+#h+m++s#h+m++s##
+#++++ms#+++m+s##
+#m++ms##m++ms###
+################
+##wh++ms#wh+m+ms
+##h+m++s#h+m++ms
+##++++ms#++++m+s
+##m++ms##m++mss#
+####mmssmmss####
+wh+++ms#wh+++m+s
+h+m++++s#+m++++s
+++h+m++s#+++m++s
+sm+++ms#sm+m+ms#
+wh++ms#wh++++m+s
+h+++##h+m+h+++ms
+'''
+
+[tile.wall_corner_ne]
+palette     = "gba16"
+size        = "16x16"
+auto_rotate = "4way"
+edge_class  = { n = "solid", e = "solid", s = "floor", w = "floor" }
+tags        = ["wall", "corner"]
+weight      = 1.5
+semantic    = { affordance = "obstacle", collision = "full" }
+grid = '''
+################
+################
+################
+################
+################
+################
+##############sm
+############sm+h
+##########smh+m+
+########wh++m+s#
+######wh+++ms###
+####wh++m+s#####
+##wh++m+s#######
+wh+++ms#wh+++m+s
+++m++s##h+m+++ms
++m++s###+h+m++++
+'''

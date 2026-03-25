@@ -1,27 +1,21 @@
-import 'package:flutter/services.dart';
-
-/// Loads the curated pixel art knowledge base from bundled assets.
-/// This is injected as the system prompt prefix for all Claude interactions.
+/// Composes system prompts from backend-retrieved knowledge and session style.
+///
+/// Knowledge retrieval (BM25 + knowledge graph) happens server-side in
+/// pixl serve via /api/generate/context. This class only assembles the
+/// pieces the backend returns with the active style fragment.
 class KnowledgeBase {
-  static String? _cached;
-
-  /// Load the knowledge base. Caches after first load.
-  static Future<String> load() async {
-    _cached ??= await rootBundle.loadString('assets/knowledge_base.md');
-    return _cached!;
-  }
-
-  /// Build a complete system prompt combining the knowledge base
-  /// with session-specific context (theme, palette, constraints).
-  static Future<String> buildSystemPrompt({
+  /// Build a system prompt from backend context and active style.
+  ///
+  /// [backendContext] is the system_prompt returned by /api/generate/context,
+  /// which already contains targeted knowledge passages from the BM25 corpus.
+  static String buildSystemPrompt({
     String? backendContext,
     String? styleFragment,
-  }) async {
-    final kb = await load();
-    final parts = <String>[kb];
+  }) {
+    final parts = <String>[];
 
     if (backendContext != null && backendContext.isNotEmpty) {
-      parts.add('\n## Current Session Context\n$backendContext');
+      parts.add(backendContext);
     }
     if (styleFragment != null && styleFragment.isNotEmpty) {
       parts.add('\n## Active Style\n$styleFragment');

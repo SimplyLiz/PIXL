@@ -25,24 +25,25 @@ fg_brighter_than_bg         = true
 shadow_darker_than_bg       = true
 max_colors_per_tile         = 12
 
+# Palette: dark sci-fi with neon accents — high contrast
 [palette.neon]
 "." = "#00000000"
-"#" = "#1a1a2e"
-"+" = "#2a2a4e"
-"s" = "#0a0a1e"
+"s" = "#080818"
+"#" = "#181830"
+"+" = "#303058"
+"h" = "#505880"
+"w" = "#a0a8c0"
 "c" = "#00d4ff"
 "g" = "#00ff88"
 "r" = "#ff2244"
-"h" = "#4a4a6e"
-"w" = "#e0e0f0"
 
 [stamp.panel_4x4]
 palette = "neon"
 size    = "4x4"
 grid = '''
 cccc
-c++c
-c++c
+ch+c
+c+sc
 cccc
 '''
 
@@ -61,8 +62,8 @@ palette = "neon"
 size    = "4x4"
 grid = '''
 ####
-+##s
-+##s
+h##s
+h##s
 ####
 '''
 
@@ -71,37 +72,38 @@ palette = "neon"
 size    = "4x4"
 grid = '''
 .cc.
-c++c
-c++c
+chhc
+chhc
 .cc.
 '''
 
 # --- Starter Tiles ---
+# Sci-fi: metal panels with neon trim. c=cyan accent lines, h=panel highlight.
 
 [tile.wall_solid]
 palette    = "neon"
 size       = "16x16"
 edge_class = { n = "solid", e = "solid", s = "solid", w = "solid" }
 tags       = ["wall", "interior"]
-weight     = 1.0
+weight     = 0.4
 semantic   = { affordance = "obstacle", collision = "full", tags = { biome = "sci_fi" } }
 grid = '''
-################
-#c++##c++##c++##
-#+++++++++++++c#
-##++##++####++##
-################
-##c+++++++####++
-#++++c#+++++++++
-##++##++##c++###
-################
-##c+##++########
-#++++++++++c++##
-##++##c+##++####
-################
-##++##c+##++####
-#+++++++++++++c#
-################
+cccccccccccccccc
+ch++++++sch+++++
+c+++++++sc+++++s
+c+++++++sc+++++s
+c++++++ssc++++ss
+csssssssscssssss
+cccccccccccccccc
+ch+++++++++++++s
+c++++++++++++++s
+c++++h+++++++++s
+c++++++++++h++ss
+cssssssssssssss#
+cccccccccccccccc
+ch++++++sch+++++
+c+++++++sc+++++s
+c++++++ssc++++ss
 '''
 
 [tile.floor_stone]
@@ -112,48 +114,49 @@ tags       = ["floor", "interior"]
 weight     = 3.0
 semantic   = { affordance = "walkable", collision = "none", tags = { biome = "sci_fi" } }
 grid = '''
-++++++++++++++++
-+++++++++++s++++
-++++s+++++++++++
-++++++++++++++++
-++++++++s+++++++
-++++++++++++++++
-+s++++++++++++++
-+++++++++++++s++
-++++++++++++++++
-++++++s+++++++++
+h+++++++s#h++++s
 ++++++++++++++++
 ++++++++++++++++
-++s+++++++++++++
-++++++++++s+++++
+s+++++++s#s++++s
+################
+h+++s#h++++++++s
++++++++++++c++++
+++++c+++++++++++
+s++s##s++++++++s
+################
+h+++++++s#h++++s
 ++++++++++++++++
-++++++++++++++++
+++++++++++++++c+
+s+++++++s#s++++s
+################
+h++++s#h+++++c+s
 '''
 
 [tile.wall_floor_n]
-palette    = "neon"
-size       = "16x16"
-edge_class = { n = "solid", e = "solid", s = "floor", w = "solid" }
-tags       = ["transition", "wall_base"]
-weight     = 1.0
-semantic   = { affordance = "obstacle", collision = "full", tags = { biome = "sci_fi" } }
+palette     = "neon"
+size        = "16x16"
+auto_rotate = "4way"
+edge_class  = { n = "solid", e = "solid", s = "floor", w = "solid" }
+tags        = ["transition", "wall_base"]
+weight      = 2.0
+semantic    = { affordance = "obstacle", collision = "full", tags = { biome = "sci_fi" } }
 grid = '''
-################
-################
-################
-################
-################
-##c+##c+##c++###
-#+++++++++++++c#
-##++##c+##++####
-################
-###+++++++++####
-++++++++++++++##
+cccccccccccccccc
+ch++++++sch+++++
+c+++++++sc+++++s
+c++++++ssc++++ss
+csssssssscssssss
+cccccccccccccccc
+ch+++++++++++++s
+c++++++++++++++s
+c+++++++++++++ss
+cccccccccccccccc
+h+++++++s#h++++s
 ++++++++++++++++
 ++++++++++++++++
-++++++++++++++++
-++++++++++++++++
-++++++++++++++++
+s+++++++s#s++++s
+h++++s#h+++++c+s
+++++##+++++++++#
 '''
 
 [tile.wall_corner_ne]
@@ -162,23 +165,23 @@ size        = "16x16"
 auto_rotate = "4way"
 edge_class  = { n = "solid", e = "solid", s = "floor", w = "floor" }
 tags        = ["wall", "corner"]
-weight      = 1.0
+weight      = 1.5
 semantic    = { affordance = "obstacle", collision = "full", tags = { biome = "sci_fi" } }
 grid = '''
-################
-################
-################
-################
-################
-################
-################
-################
-++++++++++######
-++++++++++++####
-+++++++++++++###
-++++++++++++++##
-+++++++++++++++#
-++++++++++++++++
-++++++++++++++++
-++++++++++++++++
+cccccccccccccccc
+ch++++++sch+++++
+c+++++++sc+++++s
+c++++++ssc++++ss
+csssssssscssssss
+cccccccccccccccc
+############ch+s
+##########c+++ss
+########c++++s##
+######c+++++s###
+####c++++++s####
+##c+++++++s#####
+c+++++++s#h++++s
++++++++s#++++++#
+++++c+s##+++++++
+++++++s##+++++++
 '''

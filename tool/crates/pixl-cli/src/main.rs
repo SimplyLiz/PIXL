@@ -217,7 +217,7 @@ enum Commands {
 
     /// Create a new .pax file from a built-in theme
     New {
-        /// Theme: dark_fantasy, light_fantasy, sci_fi, nature, gameboy, nes
+        /// Theme: dark_fantasy, light_fantasy, sci_fi, nature, gameboy, nes, snes, gba
         theme: String,
 
         /// Output .pax file path
@@ -230,7 +230,7 @@ enum Commands {
         /// Path to the .pax file
         file: PathBuf,
 
-        /// Export format: texturepacker, tiled, godot, unity, gbstudio
+        /// Export format: texturepacker, tiled, godot
         #[arg(long, default_value = "tiled")]
         format: String,
 
@@ -864,6 +864,8 @@ fn cmd_new(theme: &str, out: &PathBuf) {
         ("nature", include_str!("../../../themes/nature.pax")),
         ("gameboy", include_str!("../../../themes/gameboy.pax")),
         ("nes", include_str!("../../../themes/nes.pax")),
+        ("snes", include_str!("../../../themes/snes.pax")),
+        ("gba", include_str!("../../../themes/gba.pax")),
     ];
 
     let content = match themes.iter().find(|(name, _)| *name == theme) {
@@ -1265,14 +1267,32 @@ fn load_pax(
     (pax_file, palettes)
 }
 
+/// Ensure parent directory exists for an output file path.
+fn ensure_parent_dir(out: &PathBuf) {
+    if let Some(parent) = out.parent() {
+        if !parent.as_os_str().is_empty() && !parent.exists() {
+            std::fs::create_dir_all(parent).unwrap_or_else(|e| {
+                eprintln!("error: cannot create directory {}: {}", parent.display(), e);
+                process::exit(1);
+            });
+        }
+    }
+}
+
 fn cmd_render(file: &PathBuf, tile_name: &str, scale: u32, out: &PathBuf) {
     let (pax_file, palettes) = load_pax(file);
 
+    // Look up tile directly, or fall back to base name for rotated variants
     let tile_raw = match pax_file.tile.get(tile_name) {
         Some(t) => t,
         None => {
-            eprintln!("error: tile '{}' not found", tile_name);
-            process::exit(1);
+            // Try stripping rotation suffix to find base tile
+            pixl_core::resolve::base_tile_name(tile_name)
+                .and_then(|base| pax_file.tile.get(base))
+                .unwrap_or_else(|| {
+                    eprintln!("error: tile '{}' not found", tile_name);
+                    process::exit(1);
+                })
         }
     };
 
@@ -1284,12 +1304,12 @@ fn cmd_render(file: &PathBuf, tile_name: &str, scale: u32, out: &PathBuf) {
         }
     };
 
-    // Use unified resolver — handles grid, RLE, compose, template, symmetry
+    // Use unified resolver — handles grid, RLE, compose, template, symmetry, rotation
     let (full_grid, w, h) = match pixl_core::resolve::resolve_tile_grid(
         tile_name,
         &pax_file.tile,
         &palettes,
-        &std::collections::HashMap::new(), // stamps resolved separately if needed
+        &std::collections::HashMap::new(),
     ) {
         Ok(r) => r,
         Err(e) => {
@@ -1300,6 +1320,7 @@ fn cmd_render(file: &PathBuf, tile_name: &str, scale: u32, out: &PathBuf) {
 
     let img = pixl_render::renderer::render_grid(&full_grid, palette, scale);
 
+    ensure_parent_dir(out);
     if let Err(e) = img.save(out) {
         eprintln!("error: cannot write {}: {}", out.display(), e);
         process::exit(1);
@@ -1364,6 +1385,7 @@ fn cmd_atlas(
     match pixl_render::atlas::pack_atlas(&atlas_tiles, palette, columns, padding, scale, &out_name)
     {
         Ok((img, json)) => {
+            ensure_parent_dir(out);
             if let Err(e) = img.save(out) {
                 eprintln!("error: cannot write atlas: {}", e);
                 process::exit(1);
@@ -1392,8 +1414,12 @@ fn cmd_preview(file: &PathBuf, tile_name: &str, out: &PathBuf, show_grid: bool) 
     let tile_raw = match pax_file.tile.get(tile_name) {
         Some(t) => t,
         None => {
-            eprintln!("error: tile '{}' not found", tile_name);
-            process::exit(1);
+            pixl_core::resolve::base_tile_name(tile_name)
+                .and_then(|base| pax_file.tile.get(base))
+                .unwrap_or_else(|| {
+                    eprintln!("error: tile '{}' not found", tile_name);
+                    process::exit(1);
+                })
         }
     };
 
@@ -1405,26 +1431,25 @@ fn cmd_preview(file: &PathBuf, tile_name: &str, out: &PathBuf, show_grid: bool) 
         }
     };
 
-    let size_str = tile_raw.size.as_deref().unwrap_or("16x16");
-    let (w, h) = pixl_core::types::parse_size(size_str).unwrap_or((16, 16));
-
-    let grid_str = match &tile_raw.grid {
-        Some(g) => g,
-        None => {
-            eprintln!("error: tile '{}' has no grid data", tile_name);
+    // Use unified resolver — handles grid, RLE, compose, template, symmetry
+    let (grid, w, h) = match pixl_core::resolve::resolve_tile_grid(
+        tile_name,
+        &pax_file.tile,
+        &palettes,
+        &std::collections::HashMap::new(),
+    ) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("error: {}", e);
             process::exit(1);
         }
     };
-
-    let grid = pixl_core::grid::parse_grid(grid_str, w, h, palette).unwrap_or_else(|e| {
-        eprintln!("error: {}", e);
-        process::exit(1);
-    });
 
     let preview_scale = 16u32;
     let img = pixl_render::renderer::render_grid(&grid, palette, preview_scale);
     let preview = pixl_render::preview::render_preview(&img, w, h, preview_scale, show_grid);
 
+    ensure_parent_dir(out);
     if let Err(e) = preview.save(out) {
         eprintln!("error: {}", e);
         process::exit(1);
@@ -1711,6 +1736,7 @@ fn cmd_narrate(
                 }
             }
 
+            ensure_parent_dir(out);
             if let Err(e) = img.save(out) {
                 eprintln!("error: {}", e);
                 process::exit(1);

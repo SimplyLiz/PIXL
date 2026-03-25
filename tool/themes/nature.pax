@@ -25,26 +25,28 @@ fg_brighter_than_bg         = true
 shadow_darker_than_bg       = true
 max_colors_per_tile         = 14
 
+# Palette: forest — earthy tones with lush greens
 [palette.forest]
 "." = "#00000000"
-"#" = "#3a2a1a"
-"+" = "#5a4a2a"
 "s" = "#1a1a0a"
+"#" = "#3a2a1a"
+"+" = "#6a5830"
+"h" = "#9a8858"
+"w" = "#d0c8a0"
 "g" = "#2a6a1a"
-"G" = "#4a8a3a"
+"G" = "#50a030"
 "o" = "#e8c040"
 "r" = "#c83030"
 "~" = "#3070c0"
-"w" = "#e0d8c0"
 
 [stamp.bark_4x4]
 palette = "forest"
 size    = "4x4"
 grid = '''
-##+#
-#+##
-##+#
-#+##
+#s+#
+s#+#
+#s+#
+s#+s
 '''
 
 [stamp.grass_4x4]
@@ -57,62 +59,33 @@ gGgG
 GgGg
 '''
 
-[stamp.dirt_4x4]
-palette = "forest"
-size    = "4x4"
-grid = '''
-##++
-#+++
-++##
-+##s
-'''
-
-[stamp.leaf_4x4]
-palette = "forest"
-size    = "4x4"
-grid = '''
-.gG.
-gGGg
-GgGG
-.Gg.
-'''
-
-[stamp.water_4x4]
-palette = "forest"
-size    = "4x4"
-grid = '''
-~~~~
-~~+~
-~~~~
-~+~~
-'''
-
 # --- Starter Tiles ---
+# Nature: dense tree canopy for walls, dirt path for floor. g/G = foliage, #/+ = earth.
 
 [tile.wall_solid]
 palette    = "forest"
 size       = "16x16"
 edge_class = { n = "solid", e = "solid", s = "solid", w = "solid" }
 tags       = ["wall", "hedge"]
-weight     = 1.0
+weight     = 0.6
 semantic   = { affordance = "obstacle", collision = "full", tags = { biome = "forest" } }
 grid = '''
-ggGgggGggGggGggg
-gGGgGGgGGgGGgGGg
-GgGGGgGGGgGGGgGG
-gGgggGgggGgggGgg
-ggGgggGggGggGggg
-gGGgGGgGGgGGgGGg
-GgGGGgGGGgGGGgGG
-gGgggGgggGgggGgg
-ggGgggGggGggGggg
-gGGgGGgGGgGGgGGg
-GgGGGgGGGgGGGgGG
-gGgggGgggGgggGgg
-ggGgggGggGggGggg
-gGGgGGgGGgGGgGGg
-GgGGGgGGGgGGGgGG
-gGgggGgggGgggGgg
+gGgGGgGggGGgGgGg
+GgGggGgGgggGGgGG
+gGGGggGGGGgGggGg
+GggGGgggggGGgGgG
+gGgGGgGggGGgGgGg
+GgGggGgGgggGGgGG
+gGGGggGGGGgGggGg
+GggGGgggggGGgGgG
+gGgGGgGggGGgGgGg
+GgGggGgGgggGGgGG
+gGGGggGGGGgGggGg
+GggGGgggggGGgGgG
+gGgGGgGggGGgGgGg
+GgGggGgGgggGGgGG
+gGGGggGGGGgGggGg
+GggGGgggggGGgGgG
 '''
 
 [tile.floor_stone]
@@ -120,51 +93,52 @@ palette    = "forest"
 size       = "16x16"
 edge_class = { n = "floor", e = "floor", s = "floor", w = "floor" }
 tags       = ["floor", "path"]
-weight     = 3.0
+weight     = 5.0
 semantic   = { affordance = "walkable", collision = "none", tags = { biome = "forest" } }
 grid = '''
-++++++++++++++++
-++++++++++#+++++
-++++#+++++++++++
-++++++++++++++++
-++++++++#+++++++
-++++++++++++++++
-+#++++++++++++++
-+++++++++++++#++
-++++++++++++++++
-++++++#+++++++++
-++++++++++++++++
-++++++++++++++++
-++#+++++++++++++
-++++++++++#+++++
+h++++++s#h+++++s
++++++++++++++++#
++++++++s#+++++++
+################
+h++s#h+++++++++s
++++##+++++++++++
++++##+++++++++++
+++s##s+++++++++s
+################
+h+++++++s#h++++s
 ++++++++++++++++
 ++++++++++++++++
+s++++++s#s++++++
+################
+h+++s#h++++++++s
+++++##+++++++++#
 '''
 
 [tile.wall_floor_n]
-palette    = "forest"
-size       = "16x16"
-edge_class = { n = "solid", e = "solid", s = "floor", w = "solid" }
-tags       = ["transition", "tree_edge"]
-weight     = 1.0
-semantic   = { affordance = "obstacle", collision = "full", tags = { biome = "forest" } }
+palette     = "forest"
+size        = "16x16"
+auto_rotate = "4way"
+edge_class  = { n = "solid", e = "solid", s = "floor", w = "solid" }
+tags        = ["transition", "tree_edge"]
+weight      = 2.0
+semantic    = { affordance = "obstacle", collision = "full", tags = { biome = "forest" } }
 grid = '''
-ggGgggGggGggGggg
-gGGgGGgGGgGGgGGg
-GgGGGgGGGgGGGgGG
-gGgggGgggGgggGgg
-ggGgggGggGggGggg
-gGGgGGgGGgGGgGGg
-GgGGGgGGGgGGGgGG
-gGgggGgggGgggGgg
-ggGgggGggGggGggg
-gGg+++++++++gGGg
-+++++++++++++++G
+gGgGGgGggGGgGgGg
+GgGggGgGgggGGgGG
+gGGGggGGGGgGggGg
+GggGGgggggGGgGgG
+gGgGGgGggGGgGgGg
+GgGggGgGgggGGgGG
+gGGGg+GGGGgG+gGg
+Gg+GG+g+g+GGg+gG
++g+g+++++++g+g+g
+++++++++++++++gG
 ++++++++++++++++
 ++++++++++++++++
-++++++++++++++++
-++++++++++++++++
-++++++++++++++++
+s++++++s#s++++++
+################
+h+++s#h++++++++s
+++++##+++++++++#
 '''
 
 [tile.wall_corner_ne]
@@ -173,23 +147,23 @@ size        = "16x16"
 auto_rotate = "4way"
 edge_class  = { n = "solid", e = "solid", s = "floor", w = "floor" }
 tags        = ["wall", "corner"]
-weight      = 1.0
+weight      = 1.5
 semantic    = { affordance = "obstacle", collision = "full", tags = { biome = "forest" } }
 grid = '''
-ggGgggGggGggGggg
-gGGgGGgGGgGGgGGg
-GgGGGgGGGgGGGgGG
-gGgggGgggGgggGgg
-ggGgggGggGggGggg
-gGGgGGgGGgGGgGGg
-GgGGGgGGGgGGGgGG
-gGgggGgggGgggGgg
-++++++++++ggGggg
-++++++++++++gGGg
-+++++++++++++gGG
-++++++++++++++gG
+gGgGGgGggGGgGgGg
+GgGggGgGgggGGgGG
+gGGGggGGGGgGggGg
+GggGGgggggGGgGgG
+gGgGGgGggGGgGgGg
+GgGggGgGgggGGgGG
+gGGGggGGGGgGggGg
+Gg+GGg+g+gGGgGgG
++g+g+++++gGgGgGg
++++++g++++GgGgGG
++++++++g+++gGGGg
+++++++++++g+gGgG
++++++++++++g+gGg
++++++++++++++ggG
 +++++++++++++++g
-++++++++++++++++
-++++++++++++++++
 ++++++++++++++++
 '''

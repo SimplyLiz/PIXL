@@ -53,6 +53,8 @@ pub fn create_router(state: McpState, inference_config: Option<InferenceConfig>)
         .route("/api/feedback/constraints", get(feedback_constraints))
         .route("/api/training/export", post(export_training))
         .route("/api/training/stats", get(training_stats))
+        .route("/api/new", post(new_from_template))
+        .route("/api/export", post(export_engine))
         .route("/api/tool", post(generic_tool_call))
         .with_state(shared)
 }
@@ -176,6 +178,18 @@ async fn training_stats(State(state): State<SharedState>) -> Json<Value> {
 
 async fn feedback_constraints(State(state): State<SharedState>) -> Json<Value> {
     Json(handlers::handle_tool(&state.mcp, "pixl_feedback_constraints", &Value::Null))
+}
+
+async fn new_from_template(Json(args): Json<Value>) -> Json<Value> {
+    Json(handlers::handle_tool(
+        &Mutex::new(McpState::new()),
+        "pixl_new_from_template",
+        &args,
+    ))
+}
+
+async fn export_engine(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
+    Json(handlers::handle_tool(&state.mcp, "pixl_export", &args))
 }
 
 /// Generic tool call endpoint — accepts { "tool": "pixl_xxx", "args": {...} }

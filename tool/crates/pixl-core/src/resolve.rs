@@ -4,6 +4,7 @@
 use crate::compose;
 use crate::grid;
 use crate::rle;
+use crate::rotate;
 use crate::symmetry;
 use crate::types::{Palette, Stamp, TileRaw, Symmetry, parse_size};
 use std::collections::HashMap;
@@ -31,6 +32,41 @@ pub enum ResolveError {
     Size(String),
 }
 
+/// Rotation suffixes and the number of 90° CW rotations they represent.
+const ROTATION_SUFFIXES: &[(&str, u32)] = &[
+    ("_270f", 0), // flip + 270 (checked first since longer)
+    ("_180f", 0), // flip + 180
+    ("_90f", 0),  // flip + 90
+    ("_flip", 0), // flip only
+    ("_270", 3),
+    ("_180", 2),
+    ("_90", 1),
+];
+
+/// Try to strip a rotation suffix and return (base_name, rotations, flip).
+fn parse_rotation_suffix(name: &str) -> Option<(&str, u32, bool)> {
+    for &(suffix, _) in ROTATION_SUFFIXES {
+        if let Some(base) = name.strip_suffix(suffix) {
+            let flip = suffix.contains('f') || suffix == "_flip";
+            let rotations = match suffix {
+                "_90" | "_90f" => 1,
+                "_180" | "_180f" => 2,
+                "_270" | "_270f" => 3,
+                "_flip" => 0,
+                _ => 0,
+            };
+            return Some((base, rotations, flip));
+        }
+    }
+    None
+}
+
+/// Extract the base tile name from a rotation-suffixed name.
+/// Returns None if the name has no rotation suffix.
+pub fn base_tile_name(name: &str) -> Option<&str> {
+    parse_rotation_suffix(name).map(|(base, _, _)| base)
+}
+
 /// Resolve a tile to its full pixel grid.
 pub fn resolve_tile_grid(
     name: &str,
@@ -38,7 +74,29 @@ pub fn resolve_tile_grid(
     palettes: &HashMap<String, Palette>,
     stamps: &HashMap<String, Stamp>,
 ) -> Result<(Vec<Vec<char>>, u32, u32), ResolveError> {
-    let tile_raw = tiles.get(name).ok_or(ResolveError::NoPixelData)?;
+    // Try direct lookup first
+    let tile_raw = match tiles.get(name) {
+        Some(t) => t,
+        None => {
+            // Try as a rotated variant of a base tile
+            if let Some((base_name, rotations, flip)) = parse_rotation_suffix(name) {
+                if let Some(base_tile) = tiles.get(base_name) {
+                    if base_tile.auto_rotate.is_some() {
+                        let (mut grid, w, h) = resolve_tile_grid(base_name, tiles, palettes, stamps)?;
+                        if flip {
+                            grid = rotate::flip_grid_h(&grid);
+                        }
+                        for _ in 0..rotations {
+                            grid = rotate::rotate_grid_cw(&grid);
+                        }
+                        // For square tiles, dimensions stay the same after rotation
+                        return Ok((grid, w, h));
+                    }
+                }
+            }
+            return Err(ResolveError::NoPixelData);
+        }
+    };
 
     // Handle template tiles
     let effective = if let Some(ref template_name) = tile_raw.template {

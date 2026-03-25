@@ -1,0 +1,174 @@
+[pax]
+version = "2.0"
+name    = "snes"
+theme   = "snes"
+
+[theme.snes]
+palette          = "snes16"
+scale            = 2
+canvas           = 16
+max_palette_size = 16
+light_source     = "top-left"
+
+[theme.snes.roles]
+void   = "."
+bg     = "#"
+fg     = "+"
+accent = "o"
+danger = "r"
+shadow = "s"
+life   = "g"
+hi     = "h"
+bone   = "w"
+
+[theme.snes.constraints]
+fg_brighter_than_bg         = true
+shadow_darker_than_bg       = true
+max_colors_per_tile         = 16
+
+# SNES RPG palette — inspired by Chrono Trigger / Secret of Mana
+# Rich earth tones with 5-step stone ramp + greens + warm accent
+[palette.snes16]
+"." = "#00000000"
+"s" = "#262030"
+"#" = "#4a3848"
+"m" = "#685868"
+"+" = "#887888"
+"h" = "#b0a0b0"
+"w" = "#e0d8e0"
+"g" = "#305828"
+"G" = "#58a038"
+"L" = "#88d060"
+"o" = "#d8a838"
+"r" = "#a03030"
+"~" = "#3060a0"
+"W" = "#58a0d8"
+
+[stamp.cobble_4x4]
+palette = "snes16"
+size    = "4x4"
+grid = '''
+h++s
++m++
++++m
+s++h
+'''
+
+[stamp.leaf_4x4]
+palette = "snes16"
+size    = "4x4"
+grid = '''
+.gG.
+gGLG
+GLGg
+.Gg.
+'''
+
+# --- Starter Tiles ---
+# SNES: 6-shade stone ramp s→#→m→+→h→w. Detailed bricks with mortar texture.
+
+[tile.wall_solid]
+palette    = "snes16"
+size       = "16x16"
+edge_class = { n = "solid", e = "solid", s = "solid", w = "solid" }
+tags       = ["wall", "interior"]
+weight     = 0.4
+semantic   = { affordance = "obstacle", collision = "full" }
+grid = '''
+sh++m+s#h+++m+s#
+s+m+++s#+m++++s#
+s+++++s#+++++ms#
+s+m++ss#sm++ss##
+################
+#h+++m+s#h++++ms
+#+m++++s#+m++++s
+#+++m++s#+++++ms
+#++++mss#s+++ss#
+################
+sh++m+s#h+++m+s#
+s+m+++s#+m++++s#
+s+++++s#+++++ms#
+s+m++ss#sm++ss##
+################
+#h+++m+s#h++++ms
+'''
+
+[tile.floor_stone]
+palette    = "snes16"
+size       = "16x16"
+edge_class = { n = "floor", e = "floor", s = "floor", w = "floor" }
+tags       = ["floor", "interior"]
+weight     = 3.0
+semantic   = { affordance = "walkable", collision = "none" }
+grid = '''
+h++++m+s#h+++m+s
++m+++++s#+++++ms
++++h++++#+++h+++
+################
+h++ms#h+++++m++s
+++++##++m++++m+s
+++m+##++++++h++s
++m+s##sm+++m+ss#
+################
+h++++++ms#h++m+s
+++m+h+++++++m++s
++++++++m++++++ms
+s++m+++s#sm+++s#
+################
+h+m+s#h++++m++ms
+++++##++m+h++++s
+'''
+
+[tile.wall_floor_n]
+palette     = "snes16"
+size        = "16x16"
+auto_rotate = "4way"
+edge_class  = { n = "solid", e = "solid", s = "floor", w = "solid" }
+tags        = ["transition", "wall_base"]
+weight      = 2.0
+semantic    = { affordance = "obstacle", collision = "full" }
+grid = '''
+sh++m+s#h+++m+s#
+s+m+++s#+m++++s#
+s+++++s#+++++ms#
+s+m++ss#sm++ss##
+################
+#h+++m+s#h++++ms
+#+m++++s#+m++++s
+#+++m++s#+++++ms
+#++++mss#s+++ss#
+####mmssmm######
+h++++m+s#h+++m+s
++m+++++s#+++++ms
++++h++++#+++h+++
+s++m+++s#sm+++s#
+h+m+s#h++++m++ms
+++++##++m+h++++s
+'''
+
+[tile.wall_corner_ne]
+palette     = "snes16"
+size        = "16x16"
+auto_rotate = "4way"
+edge_class  = { n = "solid", e = "solid", s = "floor", w = "floor" }
+tags        = ["wall", "corner"]
+weight      = 1.5
+semantic    = { affordance = "obstacle", collision = "full" }
+grid = '''
+################
+################
+################
+################
+################
+################
+#############smh
+###########sm+++
+#########sm++m+s
+########h+++m+s#
+######h++++ms###
+####h++m++s#####
+##h++m++s#######
+h++++m+s#h+++m+s
++++m++s##+m+++ms
++m+++s##+++h++++
+'''

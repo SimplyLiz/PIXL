@@ -35,6 +35,8 @@ pub fn handle_tool(state: &Mutex<McpState>, tool_name: &str, args: &Value) -> Va
         "pixl_feedback_constraints" => handle_feedback_constraints(state),
         "pixl_export_training" => handle_export_training(state, args),
         "pixl_training_stats" => handle_training_stats(state),
+        "pixl_new_from_template" => handle_new_from_template(args),
+        "pixl_export" => handle_export(state, args),
         _ => json!({"error": format!("unknown tool: {}", tool_name)}),
     }
 }
@@ -1046,21 +1048,30 @@ fn handle_generate_context(state: &Mutex<McpState>, args: &Value) -> Value {
         String::new()
     };
 
-    // Search knowledge base for relevant technique knowledge (opt-in, default on)
+    // Search knowledge base for relevant technique knowledge (opt-in, default on).
+    // Retrieved passages go into the user message (not system prompt) so that
+    // immutable rules stay in the system prompt and retrieved context is clearly
+    // separated. Each passage includes source metadata to help the LLM attribute
+    // and weight information.
     let knowledge_text = if knowledge_enabled {
         if let Some(ref kb) = st.knowledge {
-            let results = kb.search(prompt, 3);
+            let results = kb.search(prompt, 5);
             if results.is_empty() {
                 String::new()
             } else {
-                let mut text = String::from("\nRelevant pixel art technique knowledge:\n");
+                let mut text = String::from(
+                    "\n---\nRelevant pixel art technique knowledge (retrieved by relevance):\n",
+                );
                 for r in &results {
-                    if !r.summary.is_empty() {
-                        text.push_str(&format!("\n### {}\n", r.summary));
-                    }
-                    text.push_str(&r.content);
-                    text.push('\n');
+                    text.push_str(&format!(
+                        "\n[Source: {} | Topic: {} | Relevance: {:.1}]\n{}\n",
+                        r.source_title,
+                        if r.summary.is_empty() { "general" } else { &r.summary },
+                        r.score,
+                        r.content,
+                    ));
                 }
+                text.push_str("---\n");
                 text
             }
         } else {
@@ -1070,13 +1081,13 @@ fn handle_generate_context(state: &Mutex<McpState>, args: &Value) -> Value {
         String::new()
     };
 
-    // Build the enriched system prompt
+    // Build the system prompt — immutable rules, constraints, and structure only.
+    // Retrieved knowledge goes in the user message to keep separation clean.
     let system_prompt = format!(
         "You are a pixel art expert generating PAX format tiles.\n\
          \n\
          {palette_text}\n\
          {theme_text}\n\
-         {knowledge_text}\n\
          {style_text}\n\
          {preference_text}\n\
          Canvas size: {size_str}\n\
@@ -1098,9 +1109,10 @@ fn handle_generate_context(state: &Mutex<McpState>, args: &Value) -> Value {
          - Suggest a target_layer for this tile (background/terrain/walls/platform/foreground/effects)"
     );
 
-    // Build the enriched user prompt
+    // Build the user prompt — includes retrieved knowledge passages so the
+    // LLM sees them as context for this specific request, not as permanent rules.
     let user_prompt = format!(
-        "Generate a {size_str} {tile_type}: {prompt}"
+        "{knowledge_text}\nGenerate a {size_str} {tile_type}: {prompt}"
     );
 
     let stats = st.feedback.stats();
@@ -1687,4 +1699,211 @@ fn extract_grid(response: &str, expected_size: &str) -> String {
     }
 
     grid_lines.join("\n")
+}
+
+// ── New from template ──────────────────────────────────────────
+
+fn handle_new_from_template(args: &Value) -> Value {
+    let theme = args.get("theme").and_then(|v| v.as_str()).unwrap_or("");
+
+    let themes = [
+        ("dark_fantasy", include_str!("../../../themes/dark_fantasy.pax")),
+        ("light_fantasy", include_str!("../../../themes/light_fantasy.pax")),
+        ("sci_fi", include_str!("../../../themes/sci_fi.pax")),
+        ("nature", include_str!("../../../themes/nature.pax")),
+        ("gameboy", include_str!("../../../themes/gameboy.pax")),
+        ("nes", include_str!("../../../themes/nes.pax")),
+        ("snes", include_str!("../../../themes/snes.pax")),
+        ("gba", include_str!("../../../themes/gba.pax")),
+    ];
+
+    match themes.iter().find(|(name, _)| *name == theme) {
+        Some((_, content)) => json!({
+            "ok": true,
+            "theme": theme,
+            "source": content,
+        }),
+        None => {
+            let available: Vec<&str> = themes.iter().map(|(n, _)| *n).collect();
+            json!({
+                "ok": false,
+                "error": format!("unknown theme '{}'. Available: {}", theme, available.join(", ")),
+            })
+        }
+    }
+}
+
+// ── Export to game engine format ────────────────────────────────
+
+fn handle_export(state: &Mutex<McpState>, args: &Value) -> Value {
+    let format = args.get("format").and_then(|v| v.as_str()).unwrap_or("tiled");
+    let out_dir = match args.get("out_dir").and_then(|v| v.as_str()) {
+        Some(d) => std::path::PathBuf::from(d),
+        None => return json!({"ok": false, "error": "missing 'out_dir' parameter"}),
+    };
+
+    let st = state.lock().unwrap();
+
+    // Collect tile data from session
+    let palette_name = st.file.tile.values()
+        .next()
+        .map(|t| t.palette.as_str())
+        .unwrap_or("");
+    let palette = match st.palettes.get(palette_name) {
+        Some(p) => p,
+        None => return json!({"ok": false, "error": "no palette found in session"}),
+    };
+
+    let mut tile_names: Vec<String> = Vec::new();
+    let mut tile_grids: Vec<Vec<Vec<char>>> = Vec::new();
+    let mut collision_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+
+    for (name, tile_raw) in &st.file.tile {
+        if tile_raw.template.is_some() || tile_raw.grid.is_none() {
+            continue;
+        }
+        let size_str = tile_raw.size.as_deref().unwrap_or("16x16");
+        let (w, h) = match parse_size(size_str) {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+        if let Ok(g) = grid::parse_grid(tile_raw.grid.as_ref().unwrap(), w, h, palette) {
+            tile_names.push(name.clone());
+            tile_grids.push(g);
+            if let Some(ref sem) = tile_raw.semantic {
+                if let Some(ref c) = sem.collision {
+                    collision_map.insert(name.clone(), c.clone());
+                }
+            }
+        }
+    }
+
+    // Sort for deterministic output
+    {
+        let mut order: Vec<usize> = (0..tile_names.len()).collect();
+        order.sort_by(|a, b| tile_names[*a].cmp(&tile_names[*b]));
+        let sorted_names: Vec<String> = order.iter().map(|&i| tile_names[i].clone()).collect();
+        let sorted_grids: Vec<Vec<Vec<char>>> = order.iter().map(|&i| tile_grids[i].clone()).collect();
+        tile_names = sorted_names;
+        tile_grids = sorted_grids;
+    }
+
+    if tile_names.is_empty() {
+        return json!({"ok": false, "error": "no tiles found in session"});
+    }
+
+    let tile_size = st.file.tile.values()
+        .next()
+        .and_then(|t| t.size.as_deref())
+        .and_then(|s| parse_size(s).ok())
+        .unwrap_or((16, 16));
+
+    // Create output directory
+    if let Err(e) = std::fs::create_dir_all(&out_dir) {
+        return json!({"ok": false, "error": format!("cannot create directory: {}", e)});
+    }
+
+    let atlas_tiles: Vec<pixl_render::atlas::AtlasTile> = tile_names.iter()
+        .zip(tile_grids.iter())
+        .map(|(name, g)| pixl_render::atlas::AtlasTile {
+            name: name.clone(),
+            grid: g.clone(),
+            width: tile_size.0,
+            height: tile_size.1,
+        })
+        .collect();
+
+    match format {
+        "texturepacker" | "tp" => {
+            let atlas_path = out_dir.join("atlas.png");
+            let json_path = out_dir.join("atlas.json");
+            match pixl_render::atlas::pack_atlas(&atlas_tiles, palette, 8, 1, 1, "atlas.png") {
+                Ok((img, atlas_json)) => {
+                    if let Err(e) = img.save(&atlas_path) {
+                        return json!({"ok": false, "error": format!("cannot write atlas: {}", e)});
+                    }
+                    let json_str = serde_json::to_string_pretty(&atlas_json).unwrap_or_default();
+                    if let Err(e) = std::fs::write(&json_path, json_str) {
+                        return json!({"ok": false, "error": format!("cannot write JSON: {}", e)});
+                    }
+                    json!({
+                        "ok": true,
+                        "format": "texturepacker",
+                        "files": [atlas_path.display().to_string(), json_path.display().to_string()],
+                        "tile_count": tile_names.len(),
+                    })
+                }
+                Err(e) => json!({"ok": false, "error": format!("{}", e)}),
+            }
+        }
+
+        "tiled" | "tmj" => {
+            let atlas_path = out_dir.join("tileset.png");
+            let tsj_path = out_dir.join("tileset.tsj");
+            match pixl_render::atlas::pack_atlas(&atlas_tiles, palette, 8, 1, 1, "tileset.png") {
+                Ok((img, _)) => {
+                    if let Err(e) = img.save(&atlas_path) {
+                        return json!({"ok": false, "error": format!("cannot write atlas: {}", e)});
+                    }
+                    let tileset = pixl_export::tiled::generate_tileset(
+                        &st.file.pax.name,
+                        &tile_names,
+                        tile_size.0,
+                        tile_size.1,
+                        "tileset.png",
+                        img.width(),
+                        img.height(),
+                        8, 1, 1,
+                        &collision_map,
+                    );
+                    let tsj_str = serde_json::to_string_pretty(&tileset).unwrap_or_default();
+                    if let Err(e) = std::fs::write(&tsj_path, tsj_str) {
+                        return json!({"ok": false, "error": format!("cannot write TSJ: {}", e)});
+                    }
+                    json!({
+                        "ok": true,
+                        "format": "tiled",
+                        "files": [atlas_path.display().to_string(), tsj_path.display().to_string()],
+                        "tile_count": tile_names.len(),
+                    })
+                }
+                Err(e) => json!({"ok": false, "error": format!("{}", e)}),
+            }
+        }
+
+        "godot" | "tres" => {
+            let atlas_path = out_dir.join("tileset.png");
+            let tres_path = out_dir.join("tileset.tres");
+            match pixl_render::atlas::pack_atlas(&atlas_tiles, palette, 8, 1, 1, "tileset.png") {
+                Ok((img, _)) => {
+                    if let Err(e) = img.save(&atlas_path) {
+                        return json!({"ok": false, "error": format!("cannot write atlas: {}", e)});
+                    }
+                    let tres = pixl_export::godot::generate_tres(
+                        &st.file.pax.name,
+                        &tile_names,
+                        tile_size.0,
+                        tile_size.1,
+                        "tileset.png",
+                        &collision_map,
+                    );
+                    if let Err(e) = std::fs::write(&tres_path, tres) {
+                        return json!({"ok": false, "error": format!("cannot write TRES: {}", e)});
+                    }
+                    json!({
+                        "ok": true,
+                        "format": "godot",
+                        "files": [atlas_path.display().to_string(), tres_path.display().to_string()],
+                        "tile_count": tile_names.len(),
+                    })
+                }
+                Err(e) => json!({"ok": false, "error": format!("{}", e)}),
+            }
+        }
+
+        _ => json!({
+            "ok": false,
+            "error": format!("unknown format '{}'. Supported: texturepacker, tiled, godot", format),
+        }),
+    }
 }

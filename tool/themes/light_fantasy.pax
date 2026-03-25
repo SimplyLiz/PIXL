@@ -26,36 +26,38 @@ fg_brighter_than_bg         = true
 shadow_darker_than_bg       = true
 max_colors_per_tile         = 16
 
+# Palette: warm stone cathedral — s(dark) → #(stone) → +(cream) → h(highlight) → w(white)
 [palette.cathedral]
 "." = "#00000000"
-"#" = "#8a7a6a"
-"+" = "#c8b8a0"
-"s" = "#5a4a3a"
+"s" = "#3a2a1a"
+"#" = "#6a5a4a"
+"+" = "#b8a888"
+"h" = "#e0d4c0"
+"w" = "#f8f0e0"
 "~" = "#4080b0"
 "g" = "#4a9a3a"
+"G" = "#70c050"
 "o" = "#e8c840"
 "r" = "#c04040"
-"h" = "#e8e0d0"
-"w" = "#f0ece0"
 
 [stamp.marble_4x4]
 palette = "cathedral"
 size    = "4x4"
 grid = '''
-++#+
-++h+
+w+++
++h++
 ++++
-++s+
+++#s
 '''
 
 [stamp.vine_4x4]
 palette = "cathedral"
 size    = "4x4"
 grid = '''
-..g.
-.gg.
-.g..
-g...
+..gG
+.gGg
+gGg.
+Gg..
 '''
 
 [stamp.gold_trim_4x4]
@@ -63,37 +65,38 @@ palette = "cathedral"
 size    = "4x4"
 grid = '''
 oooo
-o++o
-o++o
+oh+o
+o+so
 oooo
 '''
 
 # --- Starter Tiles ---
+# Cathedral: large ashlar stone blocks. Light cream stone with warm shadows.
 
 [tile.wall_solid]
 palette    = "cathedral"
 size       = "16x16"
 edge_class = { n = "solid", e = "solid", s = "solid", w = "solid" }
 tags       = ["wall", "interior"]
-weight     = 1.0
+weight     = 0.4
 semantic   = { affordance = "obstacle", collision = "full", tags = { biome = "cathedral" } }
 grid = '''
+sw+++++h#w+++++h
+s++++++##++++++#
+s+++++s##+++++s#
+s++++s###s+++s##
 ################
-##++#++#++#++###
-#+++++++++++++##
-##++#++#####+###
+#w+++++h#w+++++h
+#++++++##++++++#
+#+++++s##+++++s#
+#++++s###s+++s##
 ################
-##++++++++###+##
-#++++##+++++++++
-##++#++#++#++###
+sw+++++h#w+++++h
+s++++++##++++++#
+s+++++s##+++++s#
+s++++s###s+++s##
 ################
-##++#+++########
-#+++++++++++++##
-##++#++#++#++###
-################
-##++#++#++#++###
-#+++++++++++++##
-################
+#w+++++h#w+++++h
 '''
 
 [tile.floor_stone]
@@ -104,48 +107,49 @@ tags       = ["floor", "interior"]
 weight     = 3.0
 semantic   = { affordance = "walkable", collision = "none", tags = { biome = "cathedral" } }
 grid = '''
-++++++++++++++++
-+++++++h++++h+++
-++++#+++++++++++
-++++++++++++++++
-++++++++#++h++++
-++++++++++++++++
-+h++++++++++++++
-+++++++++++++h++
-++++++++++++++++
-++++h+#+++++++++
-++++++++++++++++
-++++++++++++++++
-++h+++++++++++++
-++++++++++h+++++
-++++++++++++++++
-++++++++++++++++
+w+++++s#w++++++s
++++h+++#++++++++
++++++++#+++++h++
+################
+w+++s#w++++++++s
+++++##++++++h+++
++++s##++++++++s+
+################
+w+++++++s#w++++s
+++++h+++++++++++
++++++++++++h++++
+s+++++++s#s++++s
+################
+w++++s#w+++++++s
+++++++#++++++h++
+++++s##+++++++++
 '''
 
 [tile.wall_floor_n]
-palette    = "cathedral"
-size       = "16x16"
-edge_class = { n = "solid", e = "solid", s = "floor", w = "solid" }
-tags       = ["transition", "wall_base"]
-weight     = 1.0
-semantic   = { affordance = "obstacle", collision = "full", tags = { biome = "cathedral" } }
+palette     = "cathedral"
+size        = "16x16"
+auto_rotate = "4way"
+edge_class  = { n = "solid", e = "solid", s = "floor", w = "solid" }
+tags        = ["transition", "wall_base"]
+weight      = 2.0
+semantic    = { affordance = "obstacle", collision = "full", tags = { biome = "cathedral" } }
 grid = '''
+sw+++++h#w+++++h
+s++++++##++++++#
+s+++++s##+++++s#
+s++++s###s+++s##
 ################
-################
-################
-################
-################
-##++#++#++#++###
-#+++++++++++++##
-##++#++#++#++###
-################
-###++++++++++###
-++++++++++++++##
-++++++++++++++++
-++++++++++++++++
-++++++++++++++++
-++++++++++++++++
-++++++++++++++++
+#w+++++h#w+++++h
+#++++++##++++++#
+#+++++s##+++++s#
+#++++s###s+++s##
+##ooooooooooo###
+w+++++s#w++++++s
++++h+++#++++++++
++++++++#+++++h++
+s+++++++s#s++++s
+w++++s#w+++++++s
+++++++#++++++h++
 '''
 
 [tile.wall_corner_ne]
@@ -154,7 +158,7 @@ size        = "16x16"
 auto_rotate = "4way"
 edge_class  = { n = "solid", e = "solid", s = "floor", w = "floor" }
 tags        = ["wall", "corner"]
-weight      = 1.0
+weight      = 1.5
 semantic    = { affordance = "obstacle", collision = "full", tags = { biome = "cathedral" } }
 grid = '''
 ################
@@ -163,14 +167,14 @@ grid = '''
 ################
 ################
 ################
-################
-################
-++++++++++######
-++++++++++++####
-+++++++++++++###
-++++++++++++++##
-+++++++++++++++#
-++++++++++++++++
-++++++++++++++++
-++++++++++++++++
+##############os
+############o+++
+##########o+++++
+#########++++++s
+######w+++++++s#
+####w+++++++s###
+##w+++++++s#####
+w+++++++s#w++++s
++++++++s#++++++#
+++++++s##+++++++
 '''
