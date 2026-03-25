@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 
 import '../../models/pixel_canvas.dart';
@@ -12,16 +14,19 @@ class PixelCanvasPainter extends CustomPainter {
     this.blueprintLandmarks,
     this.shapePreview,
     this.selection,
+    this.referenceImage,
+    this.referenceOpacity = 0.3,
   });
 
   final CanvasState canvasState;
   final double pixelSize;
   final Offset? hoverPixel;
   final List<Map<String, dynamic>>? blueprintLandmarks;
-  /// Shape preview during drag: (tool, start, end, shiftHeld).
   final (DrawingTool, (int, int), (int, int), bool)? shapePreview;
-  /// Current selection rectangle.
   final SelectionState? selection;
+  /// Optional reference image overlay.
+  final ui.Image? referenceImage;
+  final double referenceOpacity;
 
   static const _checkerLight = Color(0xFF383838);
   static const _checkerDark = Color(0xFF2c2c2c);
@@ -43,6 +48,19 @@ class PixelCanvasPainter extends CustomPainter {
           Paint()..color = isLight ? _checkerLight : _checkerDark,
         );
       }
+    }
+
+    // Reference image overlay (below pixels, above checkerboard)
+    if (referenceImage != null) {
+      final src = Rect.fromLTWH(0, 0,
+        referenceImage!.width.toDouble(), referenceImage!.height.toDouble());
+      final dst = Rect.fromLTWH(0, 0, w * ps, h * ps);
+      canvas.drawImageRect(
+        referenceImage!,
+        src,
+        dst,
+        Paint()..color = Color.fromRGBO(255, 255, 255, referenceOpacity),
+      );
     }
 
     // Composite layers bottom-up with opacity
@@ -213,5 +231,7 @@ class PixelCanvasPainter extends CustomPainter {
       hoverPixel != oldDelegate.hoverPixel ||
       blueprintLandmarks != oldDelegate.blueprintLandmarks ||
       shapePreview != oldDelegate.shapePreview ||
-      selection != oldDelegate.selection;
+      selection != oldDelegate.selection ||
+      referenceImage != oldDelegate.referenceImage ||
+      referenceOpacity != oldDelegate.referenceOpacity;
 }

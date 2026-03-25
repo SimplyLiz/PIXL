@@ -17,6 +17,7 @@ import '../../providers/style_provider.dart';
 import '../../services/knowledge_base.dart';
 import '../../theme/studio_theme.dart';
 import '../../utils/grid_parser.dart';
+import '../color_picker_dialog.dart';
 
 enum _PanelTab { palette, style, generate, tiles }
 
@@ -367,7 +368,12 @@ class _PaletteSection extends ConsumerWidget {
             Tooltip(
               message: 'Edit hex color',
               child: InkWell(
-                onTap: () => _showHexEditor(context, ref, cs.foregroundColorIndex, palette),
+                onTap: () async {
+                  final color = await ColorPickerDialog.show(context, palette[cs.foregroundColorIndex]);
+                  if (color != null) {
+                    ref.read(paletteProvider.notifier).editColor(cs.foregroundColorIndex, color);
+                  }
+                },
                 borderRadius: BorderRadius.circular(4),
                 child: const Padding(
                   padding: EdgeInsets.all(2),
@@ -385,75 +391,6 @@ class _PaletteSection extends ConsumerWidget {
     );
   }
 
-  static void _showHexEditor(BuildContext context, WidgetRef ref, int index, PixlPalette palette) {
-    final color = palette[index];
-    final hex = color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2);
-    final controller = TextEditingController(text: hex);
-
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        final theme = Theme.of(ctx);
-        return Dialog(
-          backgroundColor: theme.cardColor,
-          child: Container(
-            width: 240,
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Edit Color', style: theme.textTheme.bodyMedium!.copyWith(fontWeight: FontWeight.w700)),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Text('#', style: theme.textTheme.bodyMedium),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: TextField(
-                        controller: controller,
-                        style: theme.textTheme.bodyMedium!.copyWith(fontSize: 13),
-                        maxLength: 6,
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          counterText: '',
-                          contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.of(ctx).pop(),
-                      child: const Text('Cancel', style: TextStyle(fontSize: 12)),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: () {
-                        final hexVal = int.tryParse(controller.text, radix: 16);
-                        if (hexVal != null) {
-                          ref.read(paletteProvider.notifier).editColor(
-                            index,
-                            Color(0xFF000000 | hexVal),
-                          );
-                        }
-                        Navigator.of(ctx).pop();
-                      },
-                      child: const Text('Apply', style: TextStyle(fontSize: 12)),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
 }
 
 class _TransparentPainter extends CustomPainter {
@@ -1375,13 +1312,32 @@ class _TileListSectionState extends ConsumerState<_TileListSection> {
                     width: 24, height: 24,
                     child: CircularProgressIndicator(strokeWidth: 1.5),
                   )
-                else if (_previewBytes != null)
+                else if (_previewBytes != null) ...[
                   Image.memory(
                     _previewBytes!,
-                    width: 128, height: 128,
+                    width: 96, height: 96,
                     filterQuality: FilterQuality.none,
                     fit: BoxFit.contain,
-                  )
+                  ),
+                  const SizedBox(height: 4),
+                  // 3x3 tiling preview
+                  Text('Tiling:', style: theme.textTheme.bodySmall!.copyWith(fontSize: 8)),
+                  const SizedBox(height: 2),
+                  SizedBox(
+                    width: 96,
+                    height: 96,
+                    child: GridView.count(
+                      crossAxisCount: 3,
+                      physics: const NeverScrollableScrollPhysics(),
+                      padding: EdgeInsets.zero,
+                      children: List.generate(9, (_) => Image.memory(
+                        _previewBytes!,
+                        filterQuality: FilterQuality.none,
+                        fit: BoxFit.fill,
+                      )),
+                    ),
+                  ),
+                ]
                 else
                   Text('No preview', style: theme.textTheme.bodySmall),
                 const SizedBox(height: 4),

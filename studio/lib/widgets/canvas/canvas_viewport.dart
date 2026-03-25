@@ -6,7 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/palette.dart';
 import '../../models/pixel_canvas.dart';
 import '../../providers/canvas_provider.dart';
+import '../../providers/backend_provider.dart';
 import '../../providers/hover_provider.dart';
+import '../../services/export_service.dart';
 import '../../theme/studio_theme.dart';
 import '../../providers/palette_provider.dart';
 import '../shortcuts_dialog.dart';
@@ -234,6 +236,11 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
               }
               return KeyEventResult.handled;
             }
+            // Cmd+S = quick save
+            if (meta && event.logicalKey == LogicalKeyboardKey.keyS) {
+              _quickSave();
+              return KeyEventResult.handled;
+            }
             // Tool shortcuts
             if (event.logicalKey == LogicalKeyboardKey.keyB) {
               notifier.setTool(DrawingTool.pencil);
@@ -383,6 +390,16 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
         );
       },
     );
+  }
+
+  Future<void> _quickSave() async {
+    final source = await ref.read(backendProvider.notifier).getPaxSource();
+    if (source == null) return;
+    final ok = await ExportService.quickSavePax(source);
+    if (!ok) {
+      // No last file path — fall back to save dialog
+      await ExportService.savePaxSource(source);
+    }
   }
 
   bool _isPanMode(CanvasState cs) =>

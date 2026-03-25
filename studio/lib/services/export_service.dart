@@ -4,10 +4,56 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/pixel_canvas.dart';
 
 /// Export service for saving tiles, PAX source, and atlases.
+/// Also manages recent files list and quick-save path.
 class ExportService {
+  static const _prefRecentFiles = 'recent_pax_files';
+  static const _prefLastFile = 'last_pax_file';
+  static const _maxRecent = 5;
+
+  /// Get the last opened file path (for Cmd+S quick save).
+  static Future<String?> getLastFilePath() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_prefLastFile);
+  }
+
+  /// Set the last opened file path.
+  static Future<void> setLastFilePath(String path) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefLastFile, path);
+    await _addToRecent(path);
+  }
+
+  /// Get recent files list.
+  static Future<List<String>> getRecentFiles() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(_prefRecentFiles) ?? [];
+  }
+
+  static Future<void> _addToRecent(String path) async {
+    final prefs = await SharedPreferences.getInstance();
+    final recent = prefs.getStringList(_prefRecentFiles) ?? [];
+    recent.remove(path);
+    recent.insert(0, path);
+    if (recent.length > _maxRecent) recent.removeLast();
+    await prefs.setStringList(_prefRecentFiles, recent);
+  }
+
+  /// Quick-save PAX source to the last-opened path (no dialog).
+  static Future<bool> quickSavePax(String source) async {
+    final path = await getLastFilePath();
+    if (path == null) return false;
+    try {
+      await File(path).writeAsString(source);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Export the current canvas as a scaled PNG.
   static Future<bool> exportCanvasPng({
     required CanvasState canvasState,

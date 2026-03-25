@@ -40,6 +40,7 @@ Future<void> _openPaxFile(BuildContext context, WidgetRef ref) async {
   }
 
   final source = await File(path).readAsString();
+  await ExportService.setLastFilePath(path);
   final backend = ref.read(backendProvider);
 
   // If engine isn't connected, start it with this file
@@ -130,6 +131,7 @@ class TopBar extends ConsumerWidget {
           // File actions
           _BarButton(label: 'New', icon: Icons.add, onTap: () => notifier.clearCanvas()),
           _BarButton(label: 'Open PAX', icon: Icons.folder_open, onTap: () => _openPaxFile(context, ref)),
+          _RecentFilesMenu(),
           _ExportMenu(),
           const SizedBox(width: 8),
           _BarButton(
@@ -311,6 +313,51 @@ class _ExportMenu extends ConsumerWidget {
         PopupMenuItem(value: 'gbstudio', child: Text('Export for GB Studio', style: TextStyle(fontSize: 12))),
         PopupMenuItem(value: 'unity', child: Text('Export for Unity', style: TextStyle(fontSize: 12))),
       ],
+    );
+  }
+}
+
+class _RecentFilesMenu extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return FutureBuilder<List<String>>(
+      future: ExportService.getRecentFiles(),
+      builder: (context, snapshot) {
+        final files = snapshot.data ?? [];
+        if (files.isEmpty) return const SizedBox.shrink();
+
+        return PopupMenuButton<String>(
+          tooltip: 'Recent Files',
+          iconSize: 18,
+          icon: const Icon(Icons.history, size: 16),
+          onSelected: (path) async {
+            final file = File(path);
+            if (!await file.exists()) return;
+            final source = await file.readAsString();
+            final backend = ref.read(backendProvider);
+
+            if (!backend.isConnected) {
+              final service = ref.read(claudeProvider.notifier).service;
+              final isLocal = service.provider == LlmProviderType.pixlLocal;
+              await ref.read(backendProvider.notifier).connect(
+                paxFile: path,
+                model: isLocal ? service.pixlModel : null,
+                adapter: isLocal && service.hasPixlAdapter ? service.pixlAdapter : null,
+              );
+            } else {
+              await ref.read(backendProvider.notifier).loadSource(source);
+            }
+            await ExportService.setLastFilePath(path);
+          },
+          itemBuilder: (_) => files.map((path) {
+            final name = path.split('/').last;
+            return PopupMenuItem(
+              value: path,
+              child: Text(name, style: const TextStyle(fontSize: 12)),
+            );
+          }).toList(),
+        );
+      },
     );
   }
 }
