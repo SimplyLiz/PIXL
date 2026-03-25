@@ -4,8 +4,10 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/pixel_canvas.dart';
 import '../providers/backend_provider.dart';
 import '../providers/chat_provider.dart';
+import '../providers/tilemap_provider.dart';
 import '../theme/studio_theme.dart';
 
 /// Dialog for WFC map generation using the backend /api/narrate endpoint.
@@ -31,6 +33,7 @@ class _WfcDialogState extends ConsumerState<WfcDialog> {
 
   bool _generating = false;
   Uint8List? _previewBytes;
+  List<List<String?>>? _tileGrid;
   String? _error;
 
   Future<void> _generate() async {
@@ -70,6 +73,14 @@ class _WfcDialogState extends ConsumerState<WfcDialog> {
         _error = resp['error'] as String;
       });
       return;
+    }
+
+    // Store tile grid for "Load into Tilemap"
+    final rawGrid = resp['tile_grid'] as List<dynamic>?;
+    if (rawGrid != null) {
+      _tileGrid = rawGrid.map((row) =>
+        (row as List<dynamic>).map((cell) => cell as String?).toList()
+      ).toList();
     }
 
     // Extract preview image if available
@@ -231,6 +242,28 @@ class _WfcDialogState extends ConsumerState<WfcDialog> {
                       filterQuality: FilterQuality.none,
                       fit: BoxFit.contain,
                     ),
+                  ),
+                ),
+              ),
+            ],
+
+            // Load into Tilemap button
+            if (_tileGrid != null && _previewBytes != null) ...[
+              const SizedBox(height: 8),
+              Center(
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    ref.read(tilemapProvider.notifier).loadFromGrid(_tileGrid!);
+                    ref.read(editorModeProvider.notifier).state = EditorMode.tilemap;
+                    Navigator.of(context).pop();
+                  },
+                  icon: const Icon(Icons.grid_view, size: 14),
+                  label: const Text('Load into Tilemap'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: theme.colorScheme.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    textStyle: const TextStyle(fontSize: 12),
                   ),
                 ),
               ),

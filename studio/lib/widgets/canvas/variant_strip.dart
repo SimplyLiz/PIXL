@@ -4,7 +4,9 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../models/pixel_canvas.dart';
 import '../../providers/backend_provider.dart';
+import '../../providers/tilemap_provider.dart';
 import '../../theme/studio_theme.dart';
 
 /// Horizontal strip below the canvas showing tile previews from the session.
@@ -59,6 +61,8 @@ class _VariantStripState extends ConsumerState<VariantStrip> {
   @override
   Widget build(BuildContext context) {
     final backend = ref.watch(backendProvider);
+    final mode = ref.watch(editorModeProvider);
+    final tilemapSelected = ref.watch(tilemapProvider.select((s) => s.selectedTile));
     final theme = Theme.of(context);
 
     if (!backend.isConnected || backend.tiles.isEmpty) {
@@ -94,7 +98,9 @@ class _VariantStripState extends ConsumerState<VariantStrip> {
               itemCount: backend.tiles.length,
               itemBuilder: (context, index) {
                 final tile = backend.tiles[index];
-                final isSelected = tile.name == _selectedTile;
+                final isSelected = mode == EditorMode.tilemap
+                    ? tile.name == tilemapSelected
+                    : tile.name == _selectedTile;
                 final preview = _previewCache[tile.name];
 
                 return Padding(
@@ -102,7 +108,13 @@ class _VariantStripState extends ConsumerState<VariantStrip> {
                   child: Tooltip(
                     message: '${tile.name}${tile.size != null ? ' (${tile.size})' : ''}',
                     child: InkWell(
-                      onTap: () => setState(() => _selectedTile = tile.name),
+                      onTap: () {
+                        if (mode == EditorMode.tilemap) {
+                          ref.read(tilemapProvider.notifier).setSelectedTile(tile.name);
+                        } else {
+                          setState(() => _selectedTile = tile.name);
+                        }
+                      },
                       borderRadius: BorderRadius.circular(4),
                       child: Container(
                         width: 56,

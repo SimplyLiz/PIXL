@@ -10,6 +10,7 @@ import '../../providers/backend_provider.dart';
 import '../../providers/canvas_provider.dart';
 import '../../providers/claude_provider.dart';
 import '../../providers/chat_provider.dart';
+import '../../providers/tilemap_provider.dart';
 import '../../services/llm_provider.dart';
 import '../../providers/palette_provider.dart';
 import '../../providers/style_provider.dart';
@@ -23,33 +24,42 @@ class ToolsPanel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final mode = ref.watch(editorModeProvider);
+    final isTilemap = mode == EditorMode.tilemap;
+
     return Container(
       width: 220,
       decoration: StudioTheme.rightPanelDecoration,
-      child: const SingleChildScrollView(
+      child: SingleChildScrollView(
         padding: StudioTheme.panelPadding,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _ToolsSection(),
-            SizedBox(height: StudioTheme.sectionSpacing),
-            _SymmetrySection(),
-            SizedBox(height: StudioTheme.sectionSpacing),
-            _PaletteSection(),
-            SizedBox(height: StudioTheme.sectionSpacing),
-            _LayersSection(),
-            SizedBox(height: StudioTheme.sectionSpacing),
-            _CanvasSizeSection(),
-            SizedBox(height: StudioTheme.sectionSpacing),
-            _StyleSection(),
-            SizedBox(height: StudioTheme.sectionSpacing),
-            _QuickGenerateSection(),
-            SizedBox(height: StudioTheme.sectionSpacing),
-            _BackendSection(),
-            SizedBox(height: StudioTheme.sectionSpacing),
-            _ValidationSection(),
-            SizedBox(height: StudioTheme.sectionSpacing),
-            _TileListSection(),
+            if (isTilemap) ...[
+              const _TilemapToolsSection(),
+              const SizedBox(height: StudioTheme.sectionSpacing),
+              const _TilemapSizeSection(),
+            ] else ...[
+              const _ToolsSection(),
+              const SizedBox(height: StudioTheme.sectionSpacing),
+              const _SymmetrySection(),
+              const SizedBox(height: StudioTheme.sectionSpacing),
+              const _PaletteSection(),
+              const SizedBox(height: StudioTheme.sectionSpacing),
+              const _LayersSection(),
+              const SizedBox(height: StudioTheme.sectionSpacing),
+              const _CanvasSizeSection(),
+            ],
+            const SizedBox(height: StudioTheme.sectionSpacing),
+            const _StyleSection(),
+            const SizedBox(height: StudioTheme.sectionSpacing),
+            const _QuickGenerateSection(),
+            const SizedBox(height: StudioTheme.sectionSpacing),
+            const _BackendSection(),
+            const SizedBox(height: StudioTheme.sectionSpacing),
+            const _ValidationSection(),
+            const SizedBox(height: StudioTheme.sectionSpacing),
+            const _TileListSection(),
           ],
         ),
       ),
@@ -117,6 +127,166 @@ class _ToolButton extends ConsumerWidget {
           child: Icon(icon, size: 18, color: isActive ? theme.colorScheme.primary : null),
         ),
       ),
+    );
+  }
+}
+
+// ── Tilemap Tools ─────────────────────────────────────────
+
+class _TilemapToolsSection extends ConsumerWidget {
+  const _TilemapToolsSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final activeTool = ref.watch(tilemapProvider.select((s) => s.activeTool));
+    final theme = Theme.of(context);
+
+    Widget btn(IconData icon, String label, TilemapTool tool) {
+      final isActive = tool == activeTool;
+      return Tooltip(
+        message: label,
+        child: InkWell(
+          onTap: () => ref.read(tilemapProvider.notifier).setTool(tool),
+          borderRadius: BorderRadius.circular(4),
+          child: Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              color: isActive ? theme.colorScheme.primary.withValues(alpha: 0.3) : null,
+              borderRadius: BorderRadius.circular(4),
+              border: isActive
+                  ? Border.all(color: theme.colorScheme.primary, width: 1)
+                  : Border.all(color: Colors.transparent),
+            ),
+            child: Icon(icon, size: 18, color: isActive ? theme.colorScheme.primary : null),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('TILEMAP TOOLS', style: theme.textTheme.titleSmall),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 4,
+          runSpacing: 4,
+          children: [
+            btn(Icons.grid_view, 'Stamp (T)', TilemapTool.stamp),
+            btn(Icons.auto_fix_high, 'Eraser (E)', TilemapTool.eraser),
+            btn(Icons.format_color_fill, 'Fill (G)', TilemapTool.bucket),
+            btn(Icons.colorize, 'Eyedropper (I)', TilemapTool.eyedropper),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _TilemapSizeSection extends ConsumerStatefulWidget {
+  const _TilemapSizeSection();
+
+  @override
+  ConsumerState<_TilemapSizeSection> createState() => _TilemapSizeSectionState();
+}
+
+class _TilemapSizeSectionState extends ConsumerState<_TilemapSizeSection> {
+  late TextEditingController _wCtrl;
+  late TextEditingController _hCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    final ts = ref.read(tilemapProvider);
+    _wCtrl = TextEditingController(text: '${ts.gridWidth}');
+    _hCtrl = TextEditingController(text: '${ts.gridHeight}');
+  }
+
+  @override
+  void dispose() {
+    _wCtrl.dispose();
+    _hCtrl.dispose();
+    super.dispose();
+  }
+
+  void _apply() {
+    final w = int.tryParse(_wCtrl.text) ?? 12;
+    final h = int.tryParse(_hCtrl.text) ?? 8;
+    ref.read(tilemapProvider.notifier).resize(
+      w.clamp(2, 64),
+      h.clamp(2, 64),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final ts = ref.watch(tilemapProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('MAP SIZE', style: theme.textTheme.titleSmall),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            SizedBox(
+              width: 50,
+              child: TextField(
+                controller: _wCtrl,
+                keyboardType: TextInputType.number,
+                style: theme.textTheme.bodySmall!.copyWith(fontSize: 12),
+                decoration: InputDecoration(
+                  labelText: 'W',
+                  labelStyle: theme.textTheme.bodySmall!.copyWith(fontSize: 9),
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
+                ),
+                onSubmitted: (_) => _apply(),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text('x', style: theme.textTheme.bodySmall),
+            ),
+            SizedBox(
+              width: 50,
+              child: TextField(
+                controller: _hCtrl,
+                keyboardType: TextInputType.number,
+                style: theme.textTheme.bodySmall!.copyWith(fontSize: 12),
+                decoration: InputDecoration(
+                  labelText: 'H',
+                  labelStyle: theme.textTheme.bodySmall!.copyWith(fontSize: 9),
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
+                ),
+                onSubmitted: (_) => _apply(),
+              ),
+            ),
+            const SizedBox(width: 6),
+            InkWell(
+              onTap: _apply,
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: theme.dividerColor),
+                ),
+                child: const Icon(Icons.check, size: 14),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '${ts.gridWidth} x ${ts.gridHeight} tiles',
+          style: theme.textTheme.bodySmall!.copyWith(fontSize: 9),
+        ),
+      ],
     );
   }
 }

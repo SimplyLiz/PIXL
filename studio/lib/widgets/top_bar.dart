@@ -4,9 +4,11 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/pixel_canvas.dart' show EditorMode;
 import '../providers/backend_provider.dart';
 import '../providers/canvas_provider.dart';
 import '../providers/claude_provider.dart';
+import '../providers/tilemap_provider.dart';
 import '../services/llm_provider.dart';
 import '../services/export_service.dart';
 import '../theme/studio_theme.dart';
@@ -119,7 +121,11 @@ class TopBar extends ConsumerWidget {
               letterSpacing: 1.5,
             ),
           ),
-          const SizedBox(width: 24),
+          const SizedBox(width: 16),
+
+          // Mode toggle
+          _ModeToggle(),
+          const SizedBox(width: 16),
 
           // File actions
           _BarButton(label: 'New', icon: Icons.add, onTap: () => notifier.clearCanvas()),
@@ -267,6 +273,57 @@ class _ExportMenu extends ConsumerWidget {
         PopupMenuItem(value: 'pax', child: Text('Save PAX Source', style: TextStyle(fontSize: 12))),
         PopupMenuItem(value: 'atlas', child: Text('Export Atlas', style: TextStyle(fontSize: 12))),
       ],
+    );
+  }
+}
+
+class _ModeToggle extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mode = ref.watch(editorModeProvider);
+    final theme = Theme.of(context);
+
+    Widget modeButton(EditorMode m, IconData icon, String label) {
+      final isActive = mode == m;
+      return InkWell(
+        onTap: () => ref.read(editorModeProvider.notifier).state = m,
+        borderRadius: BorderRadius.circular(4),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: isActive ? theme.colorScheme.primary.withValues(alpha: 0.2) : null,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 14,
+                color: isActive ? theme.colorScheme.primary : theme.textTheme.bodySmall?.color),
+              const SizedBox(width: 4),
+              Text(label, style: TextStyle(
+                fontSize: 10,
+                fontWeight: isActive ? FontWeight.w700 : null,
+                color: isActive ? theme.colorScheme.primary : theme.textTheme.bodySmall?.color,
+              )),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: theme.dividerColor),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          modeButton(EditorMode.pixel, Icons.edit, 'Pixel'),
+          modeButton(EditorMode.tilemap, Icons.grid_view, 'Tilemap'),
+        ],
+      ),
     );
   }
 }

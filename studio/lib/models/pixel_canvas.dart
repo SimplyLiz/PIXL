@@ -174,3 +174,70 @@ class CanvasSnapshot {
 
   final List<List<Color?>> layerPixels;
 }
+
+// ── Tilemap Mode ──────────────────────────────────────────
+
+/// Editor modes — pixel editing or tilemap painting.
+enum EditorMode { pixel, tilemap }
+
+/// Tools available in tilemap mode.
+enum TilemapTool { stamp, eraser, bucket, eyedropper }
+
+/// A tilemap — 2D grid of tile name references.
+class TilemapState {
+  TilemapState({
+    this.gridWidth = 12,
+    this.gridHeight = 8,
+    List<List<String?>>? cells,
+    this.activeTool = TilemapTool.stamp,
+    this.selectedTile,
+    this.zoomLevel = 4.0,
+    this.showGrid = true,
+    this.tilePixelSize = 16,
+  }) : cells = cells ??
+           List.generate(gridHeight, (_) => List.filled(gridWidth, null));
+
+  final int gridWidth;
+  final int gridHeight;
+  final List<List<String?>> cells; // cells[row][col] = tile name or null
+  final TilemapTool activeTool;
+  final String? selectedTile; // tile name used as brush
+  final double zoomLevel;
+  final bool showGrid;
+  final int tilePixelSize; // native tile size in pixels (e.g. 16)
+
+  String? cellAt(int col, int row) {
+    if (col < 0 || col >= gridWidth || row < 0 || row >= gridHeight) return null;
+    return cells[row][col];
+  }
+
+  TilemapState copyWith({
+    int? gridWidth,
+    int? gridHeight,
+    List<List<String?>>? cells,
+    TilemapTool? activeTool,
+    String? selectedTile,
+    bool clearSelectedTile = false,
+    double? zoomLevel,
+    bool? showGrid,
+    int? tilePixelSize,
+  }) {
+    return TilemapState(
+      gridWidth: gridWidth ?? this.gridWidth,
+      gridHeight: gridHeight ?? this.gridHeight,
+      cells: cells ?? this.cells,
+      activeTool: activeTool ?? this.activeTool,
+      selectedTile: clearSelectedTile ? null : (selectedTile ?? this.selectedTile),
+      zoomLevel: zoomLevel ?? this.zoomLevel,
+      showGrid: showGrid ?? this.showGrid,
+      tilePixelSize: tilePixelSize ?? this.tilePixelSize,
+    );
+  }
+}
+
+/// Snapshot for tilemap undo/redo.
+@immutable
+class TilemapSnapshot {
+  const TilemapSnapshot({required this.cells});
+  final List<List<String?>> cells;
+}

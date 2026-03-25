@@ -4,7 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/backend_provider.dart';
 import '../providers/claude_provider.dart';
 import '../services/llm_provider.dart';
+import '../models/pixel_canvas.dart';
+import '../providers/tilemap_provider.dart';
 import 'canvas/canvas_viewport.dart';
+import 'canvas/tilemap_viewport.dart';
 import 'canvas/variant_strip.dart';
 import 'panels/chat_panel.dart';
 import 'panels/tools_panel.dart';
@@ -49,27 +52,33 @@ class _StudioShellState extends ConsumerState<StudioShell> {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    final mode = ref.watch(editorModeProvider);
+
+    return Scaffold(
       body: Column(
         children: [
-          TopBar(),
+          const TopBar(),
           Expanded(
             child: Row(
               children: [
-                ChatPanel(),
+                const ChatPanel(),
                 Expanded(
                   child: Column(
                     children: [
-                      Expanded(child: CanvasViewport()),
-                      VariantStrip(),
+                      Expanded(
+                        child: mode == EditorMode.tilemap
+                            ? const TilemapViewport()
+                            : const CanvasViewport(),
+                      ),
+                      const VariantStrip(),
                     ],
                   ),
                 ),
-                ToolsPanel(),
+                const ToolsPanel(),
               ],
             ),
           ),
-          StatusBar(),
+          const StatusBar(),
         ],
       ),
     );
