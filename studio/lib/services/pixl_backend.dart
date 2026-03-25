@@ -17,11 +17,38 @@ class PixlBackend {
   String get _baseUrl => 'http://127.0.0.1:$port';
 
   static String _findBinary() {
-    final candidates = [
+    // Resolve the project root — works regardless of working directory.
+    // When running from `flutter run` inside studio/, the script is in
+    // studio/lib/. When running a built app, fall back to cwd-relative
+    // paths and then PATH lookup.
+    final scriptDir = File(Platform.script.toFilePath()).parent.path;
+
+    // Walk up from studio/lib/ or studio/ to find the project root
+    Directory? projectRoot;
+    var dir = Directory(scriptDir);
+    for (var i = 0; i < 6; i++) {
+      if (File('${dir.path}/tool/Cargo.toml').existsSync()) {
+        projectRoot = dir;
+        break;
+      }
+      dir = dir.parent;
+    }
+
+    final candidates = <String>[
+      // Absolute paths from project root (most reliable)
+      if (projectRoot != null) ...[
+        '${projectRoot.path}/tool/target/release/pixl',
+        '${projectRoot.path}/tool/target/debug/pixl',
+      ],
+      // Relative paths (work when cwd is studio/ or project root)
       '../tool/target/release/pixl',
       '../tool/target/debug/pixl',
+      'tool/target/release/pixl',
+      'tool/target/debug/pixl',
+      // PATH lookup
       'pixl',
     ];
+
     for (final c in candidates) {
       if (File(c).existsSync()) return c;
     }
@@ -46,18 +73,35 @@ class PixlBackend {
       if (adapter != null && adapter.isNotEmpty) {
         args.addAll(['--adapter', adapter]);
       }
+
+      // ignore: avoid_print
+      print('[pixl] starting engine: $_binaryPath ${args.join(' ')}');
       _serverProcess = await Process.start(_binaryPath, args);
+
+      // Forward stderr for diagnostics
+      _serverProcess!.stderr.transform(const SystemEncoding().decoder).listen(
+        // ignore: avoid_print
+        (line) => print('[pixl-engine] $line'),
+      );
 
       // Wait for server to be ready
       for (var i = 0; i < 30; i++) {
         await Future.delayed(const Duration(milliseconds: 200));
         try {
           final resp = await http.get(Uri.parse('$_baseUrl/health'));
-          if (resp.statusCode == 200) return true;
+          if (resp.statusCode == 200) {
+            // ignore: avoid_print
+            print('[pixl] engine ready on port $port');
+            return true;
+          }
         } catch (_) {}
       }
+      // ignore: avoid_print
+      print('[pixl] engine failed to start within 6s (binary: $_binaryPath)');
       return false;
     } catch (e) {
+      // ignore: avoid_print
+      print('[pixl] engine start error: $e');
       return false;
     }
   }
