@@ -76,7 +76,9 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     _controller.clear();
     _scrollToBottom();
 
-    if (_isGenerationRequest(text)) {
+    if (_isAiCommand(text)) {
+      await _handleAiCommand(text);
+    } else if (_isGenerationRequest(text)) {
       await _handleGeneration(text);
     } else {
       await _handleChat(text);
@@ -315,6 +317,301 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
       return content.substring(firstBracket).trim();
     }
     return content.trim();
+  }
+
+  // ── AI Commands ─────────────────────────────────────────
+
+  bool _isAiCommand(String text) {
+    final lower = text.toLowerCase().trim();
+    return lower.startsWith('make it tile') ||
+        lower.startsWith('fix edges') ||
+        lower.startsWith('make tileable') ||
+        lower.startsWith('auto-tag') ||
+        lower.startsWith('auto tag') ||
+        lower.startsWith('tag all') ||
+        lower.contains('style transfer') ||
+        lower.startsWith('restyle') ||
+        lower.startsWith('make this look like') ||
+        lower.startsWith('shift to') ||
+        lower.startsWith('inpaint') ||
+        lower.startsWith('fill this with');
+  }
+
+  Future<void> _handleAiCommand(String text) async {
+    final lower = text.toLowerCase().trim();
+    final chat = ref.read(chatProvider.notifier);
+    final backend = ref.read(backendProvider);
+
+    if (!backend.isConnected) {
+      chat.addAssistantMessage('Engine not connected.');
+      return;
+    }
+
+    // ── Make it Tile ──
+    if (lower.startsWith('make it tile') ||
+        lower.startsWith('fix edges') ||
+        lower.startsWith('make tileable')) {
+      await _handleMakeItTile();
+      return;
+    }
+
+    // ── Auto-Tag ──
+    if (lower.startsWith('auto-tag') ||
+        lower.startsWith('auto tag') ||
+        lower.startsWith('tag all')) {
+      await _handleAutoTag();
+      return;
+    }
+
+    // ── Style Transfer ──
+    if (lower.contains('style transfer') ||
+        lower.startsWith('restyle') ||
+        lower.startsWith('make this look like') ||
+        lower.startsWith('shift to')) {
+      await _handleStyleTransfer(text);
+      return;
+    }
+
+    // ── Inpaint ──
+    if (lower.startsWith('inpaint') || lower.startsWith('fill this with')) {
+      await _handleInpaint(text);
+      return;
+    }
+  }
+
+  Future<void> _handleMakeItTile() async {
+    final chat = ref.read(chatProvider.notifier);
+    final tiles = ref.read(backendProvider).tiles;
+
+    if (_pendingTileName == null && tiles.isEmpty) {
+      chat.addAssistantMessage('No tile selected. Generate or create a tile first.');
+      return;
+    }
+
+    final tileName = _pendingTileName ?? tiles.last.name;
+    chat.addAssistantMessage('Making **`$tileName`** tileable...', isStatus: true);
+    _scrollToBottom();
+
+    // Get the tile's grid from backend
+    final ctx = await ref.read(backendProvider.notifier).getGenerationContext(
+      prompt: 'Fix the edges of tile "$tileName" to make it seamlessly tileable. '
+          'The tile must repeat horizontally and vertically with no visible seams. '
+          'Keep the interior design intact, only adjust border pixels for continuity.',
+    );
+
+    final resp = await ref.read(claudeProvider.notifier).generateTile(
+      systemPrompt: ctx['system_prompt'] as String? ?? '',
+      userPrompt: ctx['user_prompt'] as String? ?? '',
+    );
+
+    if (resp.isError) {
+      chat.addAssistantMessage('Failed: ${resp.errorMessage}');
+      return;
+    }
+
+    final grid = extractGrid(resp.content);
+    if (grid == null) {
+      chat.addAssistantMessage('Could not extract a valid grid from the response.');
+      return;
+    }
+
+    final newName = '${tileName}_tileable';
+    final canvasSize = ref.read(canvasProvider).canvasSize;
+    final sizeStr = '${canvasSize.width}x${canvasSize.height}';
+    final createResp = await ref.read(backendProvider.notifier).createTile(
+      name: newName,
+      palette: ctx['palette'] as String? ?? 'default',
+      size: sizeStr,
+      grid: grid,
+    );
+
+    if (createResp.containsKey('error')) {
+      chat.addAssistantMessage('Tile creation failed: ${createResp['error']}');
+      return;
+    }
+
+    setState(() {
+      _pendingTileName = newName;
+      _pendingPreviewB64 = createResp['preview'] as String?;
+    });
+    chat.addAssistantMessage(
+      '**Created tileable version: `$newName`**\n\n'
+      'Accept or reject below.',
+    );
+    _scrollToBottom();
+  }
+
+  Future<void> _handleAutoTag() async {
+    final chat = ref.read(chatProvider.notifier);
+    final tiles = ref.read(backendProvider).tiles;
+
+    if (tiles.isEmpty) {
+      chat.addAssistantMessage('No tiles in session to tag.');
+      return;
+    }
+
+    chat.addAssistantMessage('Auto-tagging ${tiles.length} tiles...', isStatus: true);
+    _scrollToBottom();
+
+    // Use the LLM to analyze all tiles at once
+    final tileNames = tiles.map((t) => t.name).join(', ');
+    final ctx = await ref.read(backendProvider.notifier).getGenerationContext(
+      prompt: 'Analyze these tiles and suggest semantic tags for each: $tileNames. '
+          'For each tile, provide: tags (e.g. wall, floor, corner, decoration), '
+          'a target_layer (background/terrain/walls/platform/foreground/effects), '
+          'and a brief description. Format as a list.',
+    );
+
+    final resp = await ref.read(claudeProvider.notifier).generateTile(
+      systemPrompt: ctx['system_prompt'] as String? ?? '',
+      userPrompt: ctx['user_prompt'] as String? ?? '',
+    );
+
+    if (resp.isError) {
+      chat.addAssistantMessage('Auto-tag failed: ${resp.errorMessage}');
+      return;
+    }
+
+    chat.addAssistantMessage(
+      '**Auto-tag results:**\n\n${resp.content}\n\n'
+      '*Note: tag updates need to be applied manually via the engine for now.*',
+    );
+    _scrollToBottom();
+  }
+
+  Future<void> _handleStyleTransfer(String text) async {
+    final chat = ref.read(chatProvider.notifier);
+    final tiles = ref.read(backendProvider).tiles;
+
+    if (_pendingTileName == null && tiles.isEmpty) {
+      chat.addAssistantMessage('No tile to restyle. Generate or create a tile first.');
+      return;
+    }
+
+    final tileName = _pendingTileName ?? tiles.last.name;
+    chat.addAssistantMessage('Restyling **`$tileName`**...', isStatus: true);
+    _scrollToBottom();
+
+    final canvasSize = ref.read(canvasProvider).canvasSize;
+    final sizeStr = '${canvasSize.width}x${canvasSize.height}';
+
+    final ctx = await ref.read(backendProvider.notifier).getGenerationContext(
+      prompt: 'Restyle tile "$tileName" to match this style: $text. '
+          'Use only the palette symbols provided. Output only the grid.',
+      size: sizeStr,
+    );
+
+    final resp = await ref.read(claudeProvider.notifier).generateTile(
+      systemPrompt: ctx['system_prompt'] as String? ?? '',
+      userPrompt: ctx['user_prompt'] as String? ?? '',
+    );
+
+    if (resp.isError) {
+      chat.addAssistantMessage('Style transfer failed: ${resp.errorMessage}');
+      return;
+    }
+
+    final grid = extractGrid(resp.content);
+    if (grid == null) {
+      chat.addAssistantMessage('Could not extract a valid grid from the response.');
+      return;
+    }
+
+    final newName = '${tileName}_restyled';
+    final createResp = await ref.read(backendProvider.notifier).createTile(
+      name: newName,
+      palette: ctx['palette'] as String? ?? 'default',
+      size: sizeStr,
+      grid: grid,
+    );
+
+    if (createResp.containsKey('error')) {
+      chat.addAssistantMessage('Tile creation failed: ${createResp['error']}');
+      return;
+    }
+
+    setState(() {
+      _pendingTileName = newName;
+      _pendingPreviewB64 = createResp['preview'] as String?;
+    });
+    chat.addAssistantMessage(
+      '**Restyled: `$newName`**\n\nAccept or reject below.',
+    );
+    _scrollToBottom();
+  }
+
+  Future<void> _handleInpaint(String text) async {
+    final chat = ref.read(chatProvider.notifier);
+    final sel = ref.read(selectionProvider);
+
+    if (!sel.hasSelection) {
+      chat.addAssistantMessage(
+        'Select a region first with the **Select tool (S)**, then describe what to fill it with.',
+      );
+      return;
+    }
+
+    final tiles = ref.read(backendProvider).tiles;
+    if (_pendingTileName == null && tiles.isEmpty) {
+      chat.addAssistantMessage('No tile context for inpainting.');
+      return;
+    }
+
+    final tileName = _pendingTileName ?? tiles.last.name;
+    chat.addAssistantMessage(
+      'Inpainting region (${sel.x},${sel.y})→(${sel.x + sel.width},${sel.y + sel.height}) '
+      'in **`$tileName`**...',
+      isStatus: true,
+    );
+    _scrollToBottom();
+
+    final canvasSize = ref.read(canvasProvider).canvasSize;
+    final sizeStr = '${canvasSize.width}x${canvasSize.height}';
+
+    final ctx = await ref.read(backendProvider.notifier).getGenerationContext(
+      prompt: 'Modify tile "$tileName": in the region from row ${sel.y} to ${sel.y + sel.height - 1}, '
+          'columns ${sel.x} to ${sel.x + sel.width - 1}, replace those pixels with: $text. '
+          'Keep all pixels outside this region exactly the same. Output the complete grid.',
+      size: sizeStr,
+    );
+
+    final resp = await ref.read(claudeProvider.notifier).generateTile(
+      systemPrompt: ctx['system_prompt'] as String? ?? '',
+      userPrompt: ctx['user_prompt'] as String? ?? '',
+    );
+
+    if (resp.isError) {
+      chat.addAssistantMessage('Inpaint failed: ${resp.errorMessage}');
+      return;
+    }
+
+    final grid = extractGrid(resp.content);
+    if (grid == null) {
+      chat.addAssistantMessage('Could not extract a valid grid from the response.');
+      return;
+    }
+
+    final newName = '${tileName}_inpainted';
+    final createResp = await ref.read(backendProvider.notifier).createTile(
+      name: newName,
+      palette: ctx['palette'] as String? ?? 'default',
+      size: sizeStr,
+      grid: grid,
+    );
+
+    if (createResp.containsKey('error')) {
+      chat.addAssistantMessage('Tile creation failed: ${createResp['error']}');
+      return;
+    }
+
+    setState(() {
+      _pendingTileName = newName;
+      _pendingPreviewB64 = createResp['preview'] as String?;
+    });
+    chat.addAssistantMessage(
+      '**Inpainted: `$newName`**\n\nAccept or reject below.',
+    );
+    _scrollToBottom();
   }
 
   /// Accept the pending tile — record feedback, update style latent.
