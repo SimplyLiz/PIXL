@@ -1,4 +1,6 @@
 pub mod blueprint;
+pub mod completeness;
+pub mod oklab;
 pub mod compose;
 pub mod corpus;
 pub mod cycle;

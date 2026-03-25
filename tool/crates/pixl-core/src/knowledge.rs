@@ -266,14 +266,13 @@ impl KnowledgeBase {
 
         let mut expanded: HashSet<String> = HashSet::new();
 
-        // 1-hop: direct entity matches → related entities
+        // 1-hop: exact word matches against entity and concept keys
         for word in &query_words {
             if let Some(related) = self.entity_relations.get(*word) {
                 for r in related {
                     expanded.insert(r.clone());
                 }
             }
-            // Also check concept relations
             if let Some(related) = self.concept_relations.get(*word) {
                 for r in related {
                     expanded.insert(r.clone());
@@ -281,13 +280,41 @@ impl KnowledgeBase {
             }
         }
 
-        // Multi-word entity matches (e.g. "wave function collapse")
+        // Fuzzy entity matching: query words that are substrings of entity
+        // keys or vice versa (e.g. "torchlight" matches entity "torch",
+        // "nes" matches entity "nes games"). This catches partial matches
+        // that exact lookup misses.
         for entity in self.entity_relations.keys() {
-            if entity.contains(' ') && query_lower.contains(entity.as_str()) {
+            let matched = if entity.contains(' ') {
+                // Multi-word: check if entity appears in full query
+                query_lower.contains(entity.as_str())
+            } else {
+                // Single-word: check if any query word contains or is
+                // contained by the entity (min 3 chars to avoid noise)
+                entity.len() >= 3
+                    && query_words.iter().any(|w| {
+                        w.contains(entity.as_str()) || entity.contains(w)
+                    })
+            };
+            if matched {
                 if let Some(related) = self.entity_relations.get(entity) {
                     for r in related {
                         expanded.insert(r.clone());
                     }
+                }
+            }
+        }
+
+        // Also match query words against concept keys (not just entities)
+        // to catch direct concept references like "palette", "shadow", etc.
+        for word in &query_words {
+            for concept in self.concept_to_passages.keys() {
+                if concept.len() >= 3
+                    && (word.contains(concept.as_str()) || concept.contains(word))
+                    && *word != concept.as_str()
+                {
+                    // Add the concept itself as an expanded term
+                    expanded.insert(concept.clone());
                 }
             }
         }
@@ -329,6 +356,7 @@ impl KnowledgeBase {
             .collect();
 
         // Collect all concepts reachable from query terms (1 hop)
+        // Uses fuzzy matching (same as expand_query) to catch partial matches
         let mut reachable_concepts: HashSet<String> = HashSet::new();
         for word in &query_words {
             if let Some(related) = self.entity_relations.get(*word) {
@@ -336,6 +364,22 @@ impl KnowledgeBase {
             }
             if let Some(related) = self.concept_relations.get(*word) {
                 reachable_concepts.extend(related.iter().cloned());
+            }
+        }
+        // Fuzzy entity matching for decomposition
+        for entity in self.entity_relations.keys() {
+            let matched = if entity.contains(' ') {
+                query_lower.contains(entity.as_str())
+            } else {
+                entity.len() >= 3
+                    && query_words.iter().any(|w| {
+                        w.contains(entity.as_str()) || entity.contains(w)
+                    })
+            };
+            if matched {
+                if let Some(related) = self.entity_relations.get(entity) {
+                    reachable_concepts.extend(related.iter().cloned());
+                }
             }
         }
 
@@ -369,17 +413,25 @@ impl KnowledgeBase {
                 .extend(concepts.iter().cloned());
         }
 
-        // Build sub-queries: original query terms + cluster-specific concepts
+        // Build sub-queries: original query terms + cluster-specific concepts.
+        // Deduplicate by sorting cluster terms so identical concept sets collapse.
         let original_terms = query_words.join(" ");
+        let mut seen: HashSet<String> = HashSet::new();
         let sub_queries: Vec<String> = doc_clusters
             .values()
-            .map(|concepts| {
-                let cluster_terms: Vec<&str> = concepts
+            .filter_map(|concepts| {
+                let mut cluster_terms: Vec<&str> = concepts
                     .iter()
                     .take(4) // limit to avoid BM25 dilution
                     .map(|s| s.as_str())
                     .collect();
-                format!("{} {}", original_terms, cluster_terms.join(" "))
+                cluster_terms.sort();
+                let key = cluster_terms.join(" ");
+                if seen.insert(key) {
+                    Some(format!("{} {}", original_terms, cluster_terms.join(" ")))
+                } else {
+                    None
+                }
             })
             .collect();
 

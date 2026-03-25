@@ -37,6 +37,8 @@ pub fn handle_tool(state: &Mutex<McpState>, tool_name: &str, args: &Value) -> Va
         "pixl_training_stats" => handle_training_stats(state),
         "pixl_new_from_template" => handle_new_from_template(args),
         "pixl_export" => handle_export(state, args),
+        "pixl_check_completeness" => handle_check_completeness(state),
+        "pixl_generate_transition_context" => handle_generate_transition_context(state, args),
         _ => json!({"error": format!("unknown tool: {}", tool_name)}),
     }
 }
@@ -1906,4 +1908,139 @@ fn handle_export(state: &Mutex<McpState>, args: &Value) -> Value {
             "error": format!("unknown format '{}'. Supported: texturepacker, tiled, godot", format),
         }),
     }
+}
+
+// ── Completeness check ──────────────────────────────────────────
+
+fn handle_check_completeness(state: &Mutex<McpState>) -> Value {
+    let st = state.lock().unwrap();
+    let report = pixl_core::completeness::analyze(&st.file);
+    json!({
+        "ok": true,
+        "score": report.score,
+        "edge_classes": report.edge_classes,
+        "connected_pairs": report.connected_pairs,
+        "disconnected_pairs": report.disconnected_pairs,
+        "missing_tiles": report.missing_tiles,
+        "summary": report.summary,
+    })
+}
+
+// ── Generate transition tile context ────────────────────────────
+
+fn handle_generate_transition_context(state: &Mutex<McpState>, args: &Value) -> Value {
+    let tile_a = args.get("tile_a").and_then(|v| v.as_str()).unwrap_or("");
+    let tile_b = args.get("tile_b").and_then(|v| v.as_str()).unwrap_or("");
+
+    let st = state.lock().unwrap();
+
+    // Get tile data
+    let raw_a = match st.file.tile.get(tile_a) {
+        Some(t) => t,
+        None => return json!({"ok": false, "error": format!("tile '{}' not found", tile_a)}),
+    };
+    let raw_b = match st.file.tile.get(tile_b) {
+        Some(t) => t,
+        None => return json!({"ok": false, "error": format!("tile '{}' not found", tile_b)}),
+    };
+
+    let ec_a = raw_a.edge_class.as_ref().map(|ec| (&ec.n, &ec.e, &ec.s, &ec.w));
+    let ec_b = raw_b.edge_class.as_ref().map(|ec| (&ec.n, &ec.e, &ec.s, &ec.w));
+
+    let size_str = raw_a.size.as_deref().unwrap_or("16x16");
+    let palette_name = &raw_a.palette;
+
+    // Get palette symbols for the prompt
+    let palette_info = st.palettes.get(palette_name.as_str())
+        .map(|pal| {
+            pal.symbols.iter()
+                .map(|(sym, rgba)| format!("'{}' = #{:02x}{:02x}{:02x}", sym, rgba.r, rgba.g, rgba.b))
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_default();
+
+    // Get grid previews of both tiles (first 4 rows as context)
+    let grid_a = raw_a.grid.as_deref().unwrap_or("");
+    let grid_b = raw_b.grid.as_deref().unwrap_or("");
+    let preview_a: Vec<&str> = grid_a.lines().take(4).collect();
+    let preview_b: Vec<&str> = grid_b.lines().take(4).collect();
+
+    // Search knowledge base for transition-specific techniques
+    let knowledge_text = if let Some(ref kb) = st.knowledge {
+        let query = format!(
+            "tile transition dithering boundary seamless edge blending {} {}",
+            tile_a, tile_b
+        );
+        let results = kb.search(&query, 3);
+        results.iter()
+            .map(|r| format!(
+                "[Source: {} | Relevance: {:.1}]\n{}",
+                r.source_title, r.score, r.content
+            ))
+            .collect::<Vec<_>>()
+            .join("\n---\n")
+    } else {
+        String::new()
+    };
+
+    // Build the transition-specific prompt
+    let system_prompt = format!(
+        "You are a pixel art tile designer. Create a {size} transition tile in PAX format.\n\
+         Palette ({palette}): {palette_info}\n\
+         \n\
+         Rules:\n\
+         - The transition tile must have '{a_edge}' edges on the north/east/west sides \
+           and '{b_edge}' edges on the south side\n\
+         - The top portion should visually match tile '{tile_a}' style\n\
+         - The bottom portion should visually match tile '{tile_b}' style\n\
+         - Use dithering at the boundary for a natural transition\n\
+         - Respect the light source direction (highlight top-left, shadow bottom-right)\n\
+         - Output ONLY the {size} character grid, one row per line\n\
+         - Add auto_rotate = \"4way\" to get all 4 cardinal transitions from one tile",
+        size = size_str,
+        palette = palette_name,
+        palette_info = palette_info,
+        a_edge = ec_a.map(|e| e.0.as_str()).unwrap_or("?"),
+        b_edge = ec_b.map(|e| e.0.as_str()).unwrap_or("?"),
+        tile_a = tile_a,
+        tile_b = tile_b,
+    );
+
+    let user_prompt = format!(
+        "{knowledge}\n\
+         \n\
+         Tile A '{tile_a}' (top rows):\n{preview_a}\n\
+         \n\
+         Tile B '{tile_b}' (top rows):\n{preview_b}\n\
+         \n\
+         Generate a {size} transition tile that blends '{tile_a}' into '{tile_b}' \
+         from top to bottom. Use the same symbols and patterns as the source tiles. \
+         Dither the boundary zone (2-3 rows) for a natural transition.",
+        knowledge = if knowledge_text.is_empty() { String::new() } else {
+            format!("## Relevant pixel art techniques:\n{}\n", knowledge_text)
+        },
+        tile_a = tile_a,
+        tile_b = tile_b,
+        preview_a = preview_a.join("\n"),
+        preview_b = preview_b.join("\n"),
+        size = size_str,
+    );
+
+    json!({
+        "ok": true,
+        "system_prompt": system_prompt,
+        "user_prompt": user_prompt,
+        "tile_a": tile_a,
+        "tile_b": tile_b,
+        "edge_class": {
+            "n": ec_a.map(|e| e.0.as_str()).unwrap_or("?"),
+            "e": ec_a.map(|e| e.1.as_str()).unwrap_or("?"),
+            "s": ec_b.map(|e| e.0.as_str()).unwrap_or("?"),
+            "w": ec_a.map(|e| e.3.as_str()).unwrap_or("?"),
+        },
+        "size": size_str,
+        "palette": palette_name,
+        "auto_rotate": "4way",
+    })
 }

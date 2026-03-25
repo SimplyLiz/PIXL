@@ -23,6 +23,10 @@ enum Commands {
         /// Check edge compatibility between tiles
         #[arg(long)]
         check_edges: bool,
+
+        /// Analyze tileset completeness for WFC (missing transition tiles)
+        #[arg(long)]
+        completeness: bool,
     },
 
     /// Validate and auto-fix edge classes from grid content
@@ -359,8 +363,11 @@ fn main() {
         Commands::Project { action } => {
             cmd_project(action);
         }
-        Commands::Validate { file, check_edges } => {
+        Commands::Validate { file, check_edges, completeness } => {
             cmd_validate(&file, check_edges);
+            if completeness {
+                cmd_completeness(&file);
+            }
         }
         Commands::Check { file, fix } => {
             if fix {
@@ -585,6 +592,51 @@ fn cmd_validate(file: &PathBuf, check_edges: bool) {
             result.warnings.len()
         );
         process::exit(1);
+    }
+}
+
+fn cmd_completeness(file: &PathBuf) {
+    let source = match std::fs::read_to_string(file) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: cannot read {}: {}", file.display(), e);
+            process::exit(1);
+        }
+    };
+
+    let pax_file = match pixl_core::parser::parse_pax(&source) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("parse error: {}", e);
+            process::exit(1);
+        }
+    };
+
+    let report = pixl_core::completeness::analyze(&pax_file);
+
+    println!("Tileset completeness: {:.0}%", report.score * 100.0);
+    println!("Edge classes: {}", report.edge_classes.join(", "));
+    println!("Connected pairs: {}", report.connected_pairs.len());
+
+    if report.disconnected_pairs.is_empty() {
+        println!("All edge classes are connected — WFC can reach every terrain type.");
+    } else {
+        println!(
+            "Disconnected pairs: {}",
+            report.disconnected_pairs.len()
+        );
+        for (a, b) in &report.disconnected_pairs {
+            println!("  {} <-> {} (no transition tile)", a, b);
+        }
+        println!();
+        println!("Recommended tiles to add:");
+        for mt in &report.missing_tiles {
+            println!(
+                "  {} — edges: n={}, e={}, s={}, w={} (auto_rotate=4way)",
+                mt.name, mt.edge_class.n, mt.edge_class.e, mt.edge_class.s, mt.edge_class.w,
+            );
+            println!("    {}", mt.reason);
+        }
     }
 }
 

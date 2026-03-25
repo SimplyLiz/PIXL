@@ -283,37 +283,14 @@ impl Default for StyleLatent {
     }
 }
 
+/// Perceptual lightness via OKLab (more accurate than RGB luminance).
 fn luminance(c: &Rgba) -> f64 {
-    fn linearize(v: u8) -> f64 {
-        let s = v as f64 / 255.0;
-        if s <= 0.04045 {
-            s / 12.92
-        } else {
-            ((s + 0.055) / 1.055).powf(2.4)
-        }
-    }
-    0.2126 * linearize(c.r) + 0.7152 * linearize(c.g) + 0.0722 * linearize(c.b)
+    crate::oklab::lightness(c.r, c.g, c.b) as f64
 }
 
+/// Perceptual hue angle via OKLab (more uniform than HSV hue).
 fn hue_degrees(c: &Rgba) -> f64 {
-    let r = c.r as f64 / 255.0;
-    let g = c.g as f64 / 255.0;
-    let b = c.b as f64 / 255.0;
-    let max = r.max(g).max(b);
-    let min = r.min(g).min(b);
-    let delta = max - min;
-    if delta < 1e-6 {
-        return 0.0;
-    }
-    let hue = if (max - r).abs() < 1e-6 {
-        (g - b) / delta
-    } else if (max - g).abs() < 1e-6 {
-        2.0 + (b - r) / delta
-    } else {
-        4.0 + (r - g) / delta
-    };
-    let h = hue * 60.0;
-    if h < 0.0 { h + 360.0 } else { h }
+    crate::oklab::hue(c.r, c.g, c.b) as f64
 }
 
 fn hue_distance_normalized(a: f64, b: f64) -> f64 {

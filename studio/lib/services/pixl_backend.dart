@@ -359,6 +359,25 @@ class PixlBackend {
     });
   }
 
+  // ── Completeness ─────────────────────────────────────
+
+  /// Check tileset completeness for WFC — which transition tiles are missing.
+  Future<Map<String, dynamic>> checkCompleteness() async {
+    return _get('/api/check/completeness');
+  }
+
+  /// Generate context for creating a transition tile between two tiles.
+  /// Returns system + user prompts enriched with knowledge about transitions.
+  Future<Map<String, dynamic>> generateTransitionContext({
+    required String tileA,
+    required String tileB,
+  }) async {
+    return _post('/api/tile/generate-transition', {
+      'tile_a': tileA,
+      'tile_b': tileB,
+    });
+  }
+
   // ── New & Export ──────────────────────────────────────
 
   /// Create a new PAX file from a built-in theme template.
