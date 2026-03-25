@@ -217,6 +217,7 @@ class TrainingDialog extends ConsumerStatefulWidget {
 
 class _TrainingDialogState extends ConsumerState<TrainingDialog> {
   Map<String, dynamic>? _stats;
+  Map<String, dynamic>? _feedbackStats;
   bool _loading = true;
   bool _exporting = false;
   String? _exportResult;
@@ -229,10 +230,15 @@ class _TrainingDialogState extends ConsumerState<TrainingDialog> {
 
   Future<void> _loadStats() async {
     setState(() => _loading = true);
-    final stats = await ref.read(backendProvider.notifier).backend.trainingStats();
+    final backend = ref.read(backendProvider.notifier).backend;
+    final results = await Future.wait([
+      backend.trainingStats(),
+      backend.feedbackStats(),
+    ]);
     if (mounted) {
       setState(() {
-        _stats = stats;
+        _stats = results[0];
+        _feedbackStats = results[1];
         _loading = false;
       });
     }
@@ -361,6 +367,51 @@ class _TrainingDialogState extends ConsumerState<TrainingDialog> {
                 _statRow('Total rejects', '${_stats!['total_rejects'] ?? 0}', theme),
               ],
               const SizedBox(height: 16),
+
+              // Feedback insights
+              if (_feedbackStats != null && (_feedbackStats!['total_accepts'] as int? ?? 0) > 0) ...[
+                Text('FEEDBACK INSIGHTS', style: theme.textTheme.titleSmall),
+                const SizedBox(height: 8),
+                _statRow('Avg accepted style score',
+                    '${((_feedbackStats!['avg_accepted_score'] as num? ?? 0) * 100).round()}%', theme),
+                _statRow('Avg rejected style score',
+                    '${((_feedbackStats!['avg_rejected_score'] as num? ?? 0) * 100).round()}%', theme),
+                if (_feedbackStats!['top_reject_reasons'] is Map) ...[
+                  const SizedBox(height: 4),
+                  Text('Top rejection reasons:', style: theme.textTheme.bodySmall!.copyWith(
+                    fontSize: 10, fontWeight: FontWeight.w600,
+                  )),
+                  const SizedBox(height: 2),
+                  ...(_feedbackStats!['top_reject_reasons'] as Map).entries.take(5).map((e) {
+                    return Padding(
+                      padding: const EdgeInsets.only(left: 8, bottom: 1),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 6, height: 6,
+                            margin: const EdgeInsets.only(right: 6),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primary.withValues(alpha: 0.5),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              '${e.key}',
+                              style: theme.textTheme.bodySmall!.copyWith(fontSize: 10),
+                            ),
+                          ),
+                          Text(
+                            '${e.value}x',
+                            style: theme.textTheme.bodySmall!.copyWith(fontSize: 10, fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+                const SizedBox(height: 16),
+              ],
 
               // Adapter info
               if (_stats?['adapter'] != null) ...[

@@ -383,3 +383,7 @@ class CanvasNotifier extends StateNotifier<CanvasState> {
 final canvasProvider = StateNotifierProvider<CanvasNotifier, CanvasState>(
   (ref) => CanvasNotifier(),
 );
+
+/// Blueprint landmarks overlay toggle + data.
+/// null = off, list of landmarks = on.
+final blueprintProvider = StateProvider<List<Map<String, dynamic>>?>((ref) => null);

@@ -893,7 +893,7 @@ class _QuickGenerateSectionState extends ConsumerState<_QuickGenerateSection> {
     );
     final backendCtx = ctx['system_prompt'] as String? ?? '';
     final userPrompt = ctx['user_prompt'] as String? ?? prompt;
-    final systemPrompt = await KnowledgeBase.buildSystemPrompt(
+    final systemPrompt = KnowledgeBase.buildSystemPrompt(
       backendContext: backendCtx,
       styleFragment: style.toPromptFragment(),
     );
@@ -1325,6 +1325,33 @@ class _TileListSectionState extends ConsumerState<_TileListSection> {
             );
           }),
 
+        // Stamps
+        if (backend.isConnected && backend.stamps.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text('STAMPS', style: theme.textTheme.titleSmall),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 4,
+            runSpacing: 4,
+            children: backend.stamps.map((name) {
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(3),
+                  border: Border.all(color: theme.dividerColor),
+                ),
+                child: Text(name, style: theme.textTheme.bodySmall!.copyWith(fontSize: 9)),
+              );
+            }).toList(),
+          ),
+        ],
+
+        // Edge compatibility checker
+        if (backend.isConnected && backend.tiles.length >= 2) ...[
+          const SizedBox(height: 12),
+          _EdgeChecker(tiles: backend.tiles),
+        ],
+
         // Render preview for selected tile
         if (_selectedTile != null) ...[
           const SizedBox(height: 8),
@@ -1357,10 +1384,147 @@ class _TileListSectionState extends ConsumerState<_TileListSection> {
                   )
                 else
                   Text('No preview', style: theme.textTheme.bodySmall),
+                const SizedBox(height: 4),
+                // Edge classes
+                Builder(builder: (_) {
+                  final tile = backend.tiles.where((t) => t.name == _selectedTile).firstOrNull;
+                  if (tile?.edgeClasses == null) return const SizedBox.shrink();
+                  final ec = tile!.edgeClasses!;
+                  return Text(
+                    'N:${ec['n'] ?? '?'} E:${ec['e'] ?? '?'} S:${ec['s'] ?? '?'} W:${ec['w'] ?? '?'}',
+                    style: theme.textTheme.bodySmall!.copyWith(fontSize: 8),
+                  );
+                }),
               ],
             ),
           ),
         ],
+      ],
+    );
+  }
+}
+
+// ── Edge Compatibility Checker ────────────────────────────
+
+class _EdgeChecker extends ConsumerStatefulWidget {
+  const _EdgeChecker({required this.tiles});
+  final List<TileInfo> tiles;
+
+  @override
+  ConsumerState<_EdgeChecker> createState() => _EdgeCheckerState();
+}
+
+class _EdgeCheckerState extends ConsumerState<_EdgeChecker> {
+  String? _tileA;
+  String? _tileB;
+  String _direction = 'east';
+  Map<String, dynamic>? _result;
+  bool _checking = false;
+
+  Future<void> _check() async {
+    if (_tileA == null || _tileB == null) return;
+    setState(() {
+      _checking = true;
+      _result = null;
+    });
+    final resp = await ref.read(backendProvider.notifier).backend.checkEdgePair(
+      _tileA!,
+      _direction,
+      _tileB!,
+    );
+    if (mounted) {
+      setState(() {
+        _result = resp;
+        _checking = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final names = widget.tiles.map((t) => t.name).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('EDGE CHECK', style: theme.textTheme.titleSmall),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            Expanded(
+              child: DropdownButton<String>(
+                value: _tileA,
+                hint: Text('Tile A', style: theme.textTheme.bodySmall!.copyWith(fontSize: 9)),
+                isExpanded: true,
+                isDense: true,
+                style: theme.textTheme.bodySmall!.copyWith(fontSize: 10),
+                items: names.map((n) => DropdownMenuItem(value: n, child: Text(n))).toList(),
+                onChanged: (v) => setState(() => _tileA = v),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: DropdownButton<String>(
+                value: _direction,
+                isDense: true,
+                style: theme.textTheme.bodySmall!.copyWith(fontSize: 10),
+                items: ['north', 'east', 'south', 'west']
+                    .map((d) => DropdownMenuItem(value: d, child: Text(d[0].toUpperCase())))
+                    .toList(),
+                onChanged: (v) => setState(() => _direction = v ?? 'east'),
+              ),
+            ),
+            Expanded(
+              child: DropdownButton<String>(
+                value: _tileB,
+                hint: Text('Tile B', style: theme.textTheme.bodySmall!.copyWith(fontSize: 9)),
+                isExpanded: true,
+                isDense: true,
+                style: theme.textTheme.bodySmall!.copyWith(fontSize: 10),
+                items: names.map((n) => DropdownMenuItem(value: n, child: Text(n))).toList(),
+                onChanged: (v) => setState(() => _tileB = v),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            InkWell(
+              onTap: (_tileA != null && _tileB != null && !_checking) ? _check : null,
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: theme.dividerColor),
+                ),
+                child: _checking
+                    ? const SizedBox(width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 1))
+                    : Text('Check', style: theme.textTheme.bodySmall!.copyWith(fontSize: 10)),
+              ),
+            ),
+            const SizedBox(width: 8),
+            if (_result != null)
+              Icon(
+                _result!['compatible'] == true ? Icons.check_circle : Icons.cancel,
+                size: 14,
+                color: _result!['compatible'] == true ? const Color(0xFF4caf50) : const Color(0xFFe05555),
+              ),
+            if (_result != null)
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 4),
+                  child: Text(
+                    _result!['reason'] as String? ?? (_result!['compatible'] == true ? 'Compatible' : 'Incompatible'),
+                    style: theme.textTheme.bodySmall!.copyWith(fontSize: 9),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+          ],
+        ),
       ],
     );
   }

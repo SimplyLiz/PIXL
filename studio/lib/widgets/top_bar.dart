@@ -165,6 +165,7 @@ class TopBar extends ConsumerWidget {
             onTap: () => notifier.toggleGrid(),
             active: cs.showGrid,
           ),
+          _BlueprintToggle(),
           const SizedBox(width: 4),
           // Zoom controls
           _BarButton(
@@ -264,6 +265,37 @@ class _ExportMenu extends ConsumerWidget {
               ));
             }
             break;
+          case 'tiled':
+          case 'godot':
+          case 'texturepacker':
+          case 'gbstudio':
+          case 'unity':
+            final dir = await FilePicker.platform.getDirectoryPath(
+              dialogTitle: 'Export to $value',
+            );
+            if (dir == null) {
+              messenger.showSnackBar(const SnackBar(
+                content: Text('Export cancelled'),
+                duration: Duration(seconds: 2),
+              ));
+              break;
+            }
+            final resp = await ref.read(backendProvider.notifier).backend.exportToEngine(
+              format: value,
+              outDir: dir,
+            );
+            if (resp['ok'] == true) {
+              final files = resp['files'] as int? ?? 0;
+              messenger.showSnackBar(SnackBar(
+                content: Text('Exported $files files to $dir'),
+                duration: const Duration(seconds: 3),
+              ));
+            } else {
+              messenger.showSnackBar(SnackBar(
+                content: Text('Export failed: ${resp['error'] ?? 'unknown'}'),
+              ));
+            }
+            break;
         }
       },
       itemBuilder: (_) => const [
@@ -272,7 +304,43 @@ class _ExportMenu extends ConsumerWidget {
         PopupMenuDivider(),
         PopupMenuItem(value: 'pax', child: Text('Save PAX Source', style: TextStyle(fontSize: 12))),
         PopupMenuItem(value: 'atlas', child: Text('Export Atlas', style: TextStyle(fontSize: 12))),
+        PopupMenuDivider(),
+        PopupMenuItem(value: 'tiled', child: Text('Export for Tiled', style: TextStyle(fontSize: 12))),
+        PopupMenuItem(value: 'godot', child: Text('Export for Godot', style: TextStyle(fontSize: 12))),
+        PopupMenuItem(value: 'texturepacker', child: Text('Export for TexturePacker', style: TextStyle(fontSize: 12))),
+        PopupMenuItem(value: 'gbstudio', child: Text('Export for GB Studio', style: TextStyle(fontSize: 12))),
+        PopupMenuItem(value: 'unity', child: Text('Export for Unity', style: TextStyle(fontSize: 12))),
       ],
+    );
+  }
+}
+
+class _BlueprintToggle extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final bp = ref.watch(blueprintProvider);
+    final isActive = bp != null;
+
+    return _BarButton(
+      label: 'Blueprint Guide',
+      icon: Icons.accessibility_new,
+      active: isActive,
+      onTap: () async {
+        if (isActive) {
+          ref.read(blueprintProvider.notifier).state = null;
+        } else {
+          final cs = ref.read(canvasProvider);
+          final resp = await ref.read(backendProvider.notifier).backend.getBlueprint(
+            width: cs.width,
+            height: cs.height,
+          );
+          final landmarks = resp['landmarks'] as List<dynamic>?;
+          if (landmarks != null) {
+            ref.read(blueprintProvider.notifier).state =
+                landmarks.map((l) => Map<String, dynamic>.from(l as Map)).toList();
+          }
+        }
+      },
     );
   }
 }

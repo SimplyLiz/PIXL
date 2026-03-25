@@ -251,6 +251,7 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
                             canvasState: cs,
                             pixelSize: ps,
                             hoverPixel: _hoverPixel,
+                            blueprintLandmarks: ref.watch(blueprintProvider),
                           ),
                         ),
                       ),
