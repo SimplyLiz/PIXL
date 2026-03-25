@@ -19,7 +19,7 @@ class ClaudeApi {
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
     lOptions: LinuxOptions(),
     wOptions: WindowsOptions(),
-    mOptions: MacOsOptions(),
+    mOptions: MacOsOptions(useDataProtectionKeyChain: false),
     iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
   );
 

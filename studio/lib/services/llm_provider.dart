@@ -494,7 +494,7 @@ class LlmService {
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
     lOptions: LinuxOptions(),
     wOptions: WindowsOptions(),
-    mOptions: MacOsOptions(),
+    mOptions: MacOsOptions(useDataProtectionKeyChain: false),
     iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
   );
   static const _prefProvider = 'llm_provider';

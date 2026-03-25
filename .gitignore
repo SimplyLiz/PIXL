@@ -34,8 +34,10 @@ studio/.flutter-plugins-dependencies
 .env.local
 training/.venv/
 training/data/
+training/data_matched/
 training/adapters/
 *.venv
-corpus/documents/
+corpus/
+dogfood/
 dataset/
 tool/knowledge/pixelart-knowledge-base.json
