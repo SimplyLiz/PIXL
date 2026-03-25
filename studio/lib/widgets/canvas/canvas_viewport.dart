@@ -24,11 +24,15 @@ class CanvasViewport extends ConsumerStatefulWidget {
 class _CanvasViewportState extends ConsumerState<CanvasViewport> {
   Offset? _hoverPixel;
   Offset _panOffset = Offset.zero;
-  // Centering offset — updated each build from LayoutBuilder constraints.
   double _centerX = 0;
   double _centerY = 0;
-  // Space key held = pan mode (overrides drawing).
   bool _spaceHeld = false;
+  // Line/rect tool drag state
+  (int, int)? _shapeStart;
+  (int, int)? _shapeEnd;
+  bool _shiftHeld = false;
+  // Selection drag
+  (int, int)? _selectStart;
 
   (int, int)? _pixelFromLocal(Offset localPos, CanvasState cs) {
     final ps = cs.zoomLevel;
@@ -54,20 +58,17 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
 
     switch (cs.activeTool) {
       case DrawingTool.pencil:
-        final color = palette[cs.foregroundColorIndex];
-        notifier.beginStroke(x, y, color);
+        notifier.beginStroke(x, y, palette[cs.foregroundColorIndex]);
         break;
       case DrawingTool.eraser:
         notifier.beginStroke(x, y, null);
         break;
       case DrawingTool.bucket:
-        final color = palette[cs.foregroundColorIndex];
-        notifier.bucketFill(x, y, color);
+        notifier.bucketFill(x, y, palette[cs.foregroundColorIndex]);
         break;
       case DrawingTool.eyedropper:
         final picked = notifier.pickColor(x, y);
         if (picked != null) {
-          // Find matching palette color
           for (var i = 0; i < palette.length; i++) {
             if (palette[i].toARGB32() == picked.toARGB32()) {
               notifier.setForegroundColor(i);
@@ -76,9 +77,17 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
           }
         }
         break;
+      case DrawingTool.line:
+      case DrawingTool.rect:
+        setState(() {
+          _shapeStart = (x, y);
+          _shapeEnd = (x, y);
+        });
+        break;
       case DrawingTool.rectSelect:
+        setState(() => _selectStart = (x, y));
+        break;
       case DrawingTool.move:
-        // TODO: implement selection/move
         break;
     }
   }
@@ -102,14 +111,57 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
         case DrawingTool.eraser:
           notifier.continueStroke(x, y, null);
           break;
+        case DrawingTool.line:
+        case DrawingTool.rect:
+          if (_shapeStart != null) {
+            setState(() => _shapeEnd = (x, y));
+          }
+          break;
+        case DrawingTool.rectSelect:
+          if (_selectStart != null) {
+            final (sx, sy) = _selectStart!;
+            final minX = sx < x ? sx : x;
+            final minY = sy < y ? sy : y;
+            final w = (x - sx).abs() + 1;
+            final h = (y - sy).abs() + 1;
+            ref.read(selectionProvider.notifier).state = SelectionState(
+              x: minX, y: minY, width: w, height: h,
+            );
+          }
+          break;
         default:
           break;
       }
     }
   }
 
-  void _handlePointerUp(PointerUpEvent event) {
-    ref.read(canvasProvider.notifier).endStroke();
+  void _handlePointerUp(PointerUpEvent event, CanvasState cs, PixlPalette palette) {
+    final notifier = ref.read(canvasProvider.notifier);
+
+    // Commit line/rect on mouse up
+    if (_shapeStart != null && _shapeEnd != null) {
+      final (x0, y0) = _shapeStart!;
+      final (x1, y1) = _shapeEnd!;
+      final color = cs.activeTool == DrawingTool.eraser
+          ? null
+          : palette[cs.foregroundColorIndex];
+
+      if (cs.activeTool == DrawingTool.line) {
+        notifier.drawLine(x0, y0, x1, y1, color);
+      } else if (cs.activeTool == DrawingTool.rect) {
+        notifier.drawRect(x0, y0, x1, y1, color, filled: _shiftHeld);
+      }
+      setState(() {
+        _shapeStart = null;
+        _shapeEnd = null;
+      });
+    }
+
+    if (_selectStart != null) {
+      setState(() => _selectStart = null);
+    }
+
+    notifier.endStroke();
   }
 
   void _handlePointerHover(PointerHoverEvent event, CanvasState cs) {
@@ -162,6 +214,12 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
               }
               return KeyEventResult.handled;
             }
+            // Track shift for filled rect
+            if (event.logicalKey == LogicalKeyboardKey.shiftLeft ||
+                event.logicalKey == LogicalKeyboardKey.shiftRight) {
+              _shiftHeld = event is KeyDownEvent || event is KeyRepeatEvent;
+              return KeyEventResult.ignored; // let other handlers also see shift
+            }
 
             if (event is! KeyDownEvent) return KeyEventResult.ignored;
             final notifier = ref.read(canvasProvider.notifier);
@@ -191,6 +249,63 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
             }
             if (event.logicalKey == LogicalKeyboardKey.keyI) {
               notifier.setTool(DrawingTool.eyedropper);
+              return KeyEventResult.handled;
+            }
+            if (event.logicalKey == LogicalKeyboardKey.keyL) {
+              notifier.setTool(DrawingTool.line);
+              return KeyEventResult.handled;
+            }
+            if (event.logicalKey == LogicalKeyboardKey.keyR) {
+              notifier.setTool(DrawingTool.rect);
+              return KeyEventResult.handled;
+            }
+            if (event.logicalKey == LogicalKeyboardKey.keyS && !meta) {
+              notifier.setTool(DrawingTool.rectSelect);
+              return KeyEventResult.handled;
+            }
+            // Cmd+C/V/X for clipboard
+            if (meta && event.logicalKey == LogicalKeyboardKey.keyC) {
+              final sel = ref.read(selectionProvider);
+              if (sel.hasSelection) {
+                final data = notifier.copyRegion(sel.x, sel.y, sel.width, sel.height);
+                ref.read(selectionProvider.notifier).state = sel.copyWith(
+                  clipboard: data,
+                  clipboardWidth: sel.width,
+                  clipboardHeight: sel.height,
+                );
+              }
+              return KeyEventResult.handled;
+            }
+            if (meta && event.logicalKey == LogicalKeyboardKey.keyV) {
+              final sel = ref.read(selectionProvider);
+              if (sel.hasClipboard) {
+                notifier.pasteRegion(sel.x, sel.y, sel.clipboard!, sel.clipboardWidth, sel.clipboardHeight);
+              }
+              return KeyEventResult.handled;
+            }
+            if (meta && event.logicalKey == LogicalKeyboardKey.keyX) {
+              final sel = ref.read(selectionProvider);
+              if (sel.hasSelection) {
+                final data = notifier.copyRegion(sel.x, sel.y, sel.width, sel.height);
+                ref.read(selectionProvider.notifier).state = sel.copyWith(
+                  clipboard: data,
+                  clipboardWidth: sel.width,
+                  clipboardHeight: sel.height,
+                );
+                notifier.clearRegion(sel.x, sel.y, sel.width, sel.height);
+              }
+              return KeyEventResult.handled;
+            }
+            if (event.logicalKey == LogicalKeyboardKey.delete ||
+                event.logicalKey == LogicalKeyboardKey.backspace) {
+              final sel = ref.read(selectionProvider);
+              if (sel.hasSelection) {
+                notifier.clearRegion(sel.x, sel.y, sel.width, sel.height);
+              }
+              return KeyEventResult.handled;
+            }
+            if (event.logicalKey == LogicalKeyboardKey.escape) {
+              ref.read(selectionProvider.notifier).state = const SelectionState();
               return KeyEventResult.handled;
             }
             // H = toggle grid
@@ -237,7 +352,7 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
                     _handlePointerMove(event, cs, palette);
                   }
                 },
-                onPointerUp: (event) => _handlePointerUp(event),
+                onPointerUp: (event) => _handlePointerUp(event, cs, palette),
                 child: Container(
                   color: StudioTheme.canvasBg,
                   child: Stack(
@@ -252,6 +367,10 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
                             pixelSize: ps,
                             hoverPixel: _hoverPixel,
                             blueprintLandmarks: ref.watch(blueprintProvider),
+                            shapePreview: _shapeStart != null && _shapeEnd != null
+                                ? (cs.activeTool, _shapeStart!, _shapeEnd!, _shiftHeld)
+                                : null,
+                            selection: ref.watch(selectionProvider),
                           ),
                         ),
                       ),
@@ -275,6 +394,8 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
       DrawingTool.eraser => SystemMouseCursors.precise,
       DrawingTool.bucket => SystemMouseCursors.click,
       DrawingTool.eyedropper => SystemMouseCursors.click,
+      DrawingTool.line => SystemMouseCursors.precise,
+      DrawingTool.rect => SystemMouseCursors.precise,
       DrawingTool.rectSelect => SystemMouseCursors.precise,
       DrawingTool.move => SystemMouseCursors.move,
     };

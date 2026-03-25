@@ -378,6 +378,115 @@ class CanvasNotifier extends StateNotifier<CanvasState> {
     }
     state = state.copyWith(layers: List.from(state.layers));
   }
+
+  // ── Line Tool (Bresenham) ────────────────────────
+
+  /// Draw a line from (x0,y0) to (x1,y1) using Bresenham's algorithm.
+  void drawLine(int x0, int y0, int x1, int y1, Color? color) {
+    _pushSnapshot();
+    _bresenham(x0, y0, x1, y1, color);
+    state = state.copyWith(layers: List.from(state.layers));
+  }
+
+  void _bresenham(int x0, int y0, int x1, int y1, Color? color) {
+    var dx = (x1 - x0).abs();
+    var dy = -(y1 - y0).abs();
+    final sx = x0 < x1 ? 1 : -1;
+    final sy = y0 < y1 ? 1 : -1;
+    var err = dx + dy;
+
+    while (true) {
+      _setPixelWithSymmetry(x0, y0, color);
+      if (x0 == x1 && y0 == y1) break;
+      final e2 = 2 * err;
+      if (e2 >= dy) { err += dy; x0 += sx; }
+      if (e2 <= dx) { err += dx; y0 += sy; }
+    }
+  }
+
+  // ── Rectangle Tool ───────────────────────────────
+
+  /// Draw a rectangle outline (or filled if [filled] is true).
+  void drawRect(int x0, int y0, int x1, int y1, Color? color, {bool filled = false}) {
+    _pushSnapshot();
+    final minX = x0 < x1 ? x0 : x1;
+    final maxX = x0 > x1 ? x0 : x1;
+    final minY = y0 < y1 ? y0 : y1;
+    final maxY = y0 > y1 ? y0 : y1;
+
+    if (filled) {
+      for (var y = minY; y <= maxY; y++) {
+        for (var x = minX; x <= maxX; x++) {
+          _setPixelWithSymmetry(x, y, color);
+        }
+      }
+    } else {
+      for (var x = minX; x <= maxX; x++) {
+        _setPixelWithSymmetry(x, minY, color);
+        _setPixelWithSymmetry(x, maxY, color);
+      }
+      for (var y = minY + 1; y < maxY; y++) {
+        _setPixelWithSymmetry(minX, y, color);
+        _setPixelWithSymmetry(maxX, y, color);
+      }
+    }
+    state = state.copyWith(layers: List.from(state.layers));
+  }
+
+  // ── Selection / Copy / Paste ─────────────────────
+
+  /// Copy pixels from the selection region on the active layer.
+  List<Color?> copyRegion(int sx, int sy, int sw, int sh) {
+    final w = state.width;
+    final layer = state.activeLayer;
+    final buffer = <Color?>[];
+    for (var y = sy; y < sy + sh; y++) {
+      for (var x = sx; x < sx + sw; x++) {
+        if (x >= 0 && x < w && y >= 0 && y < state.height) {
+          buffer.add(layer.pixels[y * w + x]);
+        } else {
+          buffer.add(null);
+        }
+      }
+    }
+    return buffer;
+  }
+
+  /// Paste pixels at position.
+  void pasteRegion(int dx, int dy, List<Color?> data, int pw, int ph) {
+    _pushSnapshot();
+    final w = state.width;
+    final h = state.height;
+    final layer = state.activeLayer;
+    for (var y = 0; y < ph; y++) {
+      for (var x = 0; x < pw; x++) {
+        final tx = dx + x;
+        final ty = dy + y;
+        if (tx < 0 || tx >= w || ty < 0 || ty >= h) continue;
+        final color = data[y * pw + x];
+        if (color != null) {
+          layer.pixels[ty * w + tx] = color;
+        }
+      }
+    }
+    state = state.copyWith(layers: List.from(state.layers));
+  }
+
+  /// Clear pixels in a region.
+  void clearRegion(int sx, int sy, int sw, int sh) {
+    _pushSnapshot();
+    final w = state.width;
+    final h = state.height;
+    final layer = state.activeLayer;
+    for (var y = sy; y < sy + sh; y++) {
+      for (var x = sx; x < sx + sw; x++) {
+        if (x >= 0 && x < w && y >= 0 && y < h) {
+          layer.pixels[y * w + x] = null;
+        }
+      }
+    }
+    state = state.copyWith(layers: List.from(state.layers));
+  }
 }
 
 final canvasProvider = StateNotifierProvider<CanvasNotifier, CanvasState>(
@@ -385,5 +494,10 @@ final canvasProvider = StateNotifierProvider<CanvasNotifier, CanvasState>(
 );
 
 /// Blueprint landmarks overlay toggle + data.
-/// null = off, list of landmarks = on.
 final blueprintProvider = StateProvider<List<Map<String, dynamic>>?>((ref) => null);
+
+/// Selection state for copy/paste.
+final selectionProvider = StateProvider<SelectionState>((ref) => const SelectionState());
+
+/// Reference image overlay (dart:ui.Image stored externally, path tracked here).
+final referenceImagePathProvider = StateProvider<String?>((ref) => null);

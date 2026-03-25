@@ -24,6 +24,8 @@ class StatusBar extends ConsumerWidget {
       DrawingTool.eraser => 'Eraser',
       DrawingTool.bucket => 'Fill',
       DrawingTool.eyedropper => 'Eyedropper',
+      DrawingTool.line => 'Line',
+      DrawingTool.rect => 'Rect',
       DrawingTool.rectSelect => 'Select',
       DrawingTool.move => 'Move',
     };

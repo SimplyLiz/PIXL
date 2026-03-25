@@ -71,8 +71,21 @@ class _PixelTools extends ConsumerWidget {
           onTap: () => notifier.setTool(DrawingTool.eyedropper),
         ),
         _StripButton(
+          icon: Icons.show_chart,
+          tooltip: 'Line (L)',
+          active: activeTool == DrawingTool.line,
+          onTap: () => notifier.setTool(DrawingTool.line),
+        ),
+        _StripButton(
           icon: Icons.crop_square,
-          tooltip: 'Select',
+          tooltip: 'Rect (R)',
+          active: activeTool == DrawingTool.rect,
+          onTap: () => notifier.setTool(DrawingTool.rect),
+        ),
+        const _Divider(),
+        _StripButton(
+          icon: Icons.select_all,
+          tooltip: 'Select (S)',
           active: activeTool == DrawingTool.rectSelect,
           onTap: () => notifier.setTool(DrawingTool.rectSelect),
         ),

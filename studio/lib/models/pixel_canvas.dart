@@ -23,8 +23,46 @@ enum DrawingTool {
   eraser,
   bucket,
   eyedropper,
+  line,
+  rect,
   rectSelect,
   move,
+}
+
+/// Selection state for copy/paste operations.
+class SelectionState {
+  const SelectionState({
+    this.x = 0,
+    this.y = 0,
+    this.width = 0,
+    this.height = 0,
+    this.clipboard,
+    this.clipboardWidth = 0,
+    this.clipboardHeight = 0,
+  });
+
+  final int x, y, width, height;
+  final List<Color?>? clipboard;
+  final int clipboardWidth, clipboardHeight;
+
+  bool get hasSelection => width > 0 && height > 0;
+  bool get hasClipboard => clipboard != null && clipboard!.isNotEmpty;
+
+  SelectionState copyWith({
+    int? x, int? y, int? width, int? height,
+    List<Color?>? clipboard,
+    int? clipboardWidth, int? clipboardHeight,
+  }) {
+    return SelectionState(
+      x: x ?? this.x,
+      y: y ?? this.y,
+      width: width ?? this.width,
+      height: height ?? this.height,
+      clipboard: clipboard ?? this.clipboard,
+      clipboardWidth: clipboardWidth ?? this.clipboardWidth,
+      clipboardHeight: clipboardHeight ?? this.clipboardHeight,
+    );
+  }
 }
 
 /// Symmetry modes for mirrored drawing.

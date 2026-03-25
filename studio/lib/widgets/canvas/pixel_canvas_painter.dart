@@ -10,13 +10,18 @@ class PixelCanvasPainter extends CustomPainter {
     required this.pixelSize,
     this.hoverPixel,
     this.blueprintLandmarks,
+    this.shapePreview,
+    this.selection,
   });
 
   final CanvasState canvasState;
   final double pixelSize;
   final Offset? hoverPixel;
-  /// Optional blueprint landmarks: list of {name, x, y, w?, h?} for overlay guides.
   final List<Map<String, dynamic>>? blueprintLandmarks;
+  /// Shape preview during drag: (tool, start, end, shiftHeld).
+  final (DrawingTool, (int, int), (int, int), bool)? shapePreview;
+  /// Current selection rectangle.
+  final SelectionState? selection;
 
   static const _checkerLight = Color(0xFF383838);
   static const _checkerDark = Color(0xFF2c2c2c);
@@ -119,6 +124,73 @@ class PixelCanvasPainter extends CustomPainter {
       }
     }
 
+    // Shape preview (line/rect drag)
+    if (shapePreview != null) {
+      final (tool, start, end, shiftHeld) = shapePreview!;
+      final previewPaint = Paint()
+        ..color = const Color(0x99ffffff)
+        ..style = PaintingStyle.fill;
+
+      if (tool == DrawingTool.line) {
+        // Bresenham preview
+        var x0 = start.$1, y0 = start.$2;
+        final x1 = end.$1, y1 = end.$2;
+        var dx = (x1 - x0).abs();
+        var dy = -(y1 - y0).abs();
+        final sx = x0 < x1 ? 1 : -1;
+        final sy = y0 < y1 ? 1 : -1;
+        var err = dx + dy;
+        while (true) {
+          if (x0 >= 0 && x0 < w && y0 >= 0 && y0 < h) {
+            canvas.drawRect(Rect.fromLTWH(x0 * ps, y0 * ps, ps, ps), previewPaint);
+          }
+          if (x0 == x1 && y0 == y1) break;
+          final e2 = 2 * err;
+          if (e2 >= dy) { err += dy; x0 += sx; }
+          if (e2 <= dx) { err += dx; y0 += sy; }
+        }
+      } else if (tool == DrawingTool.rect) {
+        final minX = start.$1 < end.$1 ? start.$1 : end.$1;
+        final maxX = start.$1 > end.$1 ? start.$1 : end.$1;
+        final minY = start.$2 < end.$2 ? start.$2 : end.$2;
+        final maxY = start.$2 > end.$2 ? start.$2 : end.$2;
+        if (shiftHeld) {
+          // Filled rect preview
+          canvas.drawRect(
+            Rect.fromLTWH(minX * ps, minY * ps, (maxX - minX + 1) * ps, (maxY - minY + 1) * ps),
+            previewPaint,
+          );
+        } else {
+          // Outline preview
+          for (var x = minX; x <= maxX; x++) {
+            canvas.drawRect(Rect.fromLTWH(x * ps, minY * ps, ps, ps), previewPaint);
+            canvas.drawRect(Rect.fromLTWH(x * ps, maxY * ps, ps, ps), previewPaint);
+          }
+          for (var y = minY + 1; y < maxY; y++) {
+            canvas.drawRect(Rect.fromLTWH(minX * ps, y * ps, ps, ps), previewPaint);
+            canvas.drawRect(Rect.fromLTWH(maxX * ps, y * ps, ps, ps), previewPaint);
+          }
+        }
+      }
+    }
+
+    // Selection rectangle (dashed border)
+    if (selection != null && selection!.hasSelection) {
+      final sx = selection!.x * ps;
+      final sy = selection!.y * ps;
+      final sw = selection!.width * ps;
+      final sh = selection!.height * ps;
+      final selFill = Paint()
+        ..color = const Color(0x1500bcd4)
+        ..style = PaintingStyle.fill;
+      final selStroke = Paint()
+        ..color = const Color(0xCC00bcd4)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5;
+      canvas.drawRect(Rect.fromLTWH(sx, sy, sw, sh), selFill);
+      canvas.drawRect(Rect.fromLTWH(sx, sy, sw, sh), selStroke);
+    }
+
     // Hover highlight
     if (hoverPixel != null) {
       final hx = hoverPixel!.dx.toInt();
@@ -139,5 +211,7 @@ class PixelCanvasPainter extends CustomPainter {
       !identical(canvasState, oldDelegate.canvasState) ||
       pixelSize != oldDelegate.pixelSize ||
       hoverPixel != oldDelegate.hoverPixel ||
-      blueprintLandmarks != oldDelegate.blueprintLandmarks;
+      blueprintLandmarks != oldDelegate.blueprintLandmarks ||
+      shapePreview != oldDelegate.shapePreview ||
+      selection != oldDelegate.selection;
 }
