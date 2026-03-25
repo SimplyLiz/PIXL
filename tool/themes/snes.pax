@@ -101,22 +101,22 @@ tags       = ["floor", "interior"]
 weight     = 3.0
 semantic   = { affordance = "walkable", collision = "none" }
 grid = '''
-h++++m+s#h+++m+s
-+m+++++s#+++++ms
-+++h++++#+++h+++
-################
-h++ms#h+++++m++s
-++++##++m++++m+s
-++m+##++++++h++s
-+m+s##sm+++m+ss#
-################
-h++++++ms#h++m+s
-++m+h+++++++m++s
-+++++++m++++++ms
-s++m+++s#sm+++s#
-################
-h+m+s#h++++m++ms
-++++##++m+h++++s
+h+m+h++m+sh+m++s
++m#++++m#++m+h+s
+h++m+h+++m++m+++
++m#++m++#m++h+ms
+h+m++h+m+sh++m+s
+++#m+++m#++m+h++
++m++h+m+++h++m+s
+h+#++m+h#+m++h++
++m+h++m+sh+m+h+s
+h++m++h+#m++m+++
++m+h+m+++m+h++ms
+++#m+h+m#++m++h+
+h+m+h++m+sh++m+s
++m#++m++#++m+h++
+h++m+h+m+m+h+m+s
++m#+m++h#m++m+h+
 '''
 
 [tile.wall_floor_n]
@@ -171,4 +171,57 @@ grid = '''
 h++++m+s#h+++m+s
 +++m++s##+m+++ms
 +m+++s##+++h++++
+'''
+
+[tile.floor_mossy]
+palette    = "snes16"
+size       = "16x16"
+edge_class = { n = "floor", e = "floor", s = "floor", w = "floor" }
+tags       = ["floor", "interior"]
+weight     = 1.5
+semantic   = { affordance = "walkable", collision = "none" }
+grid = '''
+h+m+h++m+sh+m++s
++m#+g++m#++m+h+s
+h++m+hg++m++m+++
++m#++m++#m++h+ms
+h+m++h+m+sh++m+s
+++#m+g+m#++m+hG+
++m++h+m+g+h++m+s
+h+#++m+h#+m++h++
++m+h++m+sh+m+h+s
+h++mG+h+#m++m+g+
++m+h+m+g+m+h++ms
+++#m+h+m#++m++h+
+h+m+h++m+sh++m+s
++m#++mG+#g+m+h++
+h++m+h+m+m+h+m+s
++m#+m++h#m++m+hg
+'''
+
+[tile.door_ns]
+palette     = "snes16"
+size        = "16x16"
+auto_rotate = "4way"
+edge_class  = { n = "floor", e = "solid", s = "floor", w = "solid" }
+tags        = ["door", "passage"]
+weight      = 0.8
+semantic    = { affordance = "walkable", collision = "none" }
+grid = '''
+h+m+h+m++sh+m+ms
+sh+m+h++m+s#h+m+
+##++m+h+m++s#+++
+##h+m++h+m++sh+m
+##++m+h++m+sh+m+
+##h++m+h+m++s#h+
+##++m+h++m++sh++
+##h+m++h+m+s#h+m
+##++m+h++m+sh+m+
+##h++m+h+m++s#h+
+##++m+h++m++sh++
+##h+m++h+m+s#h+m
+##++m+h+m++s#+++
+sh+m+h++m+s#h+m+
+h+m++h+m+sh+m++s
++m+h+m++sh+m+h+s
 '''

@@ -110,26 +110,26 @@ c++++++ssc++++ss
 palette    = "neon"
 size       = "16x16"
 edge_class = { n = "floor", e = "floor", s = "floor", w = "floor" }
-tags       = ["floor", "interior"]
+tags       = ["floor", "interior", "metal"]
 weight     = 3.0
 semantic   = { affordance = "walkable", collision = "none", tags = { biome = "sci_fi" } }
 grid = '''
-h+++++++s#h++++s
-++++++++++++++++
-++++++++++++++++
-s+++++++s#s++++s
-################
-h+++s#h++++++++s
-+++++++++++c++++
-++++c+++++++++++
-s++s##s++++++++s
-################
-h+++++++s#h++++s
-++++++++++++++++
-++++++++++++++c+
-s+++++++s#s++++s
-################
-h++++s#h+++++c+s
+h+++++h+++h+++++
+++#++++++#++++#+
+++#++++++#++++#+
+++#++++++#++++#+
+hcccccccccccccc+
+++#++++++#++++#+
+++#+++c+++#+++#+
+++#+++c+++#+++#+
++cccccccccccccc+
+++#++++++#++++#+
+++#++++++#++++#+
+++#++++++#++++#+
+hcccccccccccccc+
+++#++++++#++++#+
+++#++++++#++++#+
+s++s++s+++s++s+s
 '''
 
 [tile.wall_floor_n]
@@ -184,4 +184,61 @@ c+++++++s#h++++s
 +++++++s#++++++#
 ++++c+s##+++++++
 ++++++s##+++++++
+'''
+
+# --- Floor variant: damaged grating with exposed wiring ---
+
+[tile.floor_damaged]
+palette    = "neon"
+size       = "16x16"
+edge_class = { n = "floor", e = "floor", s = "floor", w = "floor" }
+tags       = ["floor", "interior", "damaged"]
+weight     = 1.0
+semantic   = { affordance = "walkable", collision = "none", tags = { biome = "sci_fi", condition = "damaged" } }
+grid = '''
+h+++++h+++h+++++
+++#++++++#++++#+
+++#++s+++#++++#+
+++s#+s+++#++++#+
+hccscccccccccccs
+++#++++++#+++s#+
+++#+++c+++#++s#+
+++s#s+c+s+#+++#+
++ccccscccscccccs
+++#++++s+s#+++#+
+++s#+s++++#+++#+
+++#+++++s+#+++#+
+hccccccccsccccc+
+++#+++s+++#++s#+
+++#++s+++s#+s+#+
+s++s++s+++s++s+s
+'''
+
+# --- Door tile: passage through wall ---
+
+[tile.door_ns]
+palette     = "neon"
+size        = "16x16"
+auto_rotate = "4way"
+edge_class  = { n = "floor", e = "solid", s = "floor", w = "solid" }
+tags        = ["door", "passage"]
+weight      = 0.8
+semantic    = { affordance = "walkable", collision = "none", tags = { biome = "sci_fi" } }
+grid = '''
+h+++++h+cccccccc
+++#+++++ch+++++s
+++#+++++c++++++s
+++#+++++c++++++s
+hccccccccsssssss
+++#+++++cccccccc
+++#+++++ch+++++s
+++#+++++c++++++s
+hccccccccsssssss
+++#+++++cccccccc
+++#+++++ch+++++s
+++#+++++c++++++s
+hccccccccsssssss
+++#+++++cccccccc
+++#+++++ch+++++s
+s++s++s+c++++++s
 '''

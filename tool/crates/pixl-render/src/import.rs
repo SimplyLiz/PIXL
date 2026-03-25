@@ -82,13 +82,11 @@ fn nearest_palette_symbol(pixel: &Rgba<u8>, palette: &[(char, PaxRgba)]) -> (cha
         .unwrap_or(('.', 999.0))
 }
 
-/// Perceptual color distance (luminance-weighted Euclidean).
+/// Perceptual color distance via OKLab — perceptually uniform ΔE.
 fn perceptual_distance(a: &Rgba<u8>, b: &PaxRgba) -> f64 {
-    let dr = a.0[0] as f64 - b.r as f64;
-    let dg = a.0[1] as f64 - b.g as f64;
-    let db = a.0[2] as f64 - b.b as f64;
-    // Weighted by human perception: green > red > blue
-    (dr * dr * 0.30 + dg * dg * 0.59 + db * db * 0.11).sqrt()
+    let lab_a = pixl_core::oklab::rgb_to_oklab(a.0[0], a.0[1], a.0[2]);
+    let lab_b = pixl_core::oklab::rgb_to_oklab(b.r, b.g, b.b);
+    pixl_core::oklab::delta_e(&lab_a, &lab_b) as f64
 }
 
 /// Apply 4x4 Bayer ordered dithering.

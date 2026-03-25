@@ -85,14 +85,14 @@ tags       = ["floor"]
 weight     = 3.0
 semantic   = { affordance = "walkable", collision = "none" }
 grid = '''
-3222.322
-2222.222
-....1...
-3221322.
-2221222.
-........
-322.3222
-222.2222
+22222222
+22322222
+22222222
+22222322
+22222222
+22322222
+22222222
+22222232
 '''
 
 [tile.wall_floor_n]
@@ -131,4 +131,41 @@ grid = '''
 ...1..22
 322.1.32
 222...22
+'''
+
+[tile.floor_rough]
+palette    = "gb"
+size       = "8x8"
+edge_class = { n = "floor", e = "floor", s = "floor", w = "floor" }
+tags       = ["floor"]
+weight     = 1.5
+semantic   = { affordance = "walkable", collision = "none" }
+grid = '''
+22122222
+21222132
+22222122
+22132212
+12222222
+22212221
+22122132
+22222122
+'''
+
+[tile.door_ns]
+palette     = "gb"
+size        = "8x8"
+auto_rotate = "4way"
+edge_class  = { n = "floor", e = "solid", s = "floor", w = "solid" }
+tags        = ["door", "passage"]
+weight      = 0.8
+semantic    = { affordance = "walkable", collision = "none" }
+grid = '''
+22232222
+.2222222
+.2222222
+.2232222
+.2222222
+.2222222
+.2232222
+22222222
 '''

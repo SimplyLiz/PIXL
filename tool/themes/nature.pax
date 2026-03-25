@@ -96,22 +96,22 @@ tags       = ["floor", "path"]
 weight     = 5.0
 semantic   = { affordance = "walkable", collision = "none", tags = { biome = "forest" } }
 grid = '''
-h++++++s#h+++++s
-+++++++++++++++#
-+++++++s#+++++++
-################
-h++s#h+++++++++s
-+++##+++++++++++
-+++##+++++++++++
-++s##s+++++++++s
-################
-h+++++++s#h++++s
-++++++++++++++++
-++++++++++++++++
-s++++++s#s++++++
-################
-h+++s#h++++++++s
-++++##+++++++++#
+++#+++h+++s+++h+
+++++s++++++#++s+
+s+h++++++h++++h+
++++++#s+++++s+++
++h+++++++s++++h+
++++s++h+++++#+++
++++++++s++h+++++
+#s++++++++++s+h+
++++h++#s+++++++#
+++++++++h+++s+++
++s++h+++++++h+++
++++++++s+#++++++
+h+++s++++++++s++
+++++++h++s++++++
++s+h++++++h+++s+
++++++s++#+++h+++
 '''
 
 [tile.wall_floor_n]
@@ -166,4 +166,57 @@ Gg+GGg+g+gGGgGgG
 +++++++++++++ggG
 +++++++++++++++g
 ++++++++++++++++
+'''
+
+[tile.floor_grass]
+palette    = "forest"
+size       = "16x16"
+edge_class = { n = "floor", e = "floor", s = "floor", w = "floor" }
+tags       = ["floor", "grass"]
+weight     = 2.0
+semantic   = { affordance = "walkable", collision = "none", tags = { biome = "forest" } }
+grid = '''
+gGg+GgGggGgGgGgg
+GgGgGgGgGg+GgGgG
+gGgGgGgGgGgGg+Gg
+GgGgGg+GgGgGgGgG
+gGgGgGgGgGgGgGgg
+Gg+GgGgGgGgGg+gG
+gGgGgGgGgGg+GgGg
+GgGgGgGgGg+GgGgG
+gGg+GgGgGgGgGgGg
+GgGgGgGgGg+GgGgG
+gGgGgGg+GgGgGgGg
+GgGgGgGgGgGg+G+G
+g+GgGgGgGgGgGgGg
+GgGgGg+GgGgGgGgG
+gGgGgGgGgGg+gGgG
+GgGgGgGgGgGgGgGg
+'''
+
+[tile.door_ns]
+palette     = "forest"
+size        = "16x16"
+auto_rotate = "4way"
+edge_class  = { n = "floor", e = "solid", s = "floor", w = "solid" }
+tags        = ["door", "passage"]
+weight      = 0.8
+semantic    = { affordance = "walkable", collision = "none", tags = { biome = "forest" } }
+grid = '''
+gGgG++++++s+gGgG
+GgGg+h++++++GgGG
+gGGg+++s+h++gGGg
+GggG+++++++sGggG
+gGgG+s+h++++gGgG
+GgGg++++++h+GgGg
+gGGG++h+++s+gGGg
+GggG++++s+++GggG
+gGgG++++++h+gGgG
+GgGg+h+s++++GgGg
+gGGG+++++++sgGGg
+GggG++s++h++GggG
+gGgG+h++++++gGgG
+GgGg+++s++++GgGG
+gGGg+++++h+sgGGg
+GggG+s++++++GggG
 '''

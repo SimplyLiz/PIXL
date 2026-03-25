@@ -103,26 +103,26 @@ s++++s###s+++s##
 palette    = "cathedral"
 size       = "16x16"
 edge_class = { n = "floor", e = "floor", s = "floor", w = "floor" }
-tags       = ["floor", "interior"]
+tags       = ["floor", "interior", "marble"]
 weight     = 3.0
 semantic   = { affordance = "walkable", collision = "none", tags = { biome = "cathedral" } }
 grid = '''
-w+++++s#w++++++s
-+++h+++#++++++++
-+++++++#+++++h++
-################
-w+++s#w++++++++s
-++++##++++++h+++
-+++s##++++++++s+
-################
-w+++++++s#w++++s
+w+h++++++++++h+w
+++++++++h+++++++
+++++++++++++w+++
 ++++h+++++++++++
-+++++++++++h++++
-s+++++++s#s++++s
-################
-w++++s#w+++++++s
-++++++#++++++h++
-++++s##+++++++++
+++++++++++++++h+
++w+++++h++++++++
+++++++++++w+++++
++++h++++++++++h+
++++++w++++++++++
+++++++++++h+++++
+++h++++++++++++w
++++++++w++++++++
+++++++++++++h+++
++w+++++++++++++h
++++++h++++w+++++
+h++++++++++++++w
 '''
 
 [tile.wall_floor_n]
@@ -177,4 +177,61 @@ grid = '''
 w+++++++s#w++++s
 +++++++s#++++++#
 ++++++s##+++++++
+'''
+
+# --- Floor variant: ornate marble with gold inlay ---
+
+[tile.floor_ornate]
+palette    = "cathedral"
+size       = "16x16"
+edge_class = { n = "floor", e = "floor", s = "floor", w = "floor" }
+tags       = ["floor", "interior", "decorated"]
+weight     = 1.0
+semantic   = { affordance = "walkable", collision = "none", tags = { biome = "cathedral" } }
+grid = '''
+w+h+++++o+++h+ow
+++++++o+++++o+++
+++o+++++++++++++
+++++h++++o+++h++
+o+++++++++++++o+
++w+++o+h++++o+++
+++++++++++w+++++
++++h+++o+++++oh+
+o++++w++++o+++++
+++++++++++h++o++
+++h++o+++++++++w
++++++++w+o++++++
+++o+++++++o+h+++
++w+++o+++++++o+h
+++++oh++++w+++++
+h+o+++++o+++o++w
+'''
+
+# --- Door tile: passage through wall ---
+
+[tile.door_ns]
+palette     = "cathedral"
+size        = "16x16"
+auto_rotate = "4way"
+edge_class  = { n = "floor", e = "solid", s = "floor", w = "solid" }
+tags        = ["door", "passage"]
+weight      = 0.8
+semantic    = { affordance = "walkable", collision = "none", tags = { biome = "cathedral" } }
+grid = '''
+w+h++++s########
+++++++++########
++++++h+s########
+s++++++s########
+########w++++++h
+########++++++++
+########++h+++++
+########s++++++s
+########w++++++h
+########++++h+++
+########++++++++
+########s++++++s
+w+h++++s########
++++++++s########
++++++h++########
+s++++++s########
 '''

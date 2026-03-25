@@ -198,3 +198,60 @@ h+++++++s#h++++s
 +++++++s#++++++#
 ++++++s##+++++++
 '''
+
+# --- Floor variant: cracked stone ---
+
+[tile.floor_cracked]
+palette    = "dungeon"
+size       = "16x16"
+edge_class = { n = "floor", e = "floor", s = "floor", w = "floor" }
+tags       = ["floor", "interior", "damaged"]
+weight     = 1.2
+semantic   = { affordance = "walkable", collision = "none", tags = { biome = "dungeon" } }
+grid = '''
+h++++++s#h+++++s
+++++s+++#++++++#
++++ss++s#+++++++
+##s#s###########
+h++s#h+s+++++++s
++++##++s++++++++
++++##+++s+++++++
+++s##s++++s++++s
+################
+h+++s++++s#h+++s
+++s++++s++++++s+
+++++s+++++++s+++
+s+++++ss#ss+++++
+################
+h+++s#h+s++++++s
+++++##++s++++++#
+'''
+
+# --- Door tile: passage through wall ---
+
+[tile.door_ns]
+palette     = "dungeon"
+size        = "16x16"
+auto_rotate = "4way"
+edge_class  = { n = "floor", e = "solid", s = "floor", w = "solid" }
+tags        = ["door", "passage"]
+weight      = 0.8
+semantic    = { affordance = "walkable", collision = "none", tags = { biome = "dungeon" } }
+grid = '''
+h++++++s########
++++++++s########
++++++++s########
+s++++++s########
+########h++++++s
+########++++++++
+########++++++++
+########s++++++s
+########h++++++s
+########++++++++
+########++++++++
+########s++++++s
+h++++++s########
++++++++s########
++++++++s########
+s++++++s########
+'''

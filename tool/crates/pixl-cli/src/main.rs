@@ -227,6 +227,12 @@ enum Commands {
         /// Output .pax file path
         #[arg(long, short, alias = "output")]
         out: PathBuf,
+
+        /// Generate tiles via AI instead of using static templates.
+        /// Outputs knowledge-enriched prompts for each tile type.
+        /// Pipe to an LLM: pixl new dark_fantasy --out my.pax --generate | llm
+        #[arg(long)]
+        generate: bool,
     },
 
     /// Export to game engine format
@@ -445,8 +451,12 @@ fn main() {
         } => {
             cmd_import(&image, &size, &pax, &palette, dither, out.as_deref());
         }
-        Commands::New { theme, out } => {
-            cmd_new(&theme, &out);
+        Commands::New { theme, out, generate } => {
+            if generate {
+                cmd_new_generate(&theme, &out);
+            } else {
+                cmd_new(&theme, &out);
+            }
         }
         Commands::Export { file, format, out } => {
             cmd_export(&file, &format, &out);
@@ -949,6 +959,102 @@ fn cmd_new(theme: &str, out: &PathBuf) {
     }
 
     println!("created {} from theme '{}'", out.display(), theme);
+}
+
+fn cmd_new_generate(theme: &str, out: &PathBuf) {
+    // Step 1: Write the static template (palette + theme + stamps, no tiles)
+    cmd_new(theme, out);
+
+    // Step 2: Load the template and knowledge base
+    let source = std::fs::read_to_string(out).unwrap_or_default();
+    let pax_file = match pixl_core::parser::parse_pax(&source) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("error parsing template: {}", e);
+            process::exit(1);
+        }
+    };
+
+    // Find knowledge base
+    let kb_path = std::path::Path::new("knowledge/pixelart-knowledge-base.json");
+    let kb = if kb_path.exists() {
+        pixl_core::knowledge::KnowledgeBase::load(kb_path)
+    } else {
+        None
+    };
+
+    // Step 3: Get palette info
+    let palette_name = pax_file.theme.values()
+        .next()
+        .map(|t| t.palette.as_str())
+        .unwrap_or("unknown");
+    let palette_info = pax_file.palette.iter()
+        .next()
+        .map(|(_, pal_raw)| {
+            pal_raw.iter()
+                .map(|(sym, hex)| format!("'{}' = {}", sym, hex))
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_default();
+
+    let canvas = pax_file.theme.values()
+        .next()
+        .and_then(|t| t.canvas)
+        .unwrap_or(16);
+
+    let light_source = pax_file.theme.values()
+        .next()
+        .and_then(|t| t.light_source.as_deref())
+        .unwrap_or("top-left");
+
+    // Step 4: Generate prompts for each tile type
+    let tile_specs = [
+        ("wall_solid", "solid/solid/solid/solid", "A solid wall tile with brick or stone pattern. Use highlight on top-left edges, shadow on bottom-right. Full mortar lines between blocks."),
+        ("floor_stone", "floor/floor/floor/floor", "A walkable floor tile. Use irregular stone sizes, scattered highlights, mortar gaps. Should look different from wall."),
+        ("floor_variant", "floor/floor/floor/floor", "A second floor variant — cracked, mossy, or decorated. Should tile seamlessly with floor_stone."),
+        ("wall_floor_n", "solid/solid/floor/solid", "A wall-to-floor transition tile. Top half wall pattern, bottom half floor pattern. Dither the boundary with 2-3 rows of blended pixels. auto_rotate=4way gives all 4 cardinal transitions."),
+        ("wall_corner_ne", "solid/solid/floor/floor", "A corner tile where wall (top-right) meets floor (bottom-left). Diagonal boundary with dithered edge. auto_rotate=4way gives all 4 corners."),
+        ("door_ns", "floor/solid/floor/solid", "A door/passage tile allowing movement through walls. Floor on north/south, solid wall on east/west. auto_rotate=4way gives both orientations."),
+    ];
+
+    println!();
+    println!("# AI Generation Prompts for theme '{}'", theme);
+    println!("# Palette: {}", palette_name);
+    println!("# Canvas: {}x{}", canvas, canvas);
+    println!("# Light source: {}", light_source);
+    println!("# Pipe each prompt to an LLM to generate tile grids");
+    println!();
+
+    for (name, edges, description) in &tile_specs {
+        // Search knowledge base for relevant techniques
+        let knowledge = if let Some(ref kb) = kb {
+            let query = format!("{} {} pixel art tile", description, theme);
+            let results = kb.search(&query, 3);
+            results.iter()
+                .map(|r| format!("[{}] {}", r.source_title, r.content))
+                .collect::<Vec<_>>()
+                .join("\n")
+        } else {
+            String::new()
+        };
+
+        println!("--- {} (edges: {}) ---", name, edges);
+        println!("SYSTEM: You are a pixel art tile designer. Output ONLY a {}x{} character grid.", canvas, canvas);
+        println!("Palette ({}): {}", palette_name, palette_info);
+        println!("Light source: {}. Use highlight symbols on lit edges, shadow on dark edges.", light_source);
+        println!();
+        if !knowledge.is_empty() {
+            println!("KNOWLEDGE:");
+            println!("{}", knowledge);
+            println!();
+        }
+        println!("USER: {}", description);
+        println!();
+    }
+
+    println!("# To use: pipe each section to an LLM, extract the {}x{} grid,", canvas, canvas);
+    println!("# and add it to {} as [tile.NAME] with the specified edge_class.", out.display());
 }
 
 fn cmd_check_fix(file: &PathBuf) {

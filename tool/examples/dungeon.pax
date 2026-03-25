@@ -252,6 +252,63 @@ h+++++++s#h++++s
 ++++++s##+++++++
 '''
 
+# --- Floor variant: cracked stone ---
+
+[tile.floor_cracked]
+palette    = "dungeon"
+size       = "16x16"
+edge_class = { n = "floor", e = "floor", s = "floor", w = "floor" }
+tags       = ["floor", "interior", "damaged"]
+weight     = 1.2
+semantic   = { affordance = "walkable", collision = "none", tags = { biome = "dungeon", condition = "damaged" } }
+grid = '''
+h++++++s#h+++++s
+++++s+++#++++++#
++++ss++s#+++++++
+##s#s###########
+h++s#h+s+++++++s
++++##++s++++++++
++++##+++s+++++++
+++s##s++++s++++s
+################
+h+++s++++s#h+++s
+++s++++s++++++s+
+++++s+++++++s+++
+s+++++ss#ss+++++
+################
+h+++s#h+s++++++s
+++++##++s++++++#
+'''
+
+# --- Door tile: passage through wall ---
+
+[tile.door_ns]
+palette     = "dungeon"
+size        = "16x16"
+auto_rotate = "4way"
+edge_class  = { n = "floor", e = "solid", s = "floor", w = "solid" }
+tags        = ["door", "passage"]
+weight      = 0.8
+semantic    = { affordance = "walkable", collision = "none", tags = { biome = "dungeon" } }
+grid = '''
+h++++++s########
++++++++s########
++++++++s########
+s++++++s########
+########h++++++s
+########++++++++
+########++++++++
+########s++++++s
+########h++++++s
+########++++++++
+########++++++++
+########s++++++s
+h++++++s########
++++++++s########
++++++++s########
+s++++++s########
+'''
+
 # --- Water tile with cycling ---
 
 [tile.water_surface]
@@ -294,7 +351,7 @@ requires = [
 ]
 
 [wfc_rules.variant_groups]
-stone_floor = ["floor_stone", "floor_moss"]
+stone_floor = ["floor_stone", "floor_moss", "floor_cracked"]
 
 # --- Atlas ---
 
@@ -303,6 +360,6 @@ format     = "texturepacker"
 padding    = 1
 scale      = 2
 columns    = 8
-include    = ["wall_*", "floor_*", "water_*"]
+include    = ["wall_*", "floor_*", "water_*", "door_*"]
 output     = "dungeon_atlas.png"
 map_output = "dungeon_atlas.json"
