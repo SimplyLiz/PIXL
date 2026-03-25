@@ -188,6 +188,10 @@ pub fn narrate_map(
                 last_contradiction = (x, y);
                 // Retry with next seed
             }
+            Err(WfcError::ExhaustedRetries { last_x, last_y, .. }) => {
+                last_contradiction = (last_x, last_y);
+                // Inner WFC exhausted (max_retries=0), but narrate has its own retry loop
+            }
             Err(e) => return Err(e),
         }
     }
