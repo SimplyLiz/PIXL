@@ -10,6 +10,7 @@ import 'canvas/canvas_viewport.dart';
 import 'canvas/tilemap_viewport.dart';
 import 'canvas/variant_strip.dart';
 import 'panels/chat_panel.dart';
+import 'panels/tool_strip.dart';
 import 'panels/tools_panel.dart';
 import 'status_bar.dart';
 import 'top_bar.dart';
@@ -62,6 +63,7 @@ class _StudioShellState extends ConsumerState<StudioShell> {
             child: Row(
               children: [
                 const ChatPanel(),
+                const ToolStrip(),
                 Expanded(
                   child: Column(
                     children: [
