@@ -127,10 +127,13 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> {
         borderRadius: BorderRadius.circular(8),
         side: StudioTheme.panelBorder,
       ),
-      child: Container(
-        width: 460,
-        padding: const EdgeInsets.all(20),
-        child: SingleChildScrollView(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.8,
+          maxWidth: 460,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -151,6 +154,14 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> {
                 ],
               ),
               const SizedBox(height: 20),
+
+              // Scrollable content
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
 
               // Provider Selection
               Text('LLM PROVIDER', style: theme.textTheme.titleSmall),
@@ -742,6 +753,26 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> {
                   style: theme.textTheme.bodySmall!.copyWith(fontSize: 10),
                 ),
               ],
+                    ],
+                  ),
+                ),
+              ),
+
+              // Done button — always visible at bottom
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: theme.colorScheme.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
+                  child: const Text('Done'),
+                ),
+              ),
             ],
           ),
         ),
