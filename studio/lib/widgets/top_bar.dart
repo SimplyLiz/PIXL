@@ -18,6 +18,110 @@ import 'tilegroup_dialog.dart';
 import 'training_dialog.dart';
 import 'wfc_dialog.dart';
 
+const _themes = [
+  ('dark_fantasy', 'Dark Fantasy', Icons.castle),
+  ('light_fantasy', 'Light Fantasy', Icons.wb_sunny),
+  ('sci_fi', 'Sci-Fi', Icons.rocket_launch),
+  ('nature', 'Nature', Icons.park),
+  ('gameboy', 'Game Boy', Icons.gamepad),
+  ('nes', 'Retro 8-bit', Icons.sports_esports),
+];
+
+Future<void> _showNewProjectDialog(BuildContext context, WidgetRef ref) async {
+  final theme = await showDialog<String>(
+    context: context,
+    builder: (ctx) {
+      final t = Theme.of(ctx);
+      return Dialog(
+        backgroundColor: t.cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        child: Container(
+          width: 320,
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('New Project', style: t.textTheme.bodyMedium!.copyWith(
+                fontSize: 16, fontWeight: FontWeight.w700,
+              )),
+              const SizedBox(height: 4),
+              Text('Choose a theme template:', style: t.textTheme.bodySmall),
+              const SizedBox(height: 12),
+              ..._themes.map((entry) {
+                final (id, label, icon) = entry;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: InkWell(
+                    onTap: () => Navigator.pop(ctx, id),
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: t.dividerColor),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(icon, size: 18, color: t.colorScheme.primary),
+                          const SizedBox(width: 10),
+                          Text(label, style: t.textTheme.bodySmall!.copyWith(fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }),
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: () => Navigator.pop(ctx, '_blank'),
+                borderRadius: BorderRadius.circular(6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: t.dividerColor),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.crop_square, size: 18, color: t.textTheme.bodySmall?.color),
+                      const SizedBox(width: 10),
+                      Text('Blank Canvas', style: t.textTheme.bodySmall!.copyWith(fontSize: 12)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+
+  if (theme == null) return;
+
+  if (theme == '_blank') {
+    ref.read(canvasProvider.notifier).clearCanvas();
+    return;
+  }
+
+  final backend = ref.read(backendProvider);
+  if (!backend.isConnected) {
+    // Start engine first
+    final service = ref.read(claudeProvider.notifier).service;
+    final isLocal = service.provider == LlmProviderType.pixlLocal;
+    await ref.read(backendProvider.notifier).connect(
+      model: isLocal ? service.pixlModel : null,
+      adapter: isLocal && service.hasPixlAdapter ? service.pixlAdapter : null,
+    );
+  }
+
+  final resp = await ref.read(backendProvider.notifier).backend.newFromTemplate(theme);
+  if (resp.containsKey('source')) {
+    await ref.read(backendProvider.notifier).loadSource(resp['source'] as String);
+  }
+}
+
 Future<void> _openPaxFile(BuildContext context, WidgetRef ref) async {
   final messenger = ScaffoldMessenger.of(context);
 
@@ -129,7 +233,7 @@ class TopBar extends ConsumerWidget {
           const SizedBox(width: 16),
 
           // File actions
-          _BarButton(label: 'New', icon: Icons.add, onTap: () => notifier.clearCanvas()),
+          _BarButton(label: 'New', icon: Icons.add, onTap: () => _showNewProjectDialog(context, ref)),
           _BarButton(label: 'Open PAX', icon: Icons.folder_open, onTap: () => _openPaxFile(context, ref)),
           _RecentFilesMenu(),
           _ExportMenu(),

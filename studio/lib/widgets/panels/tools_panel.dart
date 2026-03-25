@@ -18,6 +18,7 @@ import '../../services/knowledge_base.dart';
 import '../../theme/studio_theme.dart';
 import '../../utils/grid_parser.dart';
 import '../color_picker_dialog.dart';
+import '../sprite_preview_dialog.dart';
 
 enum _PanelTab { palette, style, generate, tiles }
 
@@ -1263,21 +1264,57 @@ class _TileListSectionState extends ConsumerState<_TileListSection> {
           }),
 
         // Stamps
-        if (backend.isConnected && backend.stamps.isNotEmpty) ...[
+        if (backend.isConnected) ...[
           const SizedBox(height: 12),
           Text('STAMPS', style: theme.textTheme.titleSmall),
+          const SizedBox(height: 4),
+          if (backend.stamps.isNotEmpty)
+            Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: backend.stamps.map((name) {
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border.all(color: theme.dividerColor),
+                  ),
+                  child: Text(name, style: theme.textTheme.bodySmall!.copyWith(fontSize: 9)),
+                );
+              }).toList(),
+            ),
+          const SizedBox(height: 6),
+          Text('Procedural patterns:', style: theme.textTheme.bodySmall!.copyWith(fontSize: 9)),
           const SizedBox(height: 4),
           Wrap(
             spacing: 4,
             runSpacing: 4,
-            children: backend.stamps.map((name) {
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(3),
-                  border: Border.all(color: theme.dividerColor),
+            children: const [
+              'brick_bond', 'checkerboard', 'diagonal', 'dither_bayer',
+              'horizontal_stripe', 'dots', 'cross', 'noise',
+            ].map((pattern) {
+              return InkWell(
+                onTap: () async {
+                  // Generate stamp via backend CLI tool
+                  final resp = await ref.read(backendProvider.notifier).backend.callTool(
+                    'pixl_generate_stamps',
+                    {'pattern': pattern, 'size': 4, 'fg': '#', 'bg': '+'},
+                  );
+                  if (resp.containsKey('error')) return;
+                  ref.read(backendProvider.notifier).refreshTiles();
+                },
+                borderRadius: BorderRadius.circular(3),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(3),
+                    color: theme.colorScheme.primary.withValues(alpha: 0.08),
+                    border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.3)),
+                  ),
+                  child: Text(pattern, style: theme.textTheme.bodySmall!.copyWith(
+                    fontSize: 8, color: theme.colorScheme.primary,
+                  )),
                 ),
-                child: Text(name, style: theme.textTheme.bodySmall!.copyWith(fontSize: 9)),
               );
             }).toList(),
           ),
@@ -1341,14 +1378,58 @@ class _TileListSectionState extends ConsumerState<_TileListSection> {
                 else
                   Text('No preview', style: theme.textTheme.bodySmall),
                 const SizedBox(height: 4),
-                // Edge classes
+                // Edge classes + animation
                 Builder(builder: (_) {
                   final tile = backend.tiles.where((t) => t.name == _selectedTile).firstOrNull;
-                  if (tile?.edgeClasses == null) return const SizedBox.shrink();
-                  final ec = tile!.edgeClasses!;
-                  return Text(
-                    'N:${ec['n'] ?? '?'} E:${ec['e'] ?? '?'} S:${ec['s'] ?? '?'} W:${ec['w'] ?? '?'}',
-                    style: theme.textTheme.bodySmall!.copyWith(fontSize: 8),
+                  if (tile == null) return const SizedBox.shrink();
+                  return Column(
+                    children: [
+                      if (tile.edgeClasses != null)
+                        Text(
+                          'N:${tile.edgeClasses!['n'] ?? '?'} E:${tile.edgeClasses!['e'] ?? '?'} '
+                          'S:${tile.edgeClasses!['s'] ?? '?'} W:${tile.edgeClasses!['w'] ?? '?'}',
+                          style: theme.textTheme.bodySmall!.copyWith(fontSize: 8),
+                        ),
+                      if (tile.tags.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Wrap(
+                            spacing: 3,
+                            children: tile.tags.map((t) => Text(
+                              t,
+                              style: theme.textTheme.bodySmall!.copyWith(fontSize: 7, color: theme.colorScheme.primary),
+                            )).toList(),
+                          ),
+                        ),
+                      // Animation preview button (for spriteset tiles)
+                      if (tile.tags.any((t) => t.contains('sprite') || t.contains('anim')))
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: InkWell(
+                            onTap: () => SpritePreviewDialog.show(
+                              context,
+                              spriteset: tile.name,
+                              sprite: 'default',
+                            ),
+                            borderRadius: BorderRadius.circular(4),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: theme.dividerColor),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.play_arrow, size: 12, color: theme.colorScheme.primary),
+                                  const SizedBox(width: 4),
+                                  Text('Play Animation', style: theme.textTheme.bodySmall!.copyWith(fontSize: 9)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   );
                 }),
               ],

@@ -53,7 +53,8 @@ The right panel has 4 icon tabs:
 - Tile list with inline thumbnails
 - Tile preview (click to expand) with 3x3 tiling view
 - Edge class display (N/E/S/W)
-- Stamps listing
+- Stamps listing + procedural stamp generator (8 patterns: brick, checkerboard, diagonal, etc.)
+- Play Animation button for spriteset tiles (renders animated GIF)
 - Edge compatibility checker (select two tiles + direction)
 - Validation runner
 

@@ -26,7 +26,7 @@ On first launch, you'll see the **Auto-Learn opt-in dialog**. This asks whether 
 ## Opening a Project
 
 1. Click **Open PAX** in the top bar to load a `.pax` file
-2. Or use **New** to start with a blank canvas
+2. Click **New** to create a project from a theme template (Dark Fantasy, Sci-Fi, Nature, Game Boy, etc.) or start with a blank canvas
 3. Recent files appear in the clock icon menu next to Open PAX
 
 The engine loads the file automatically and populates tiles, palettes, and themes.
