@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -32,6 +33,12 @@ class ChatPanel extends ConsumerStatefulWidget {
 class _ChatPanelState extends ConsumerState<ChatPanel> {
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
+  final _focusNode = FocusNode();
+
+  // Input history (up/down arrow recall)
+  final _inputHistory = <String>[];
+  int _historyIndex = -1;
+  String _savedInput = '';
 
   // Pending generated tile for accept/reject flow
   String? _pendingTileName;
@@ -58,6 +65,11 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
   Future<void> _send() async {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
+
+    // Track input history
+    _inputHistory.add(text);
+    _historyIndex = -1;
+    _savedInput = '';
 
     final chat = ref.read(chatProvider.notifier);
     chat.addUserMessage(text);
@@ -136,7 +148,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
 
     // Step 3: Build enriched system prompt with knowledge base + style
     final style = ref.read(styleProvider);
-    final systemPrompt = await KnowledgeBase.buildSystemPrompt(
+    final systemPrompt = KnowledgeBase.buildSystemPrompt(
       backendContext: backendContext,
       styleFragment: style.toPromptFragment(),
     );
@@ -492,7 +504,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     final backendContext = ctx['system_prompt'] as String? ?? '';
     final userPrompt = ctx['user_prompt'] as String? ?? prompt;
     final style = ref.read(styleProvider);
-    final systemPrompt = await KnowledgeBase.buildSystemPrompt(
+    final systemPrompt = KnowledgeBase.buildSystemPrompt(
       backendContext: backendContext,
       styleFragment: style.toPromptFragment(),
     );
@@ -675,7 +687,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
       );
       final backendCtx = ctx['system_prompt'] as String? ?? '';
       final style = ref.read(styleProvider);
-      final systemPrompt = await KnowledgeBase.buildSystemPrompt(
+      final systemPrompt = KnowledgeBase.buildSystemPrompt(
         backendContext: backendCtx,
         styleFragment: style.toPromptFragment(),
       );
@@ -718,10 +730,36 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
   // Helpers moved to lib/utils/grid_parser.dart
 
   @override
+  @override
   void dispose() {
     _controller.dispose();
     _scrollController.dispose();
+    _focusNode.dispose();
     super.dispose();
+  }
+
+  void _historyUp() {
+    if (_inputHistory.isEmpty) return;
+    if (_historyIndex == -1) {
+      _savedInput = _controller.text;
+      _historyIndex = _inputHistory.length - 1;
+    } else if (_historyIndex > 0) {
+      _historyIndex--;
+    }
+    _controller.text = _inputHistory[_historyIndex];
+    _controller.selection = TextSelection.collapsed(offset: _controller.text.length);
+  }
+
+  void _historyDown() {
+    if (_historyIndex == -1) return;
+    if (_historyIndex < _inputHistory.length - 1) {
+      _historyIndex++;
+      _controller.text = _inputHistory[_historyIndex];
+    } else {
+      _historyIndex = -1;
+      _controller.text = _savedInput;
+    }
+    _controller.selection = TextSelection.collapsed(offset: _controller.text.length);
   }
 
   @override
@@ -796,17 +834,20 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
                         ),
                       ),
                       const SizedBox(height: 2),
-                      MarkdownBody(
-                        data: msg.content,
-                        styleSheet: MarkdownStyleSheet(
-                          p: theme.textTheme.bodyMedium!.copyWith(fontSize: 12),
-                          code: theme.textTheme.bodyMedium!.copyWith(
-                            fontSize: 11,
-                            backgroundColor: StudioTheme.codeBg,
-                          ),
-                          codeblockDecoration: BoxDecoration(
-                            color: StudioTheme.codeBg,
-                            borderRadius: BorderRadius.circular(4),
+                      SelectionArea(
+                        child: MarkdownBody(
+                          data: msg.content,
+                          selectable: true,
+                          styleSheet: MarkdownStyleSheet(
+                            p: theme.textTheme.bodyMedium!.copyWith(fontSize: 12),
+                            code: theme.textTheme.bodyMedium!.copyWith(
+                              fontSize: 11,
+                              backgroundColor: StudioTheme.codeBg,
+                            ),
+                            codeblockDecoration: BoxDecoration(
+                              color: StudioTheme.codeBg,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
                           ),
                         ),
                       ),
@@ -1011,31 +1052,57 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
             child: Row(
               children: [
                 Expanded(
-                  child: TextField(
-                    controller: _controller,
-                    enabled: !isGenerating,
-                    style: theme.textTheme.bodyMedium!.copyWith(fontSize: 12),
-                    maxLines: 3,
-                    minLines: 1,
-                    decoration: InputDecoration(
-                      hintText: isGenerating
-                          ? 'Generating...'
-                          : claude.hasApiKey
-                              ? 'Ask or "generate a wall tile"...'
-                              : 'Add API key in Settings...',
-                      hintStyle: theme.textTheme.bodySmall,
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(4),
-                        borderSide: StudioTheme.panelBorder,
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(4),
-                        borderSide: BorderSide(color: theme.colorScheme.primary),
+                  child: KeyboardListener(
+                    focusNode: FocusNode(),
+                    onKeyEvent: (event) {
+                      if (event is! KeyDownEvent) return;
+                      // Cmd+Enter or Ctrl+Enter → send
+                      if (event.logicalKey == LogicalKeyboardKey.enter &&
+                          (HardwareKeyboard.instance.isMetaPressed ||
+                           HardwareKeyboard.instance.isControlPressed)) {
+                        _send();
+                        return;
+                      }
+                      // Up arrow → history back (only when cursor is at start)
+                      if (event.logicalKey == LogicalKeyboardKey.arrowUp &&
+                          _controller.selection.baseOffset == 0) {
+                        _historyUp();
+                        return;
+                      }
+                      // Down arrow → history forward (only when cursor is at end)
+                      if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
+                          _controller.selection.baseOffset == _controller.text.length) {
+                        _historyDown();
+                        return;
+                      }
+                    },
+                    child: TextField(
+                      controller: _controller,
+                      focusNode: _focusNode,
+                      enabled: !isGenerating,
+                      style: theme.textTheme.bodyMedium!.copyWith(fontSize: 12),
+                      maxLines: 3,
+                      minLines: 1,
+                      textInputAction: TextInputAction.newline,
+                      decoration: InputDecoration(
+                        hintText: isGenerating
+                            ? 'Generating...'
+                            : claude.hasApiKey
+                                ? 'Ask or "generate a wall tile"... (Cmd+Enter)'
+                                : 'Add API key in Settings...',
+                        hintStyle: theme.textTheme.bodySmall,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: StudioTheme.panelBorder,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: BorderSide(color: theme.colorScheme.primary),
+                        ),
                       ),
                     ),
-                    onSubmitted: (_) => _send(),
                   ),
                 ),
                 const SizedBox(width: 4),
