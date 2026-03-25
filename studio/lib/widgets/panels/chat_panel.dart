@@ -158,12 +158,38 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
       return;
     }
 
-    // Step 4: Extract PAX grid from response
-    final grid = extractGrid(resp.content);
+    // Step 4: Check if the response is a full PAX source (multiple tiles)
+    final content = resp.content;
+    if (_isPaxSource(content)) {
+      // Extract PAX source from code fence or raw
+      final paxSource = _extractPaxSource(content);
+      chat.addAssistantMessage('Loading generated tileset...', isStatus: true);
+      _scrollToBottom();
+
+      final loadResp = await ref.read(backendProvider.notifier).loadSource(paxSource);
+      if (loadResp.containsKey('error')) {
+        chat.addAssistantMessage(
+          'Failed to load generated PAX: ${loadResp['error']}\n\n'
+          '*${resp.totalTokens} tokens used*',
+        );
+        return;
+      }
+
+      final tiles = ref.read(backendProvider).tiles;
+      chat.addAssistantMessage(
+        '**Loaded tileset** (${tiles.length} tiles)\n\n'
+        '*${resp.totalTokens} tokens*',
+      );
+      _scrollToBottom();
+      return;
+    }
+
+    // Step 4b: Extract single grid from response
+    final grid = extractGrid(content);
     if (grid == null) {
       chat.addAssistantMessage(
         'The model responded but I couldn\'t extract a valid grid.\n\n'
-        '**Response:**\n${resp.content}\n\n'
+        '**Response:**\n${content.length > 500 ? '${content.substring(0, 500)}...' : content}\n\n'
         '*${resp.totalTokens} tokens used*',
       );
       return;
@@ -250,6 +276,33 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
       'Use the buttons below to **accept** or **reject**, or request **variations**.',
     );
     _scrollToBottom();
+  }
+
+  /// Check if the response looks like a full PAX TOML source.
+  bool _isPaxSource(String content) {
+    // Look for PAX structure markers
+    return content.contains('[theme]') ||
+        content.contains('[[tiles]]') ||
+        content.contains('[palettes.') ||
+        (content.contains('[pax]') && content.contains('version'));
+  }
+
+  /// Extract PAX source from a response — handles code fences.
+  String _extractPaxSource(String content) {
+    // Try code-fenced block first
+    final fenceRegex = RegExp(r'```(?:toml|pax)?\n([\s\S]*?)```');
+    final match = fenceRegex.firstMatch(content);
+    if (match != null) {
+      final block = match.group(1)!.trim();
+      if (_isPaxSource(block)) return block;
+    }
+
+    // Strip any leading/trailing prose — find first [ and last ]
+    final firstBracket = content.indexOf('[');
+    if (firstBracket >= 0) {
+      return content.substring(firstBracket).trim();
+    }
+    return content.trim();
   }
 
   /// Accept the pending tile — record feedback, update style latent.

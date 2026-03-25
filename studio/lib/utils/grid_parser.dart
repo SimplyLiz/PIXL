@@ -1,31 +1,57 @@
-/// Extract a PAX grid block from Claude's response text.
-/// Looks for content between ``` markers or a raw grid block.
+/// Extract a PAX grid block from an LLM response.
+/// Handles multiple formats:
+///   1. PAX TOML: grid = """...""" blocks
+///   2. Code-fenced: ```...``` blocks
+///   3. Raw grid: consecutive lines of symbol characters
 String? extractGrid(String response) {
-  // Try to find a code block
-  final codeBlockRegex = RegExp(r'```(?:\w*\n)?([\s\S]*?)```');
-  final match = codeBlockRegex.firstMatch(response);
-  if (match != null) {
-    final block = match.group(1)!.trim();
+  // 1. Try PAX TOML grid = """...""" blocks (take the first one)
+  final paxGridRegex = RegExp(r'grid\s*=\s*"""([\s\S]*?)"""');
+  final paxMatch = paxGridRegex.firstMatch(response);
+  if (paxMatch != null) {
+    final block = paxMatch.group(1)!.trim();
     final lines = block.split('\n').where((l) => l.trim().isNotEmpty).toList();
-    if (lines.length >= 4 && lines.every((l) => l.length >= 4)) {
+    if (lines.length >= 4 && lines.every((l) => l.trim().length >= 4)) {
+      return lines.map((l) => l.trim()).join('\n');
+    }
+  }
+
+  // 2. Try code-fenced blocks
+  final codeBlockRegex = RegExp(r'```(?:\w*\n)?([\s\S]*?)```');
+  final codeMatch = codeBlockRegex.firstMatch(response);
+  if (codeMatch != null) {
+    final block = codeMatch.group(1)!.trim();
+    // Check if the code block itself contains a PAX grid = """..."""
+    final innerPax = paxGridRegex.firstMatch(block);
+    if (innerPax != null) {
+      final inner = innerPax.group(1)!.trim();
+      final lines = inner.split('\n').where((l) => l.trim().isNotEmpty).toList();
+      if (lines.length >= 4) {
+        return lines.map((l) => l.trim()).join('\n');
+      }
+    }
+    // Otherwise treat the whole block as a grid if it looks like one
+    final lines = block.split('\n').where((l) => l.trim().isNotEmpty).toList();
+    if (lines.length >= 4 && lines.every((l) => l.trim().length >= 4 && !l.contains(' = '))) {
       return block;
     }
   }
 
-  // Try to find raw grid lines (consecutive lines of similar-length symbol chars)
+  // 3. Try raw grid lines (consecutive non-space lines of similar length)
   final lines = response.split('\n');
   final gridLines = <String>[];
   for (final line in lines) {
     final trimmed = line.trim();
-    // Skip markdown: headers (# Title), bullets (* item, - item).
-    // Lines like "####" are valid grid rows, not markdown headers.
+    // Skip TOML config lines, markdown, and blank lines
+    if (trimmed.contains(' = ') || trimmed.contains('=') && trimmed.contains('"')) continue;
     final isMarkdown = (trimmed.startsWith('* ') ||
         trimmed.startsWith('- ') ||
         (trimmed.startsWith('#') && trimmed.contains(' ')));
     if (trimmed.isNotEmpty &&
         trimmed.length >= 4 &&
         !isMarkdown &&
-        !trimmed.contains(' ')) {
+        !trimmed.contains(' ') &&
+        !trimmed.startsWith('[') &&
+        !trimmed.startsWith('"""')) {
       gridLines.add(trimmed);
     } else if (gridLines.isNotEmpty) {
       break;
