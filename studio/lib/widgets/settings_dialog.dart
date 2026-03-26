@@ -878,13 +878,18 @@ class _MlxSetupCheckState extends State<_MlxSetupCheck> {
   Future<void> _install() async {
     setState(() => _installing = true);
     try {
-      // Create venv if it doesn't exist
       final venvPath = '../training/.venv';
-      await Process.run('python3', ['-m', 'venv', venvPath]);
-      // Install mlx-lm
+      // Create venv — try python3 first, fall back to python
+      for (final py in ['python3', 'python']) {
+        try {
+          final r = await Process.run(py, ['-m', 'venv', venvPath]);
+          if (r.exitCode == 0) break;
+        } catch (_) {}
+      }
+      // Install mlx-lm using the venv's own python -m pip (always works)
       final result = await Process.run(
-        '$venvPath/bin/pip',
-        ['install', 'mlx-lm'],
+        '$venvPath/bin/python',
+        ['-m', 'pip', 'install', 'mlx-lm'],
       );
       if (result.exitCode == 0) {
         await _check();
