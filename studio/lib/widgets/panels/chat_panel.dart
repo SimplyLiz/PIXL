@@ -199,16 +199,39 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     }
 
     // Step 4b: Extract single grid from response
-    final grid = extractGrid(content);
+    var grid = extractGrid(content);
+
+    // Validate grid dimensions match expected size
+    if (grid != null) {
+      final gridLines = grid.split('\n').where((l) => l.trim().isNotEmpty).toList();
+      final gridH = gridLines.length;
+      final gridW = gridLines.isNotEmpty ? gridLines.first.length : 0;
+      final expectedW = int.tryParse(sizeStr.split('x').first) ?? 16;
+      final expectedH = int.tryParse(sizeStr.split('x').last) ?? 16;
+
+      if (gridW != expectedW || gridH != expectedH) {
+        // Grid was extracted but wrong size — show diagnostic
+        chat.addAssistantMessage(
+          'Extracted a ${gridW}x$gridH grid but expected $sizeStr.\n\n'
+          '**Grid found:**\n```\n${grid.length > 300 ? '${grid.substring(0, 300)}...' : grid}\n```\n\n'
+          'The model may not support this canvas size. Try a different model or a smaller canvas.',
+        );
+        // Still try to create it — the backend may accept it or give a better error
+      }
+    }
+
     if (grid == null) {
-      final modelHint = claude.model.contains('llama') || claude.model.contains('phi') || claude.model.contains('gemma')
-          ? '\n\n**Hint:** Small local models often struggle with PAX grid format. '
-            'Try a larger model (8B+), Qwen, or a cloud provider for better results.'
+      final modelName = claude.model;
+      final isSmall = modelName.contains('llama3.2') || modelName.contains('phi') ||
+          modelName.contains('gemma') || modelName.contains('3b') || modelName.contains('3B');
+      final hint = isSmall
+          ? '\n\n**Hint:** `$modelName` is a small model that struggles with structured grid output. '
+            'Try **qwen3:8b**, **llama3.1:8b**, or a cloud provider (Claude, GPT-4o) for reliable PAX generation.'
           : '';
       chat.addAssistantMessage(
         'The model responded but I couldn\'t extract a valid grid.\n\n'
         '**Response:**\n${content.length > 500 ? '${content.substring(0, 500)}...' : content}\n\n'
-        '*${resp.totalTokens} tokens used*$modelHint',
+        '*${resp.totalTokens} tokens used*$hint',
       );
       return;
     }
