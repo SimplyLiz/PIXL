@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -430,6 +432,8 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> {
                     ],
                   ),
                 ],
+                const SizedBox(height: 8),
+                const _MlxSetupCheck(),
                 const SizedBox(height: 20),
               ],
 
@@ -823,6 +827,141 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> {
         color: color,
         fontWeight: FontWeight.w600,
       )),
+    );
+  }
+}
+
+/// Checks if mlx-lm is available and shows setup instructions if not.
+class _MlxSetupCheck extends StatefulWidget {
+  const _MlxSetupCheck();
+
+  @override
+  State<_MlxSetupCheck> createState() => _MlxSetupCheckState();
+}
+
+class _MlxSetupCheckState extends State<_MlxSetupCheck> {
+  bool? _available;
+  String _pythonPath = '';
+  bool _installing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _check();
+  }
+
+  Future<void> _check() async {
+    // Try to find python with mlx_lm — same search as the Rust backend
+    final candidates = [
+      '../training/.venv/bin/python',
+      'training/.venv/bin/python',
+      '.venv/bin/python',
+      'python3',
+      'python',
+    ];
+
+    for (final py in candidates) {
+      try {
+        final result = await Process.run(py, ['-c', 'import mlx_lm; print("ok")']);
+        if (result.exitCode == 0 && result.stdout.toString().contains('ok')) {
+          setState(() {
+            _available = true;
+            _pythonPath = py;
+          });
+          return;
+        }
+      } catch (_) {}
+    }
+    setState(() => _available = false);
+  }
+
+  Future<void> _install() async {
+    setState(() => _installing = true);
+    try {
+      // Create venv if it doesn't exist
+      final venvPath = '../training/.venv';
+      await Process.run('python3', ['-m', 'venv', venvPath]);
+      // Install mlx-lm
+      final result = await Process.run(
+        '$venvPath/bin/pip',
+        ['install', 'mlx-lm'],
+      );
+      if (result.exitCode == 0) {
+        await _check();
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _installing = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    if (_available == null) {
+      return Row(
+        children: [
+          const SizedBox(width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 1)),
+          const SizedBox(width: 6),
+          Text('Checking mlx-lm...', style: theme.textTheme.bodySmall!.copyWith(fontSize: 10)),
+        ],
+      );
+    }
+
+    if (_available!) {
+      return Row(
+        children: [
+          const Icon(Icons.check_circle, size: 12, color: Color(0xFF4caf50)),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              'mlx-lm ready ($_pythonPath)',
+              style: theme.textTheme.bodySmall!.copyWith(fontSize: 10, color: const Color(0xFF4caf50)),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, size: 12, color: Color(0xFFe8a045)),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                'mlx-lm not found. Required for on-device inference.',
+                style: theme.textTheme.bodySmall!.copyWith(fontSize: 10, color: const Color(0xFFe8a045)),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            ElevatedButton(
+              onPressed: _installing ? null : _install,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: theme.colorScheme.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                textStyle: const TextStyle(fontSize: 10),
+              ),
+              child: _installing
+                  ? const SizedBox(width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 1, color: Colors.white))
+                  : const Text('Install mlx-lm'),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'or run: pip install mlx-lm',
+                style: theme.textTheme.bodySmall!.copyWith(fontSize: 9),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

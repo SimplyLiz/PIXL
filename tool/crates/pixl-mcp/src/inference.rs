@@ -6,6 +6,69 @@ use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::time::Duration;
 
+/// Find a Python interpreter that has mlx-lm installed.
+/// Checks: training/.venv, .venv, common paths, then falls back to system python3.
+fn find_python_with_mlx() -> String {
+    // Walk up from current exe to find project root
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()));
+
+    let mut search_dirs = vec![];
+    if let Some(ref dir) = exe_dir {
+        // From tool/target/release/ or tool/target/debug/, walk up to project root
+        let mut d = dir.clone();
+        for _ in 0..5 {
+            search_dirs.push(d.clone());
+            if !d.pop() { break; }
+        }
+    }
+    // Also check cwd
+    if let Ok(cwd) = std::env::current_dir() {
+        search_dirs.push(cwd.clone());
+        search_dirs.push(cwd.join(".."));
+    }
+
+    // Look for venvs with mlx_lm
+    let venv_candidates = [
+        "training/.venv/bin/python",
+        ".venv/bin/python",
+        "venv/bin/python",
+    ];
+
+    for base in &search_dirs {
+        for venv in &venv_candidates {
+            let path = base.join(venv);
+            if path.exists() {
+                // Check if mlx_lm is importable
+                let check = Command::new(&path)
+                    .args(["-c", "import mlx_lm"])
+                    .output();
+                if let Ok(output) = check {
+                    if output.status.success() {
+                        return path.to_string_lossy().to_string();
+                    }
+                }
+            }
+        }
+    }
+
+    // Fall back to system python
+    for name in ["python3", "python"] {
+        let check = Command::new(name)
+            .args(["-c", "import mlx_lm"])
+            .output();
+        if let Ok(output) = check {
+            if output.status.success() {
+                return name.to_string();
+            }
+        }
+    }
+
+    // Last resort
+    "python3".to_string()
+}
+
 /// Configuration for the local mlx_lm inference server.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct InferenceConfig {
@@ -93,7 +156,11 @@ impl InferenceServer {
             self.config.port, self.config.model
         );
 
-        let mut cmd = Command::new("python");
+        // Find Python with mlx-lm — check venv first, then system
+        let python = find_python_with_mlx();
+        eprintln!("using python: {}", python);
+
+        let mut cmd = Command::new(&python);
         cmd.arg("-m")
             .arg("mlx_lm.server")
             .arg("--model")
@@ -103,8 +170,8 @@ impl InferenceServer {
 
         let child = cmd.spawn().map_err(|e| {
             format!(
-                "failed to start mlx_lm.server: {}. Is mlx-lm installed? (pip install mlx-lm)",
-                e
+                "failed to start mlx_lm.server: {}. Python used: {}. Is mlx-lm installed?",
+                e, python
             )
         })?;
         self.child = Some(child);
