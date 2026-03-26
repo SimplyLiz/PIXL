@@ -3,6 +3,7 @@
 ///   1. PAX TOML: grid = """...""" blocks
 ///   2. Code-fenced: ```...``` blocks
 ///   3. Raw grid: consecutive lines of symbol characters
+///   4. Longest consistent block: finds the largest group of similar-width lines
 String? extractGrid(String response) {
   // 1. Try PAX TOML grid = """...""" blocks (take the first one)
   final paxGridRegex = RegExp(r'grid\s*=\s*"""([\s\S]*?)"""');
@@ -10,7 +11,7 @@ String? extractGrid(String response) {
   if (paxMatch != null) {
     final block = paxMatch.group(1)!.trim();
     final lines = block.split('\n').where((l) => l.trim().isNotEmpty).toList();
-    if (lines.length >= 4 && lines.every((l) => l.trim().length >= 4)) {
+    if (lines.length >= 2) {
       return lines.map((l) => l.trim()).join('\n');
     }
   }
@@ -25,43 +26,85 @@ String? extractGrid(String response) {
     if (innerPax != null) {
       final inner = innerPax.group(1)!.trim();
       final lines = inner.split('\n').where((l) => l.trim().isNotEmpty).toList();
-      if (lines.length >= 4) {
+      if (lines.length >= 2) {
         return lines.map((l) => l.trim()).join('\n');
       }
     }
     // Otherwise treat the whole block as a grid if it looks like one
     final lines = block.split('\n').where((l) => l.trim().isNotEmpty).toList();
-    if (lines.length >= 4 && lines.every((l) => l.trim().length >= 4 && !l.contains(' = '))) {
-      return block;
+    if (lines.length >= 2 && lines.every((l) => !l.contains(' = ') && l.trim().length >= 2)) {
+      return lines.map((l) => l.trim()).join('\n');
     }
   }
 
-  // 3. Try raw grid lines (consecutive non-space lines of similar length)
-  final lines = response.split('\n');
-  final gridLines = <String>[];
-  for (final line in lines) {
-    final trimmed = line.trim();
-    // Skip TOML config lines, markdown, and blank lines
-    if (trimmed.contains(' = ') || trimmed.contains('=') && trimmed.contains('"')) continue;
-    final isMarkdown = (trimmed.startsWith('* ') ||
-        trimmed.startsWith('- ') ||
-        (trimmed.startsWith('#') && trimmed.contains(' ')));
-    if (trimmed.isNotEmpty &&
-        trimmed.length >= 4 &&
-        !isMarkdown &&
-        !trimmed.contains(' ') &&
-        !trimmed.startsWith('[') &&
-        !trimmed.startsWith('"""')) {
-      gridLines.add(trimmed);
-    } else if (gridLines.isNotEmpty) {
-      break;
+  // 3. Find the longest run of similar-width symbol-only lines
+  final allLines = response.split('\n');
+  final candidates = <(int, int, int)>[]; // (startIndex, length, lineWidth)
+
+  int i = 0;
+  while (i < allLines.length) {
+    final trimmed = allLines[i].trim();
+
+    // Skip non-grid lines
+    if (!_isGridLine(trimmed)) {
+      i++;
+      continue;
+    }
+
+    // Found a potential grid line — collect consecutive similar-width lines
+    final width = trimmed.length;
+    final start = i;
+    final gridLines = <String>[trimmed];
+    i++;
+
+    while (i < allLines.length) {
+      final next = allLines[i].trim();
+      if (!_isGridLine(next)) break;
+      // Allow some width tolerance (within 2 chars) for ragged model output
+      if ((next.length - width).abs() <= 2) {
+        gridLines.add(next);
+        i++;
+      } else {
+        break;
+      }
+    }
+
+    if (gridLines.length >= 2) {
+      candidates.add((start, gridLines.length, width));
     }
   }
-  if (gridLines.length >= 4) {
-    return gridLines.join('\n');
+
+  if (candidates.isNotEmpty) {
+    // Pick the longest run (most lines), break ties by widest
+    candidates.sort((a, b) {
+      final cmp = b.$2.compareTo(a.$2); // most lines first
+      if (cmp != 0) return cmp;
+      return b.$3.compareTo(a.$3); // widest first
+    });
+    final (startIdx, count, _) = candidates.first;
+    final result = <String>[];
+    for (var j = startIdx; j < startIdx + count; j++) {
+      result.add(allLines[j].trim());
+    }
+    return result.join('\n');
   }
 
   return null;
+}
+
+/// Check if a line looks like a grid row (symbol characters, no prose).
+bool _isGridLine(String trimmed) {
+  if (trimmed.isEmpty || trimmed.length < 2) return false;
+  // Skip TOML config lines
+  if (trimmed.contains(' = ') || (trimmed.contains('=') && trimmed.contains('"'))) return false;
+  // Skip markdown headers with text (but "####" alone IS a valid grid row)
+  if (trimmed.startsWith('#') && trimmed.contains(' ')) return false;
+  // Skip bullet lists
+  if (trimmed.startsWith('* ') || trimmed.startsWith('- ')) return false;
+  // Skip lines with spaces (prose), brackets (TOML), triple quotes
+  if (trimmed.contains(' ') || trimmed.startsWith('[') || trimmed.startsWith('"""')) return false;
+  // Must be symbol characters only
+  return true;
 }
 
 /// Generate a tile name from a user prompt.

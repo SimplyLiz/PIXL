@@ -201,10 +201,14 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     // Step 4b: Extract single grid from response
     final grid = extractGrid(content);
     if (grid == null) {
+      final modelHint = claude.model.contains('llama') || claude.model.contains('phi') || claude.model.contains('gemma')
+          ? '\n\n**Hint:** Small local models often struggle with PAX grid format. '
+            'Try a larger model (8B+), Qwen, or a cloud provider for better results.'
+          : '';
       chat.addAssistantMessage(
         'The model responded but I couldn\'t extract a valid grid.\n\n'
         '**Response:**\n${content.length > 500 ? '${content.substring(0, 500)}...' : content}\n\n'
-        '*${resp.totalTokens} tokens used*',
+        '*${resp.totalTokens} tokens used*$modelHint',
       );
       return;
     }
