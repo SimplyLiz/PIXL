@@ -140,6 +140,16 @@ enum Commands {
         grid: bool,
     },
 
+    /// Structural quality critique of a tile
+    Critique {
+        /// Path to the .pax file
+        file: PathBuf,
+
+        /// Tile name
+        #[arg(long)]
+        tile: String,
+    },
+
     /// Show anatomy blueprint for a canvas size
     Blueprint {
         /// Canvas size (e.g., "32x48")
@@ -585,6 +595,9 @@ fn main() {
             grid,
         } => {
             cmd_preview(&file, &tile, &out, grid);
+        }
+        Commands::Critique { file, tile } => {
+            cmd_critique(&file, &tile);
         }
         Commands::Blueprint { size, model } => {
             cmd_blueprint(&size, &model);
@@ -1913,6 +1926,82 @@ fn cmd_render_composite(
         scale,
         out.display()
     );
+}
+
+fn cmd_critique(file: &PathBuf, tile_name: &str) {
+    let (pax_file, palettes) = load_pax(file);
+
+    let tile_raw = match pax_file.tile.get(tile_name) {
+        Some(t) => t,
+        None => {
+            eprintln!("error: tile '{}' not found", tile_name);
+            process::exit(1);
+        }
+    };
+
+    let palette = match palettes.get(&tile_raw.palette) {
+        Some(p) => p,
+        None => {
+            eprintln!("error: palette '{}' not found", tile_raw.palette);
+            process::exit(1);
+        }
+    };
+
+    let empty_stamps = std::collections::HashMap::new();
+    let (grid, w, h) = match pixl_core::resolve::resolve_tile_grid(
+        tile_name,
+        &pax_file.tile,
+        &palettes,
+        &empty_stamps,
+    ) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("error: {}", e);
+            process::exit(1);
+        }
+    };
+
+    let report = pixl_core::structural::analyze(&grid, palette, '.');
+
+    println!("pixl critique: '{}' ({}x{})", tile_name, w, h);
+    println!();
+
+    // Metrics
+    println!("  Outline coverage:    {:.1}%", report.outline_coverage * 100.0);
+    println!("  Centering:           {:.1}%", report.centering_score * 100.0);
+    println!("  Canvas utilization:  {:.1}%", report.canvas_utilization * 100.0);
+    println!("  Mean contrast:       {:.4}", report.mean_adjacent_contrast);
+    println!("  Pixel density:       {:.1}%", report.pixel_density * 100.0);
+    println!("  Components:          {}", report.connected_components);
+    println!(
+        "  Bounding box:        ({},{}) to ({},{})",
+        report.bounding_box.0, report.bounding_box.1,
+        report.bounding_box.2, report.bounding_box.3,
+    );
+    println!();
+
+    if report.issues.is_empty() {
+        println!("  \x1b[32m✓ No structural issues found.\x1b[0m");
+    } else {
+        for issue in &report.issues {
+            let (icon, color) = match issue.severity {
+                pixl_core::structural::Severity::Error => ("✗", "\x1b[31m"),
+                pixl_core::structural::Severity::Warning => ("!", "\x1b[33m"),
+                pixl_core::structural::Severity::Info => ("·", "\x1b[36m"),
+            };
+            println!("  {}{} {}\x1b[0m", color, icon, issue.message);
+        }
+    }
+    println!();
+
+    if pixl_core::structural::has_errors(&report) {
+        println!("  Verdict: \x1b[31mREJECT\x1b[0m — regenerate this tile.");
+        process::exit(1);
+    } else if pixl_core::structural::has_warnings(&report) {
+        println!("  Verdict: \x1b[33mREFINE\x1b[0m — fix the issues above.");
+    } else {
+        println!("  Verdict: \x1b[32mACCEPT\x1b[0m");
+    }
 }
 
 fn cmd_render(file: &PathBuf, tile_name: &str, scale: u32, out: &PathBuf) {

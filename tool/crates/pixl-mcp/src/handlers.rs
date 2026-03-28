@@ -46,6 +46,8 @@ pub fn handle_tool(state: &Mutex<McpState>, tool_name: &str, args: &Value) -> Va
         "pixl_list_composites" => handle_list_composites(state),
         "pixl_render_composite" => handle_render_composite(state, args),
         "pixl_check_seams" => handle_check_seams(state),
+        "pixl_critique_tile" => handle_critique_tile(state, args),
+        "pixl_refine_tile" => handle_refine_tile(state, args),
         _ => json!({"error": format!("unknown tool: {}", tool_name)}),
     }
 }
@@ -2594,6 +2596,223 @@ fn handle_check_seams(state: &Mutex<McpState>) -> Value {
         "ok": true,
         "warning_count": warnings.len(),
         "warnings": warning_json,
+    })
+}
+
+// ── SELF-REFINE handlers ────────────────────────────────────────────
+
+fn handle_critique_tile(state: &Mutex<McpState>, args: &Value) -> Value {
+    let st = state.lock().unwrap();
+
+    let name = args["name"].as_str().unwrap_or("");
+    let scale = args.get("scale").and_then(|v| v.as_u64()).unwrap_or(16) as u32;
+
+    let tile_raw = match st.file.tile.get(name) {
+        Some(t) => t,
+        None => return json!({"error": format!("tile '{}' not found", name)}),
+    };
+
+    let palette = match st.palettes.get(&tile_raw.palette) {
+        Some(p) => p,
+        None => return json!({"error": format!("palette '{}' not found", tile_raw.palette)}),
+    };
+
+    let size_str = tile_raw.size.as_deref().unwrap_or("16x16");
+    let (w, h) = match parse_size(size_str) {
+        Ok(s) => s,
+        Err(e) => return json!({"error": e}),
+    };
+
+    // Resolve grid (handles grid, RLE, compose, template, symmetry)
+    let empty_stamps = std::collections::HashMap::new();
+    let parsed = match pixl_core::resolve::resolve_tile_grid(
+        name,
+        &st.file.tile,
+        &st.palettes,
+        &empty_stamps,
+    ) {
+        Ok((g, _, _)) => g,
+        Err(e) => return json!({"error": format!("{}", e)}),
+    };
+
+    // Render preview
+    let img = renderer::render_grid(&parsed, palette, scale);
+    let b64 = renderer::png_to_base64(&renderer::encode_png(&img));
+
+    // Run structural analysis
+    let report = pixl_core::structural::analyze(&parsed, palette, '.');
+    let critique = pixl_core::structural::critique_text(&report, name);
+
+    // Style score (if session has a style latent)
+    let style_score = st
+        .style_latent
+        .as_ref()
+        .map(|latent| latent.score_tile(&parsed, palette, '.'));
+
+    let issues_json: Vec<Value> = report
+        .issues
+        .iter()
+        .map(|i| {
+            json!({
+                "severity": match i.severity {
+                    pixl_core::structural::Severity::Error => "error",
+                    pixl_core::structural::Severity::Warning => "warning",
+                    pixl_core::structural::Severity::Info => "info",
+                },
+                "code": i.code,
+                "message": i.message,
+            })
+        })
+        .collect();
+
+    let refinement_count = st.refinement_count.get(name).copied().unwrap_or(0);
+
+    json!({
+        "ok": true,
+        "name": name,
+        "size": size_str,
+        "scale": scale,
+        "preview_b64": b64,
+        "critique": critique,
+        "issues": issues_json,
+        "metrics": {
+            "outline_coverage": format!("{:.1}%", report.outline_coverage * 100.0),
+            "centering": format!("{:.1}%", report.centering_score * 100.0),
+            "canvas_utilization": format!("{:.1}%", report.canvas_utilization * 100.0),
+            "mean_contrast": format!("{:.4}", report.mean_adjacent_contrast),
+            "connected_components": report.connected_components,
+            "pixel_density": format!("{:.1}%", report.pixel_density * 100.0),
+        },
+        "style_score": style_score,
+        "has_errors": pixl_core::structural::has_errors(&report),
+        "has_warnings": pixl_core::structural::has_warnings(&report),
+        "refinement_count": refinement_count,
+        "max_refinements": 3,
+        "should_refine": pixl_core::structural::has_warnings(&report) && refinement_count < 3,
+        "should_reject": pixl_core::structural::has_errors(&report),
+        "refinement_prompt": if report.issues.is_empty() {
+            Value::Null
+        } else {
+            Value::String(pixl_core::structural::refinement_prompt(&report, &parsed, name))
+        },
+    })
+}
+
+fn handle_refine_tile(state: &Mutex<McpState>, args: &Value) -> Value {
+    let mut st = state.lock().unwrap();
+
+    let name = args["name"].as_str().unwrap_or("").to_string();
+    let start_row = args.get("start_row").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+    let new_rows_str = args["rows"].as_str().unwrap_or("");
+
+    // Validate tile exists and extract info we need before mutating
+    let (palette_name, size_str_owned, current_grid_str) = {
+        let tile_raw = match st.file.tile.get(&name) {
+            Some(t) => t,
+            None => return json!({"error": format!("tile '{}' not found", name)}),
+        };
+        let palette_name = tile_raw.palette.clone();
+        let size_str = tile_raw.size.as_deref().unwrap_or("16x16").to_string();
+        let grid_str = match &tile_raw.grid {
+            Some(g) => g.clone(),
+            None => return json!({"error": "tile has no grid data (RLE/compose tiles cannot be refined this way)"}),
+        };
+        (palette_name, size_str, grid_str)
+    };
+
+    let palette = match st.palettes.get(&palette_name) {
+        Some(p) => p.clone(),
+        None => return json!({"error": format!("palette '{}' not found", palette_name)}),
+    };
+
+    // Parse current grid into lines
+    let mut lines: Vec<String> = current_grid_str
+        .lines()
+        .map(|l| l.to_string())
+        .filter(|l| !l.trim().is_empty())
+        .collect();
+
+    // Parse replacement rows
+    let replacement: Vec<String> = new_rows_str
+        .lines()
+        .map(|l| l.to_string())
+        .filter(|l| !l.trim().is_empty())
+        .collect();
+
+    if replacement.is_empty() {
+        return json!({"error": "no replacement rows provided"});
+    }
+
+    // Validate width consistency
+    let expected_width = lines.first().map(|l| l.len()).unwrap_or(0);
+    for (i, row) in replacement.iter().enumerate() {
+        if row.len() != expected_width {
+            return json!({"error": format!(
+                "replacement row {} has width {}, expected {}",
+                i, row.len(), expected_width
+            )});
+        }
+    }
+
+    // Apply patch
+    let end_row = start_row + replacement.len();
+    if end_row > lines.len() {
+        return json!({"error": format!(
+            "patch extends beyond grid: start_row={} + {} rows = {}, but grid has {} rows",
+            start_row, replacement.len(), end_row, lines.len()
+        )});
+    }
+
+    for (i, row) in replacement.iter().enumerate() {
+        lines[start_row + i] = row.clone();
+    }
+
+    // Rebuild grid string and update tile in state
+    let new_grid_str = lines.join("\n");
+    if let Some(tile) = st.file.tile.get_mut(&name) {
+        tile.grid = Some(new_grid_str);
+    }
+
+    // Track refinement count
+    let count = st.refinement_count.entry(name.clone()).or_insert(0);
+    *count += 1;
+    let refinement_count = *count;
+
+    // Parse the updated grid for rendering + critique
+    let size_str = size_str_owned.as_str();
+    let (w, h) = match parse_size(size_str) {
+        Ok(s) => s,
+        Err(e) => return json!({"ok": true, "name": name, "error": e, "refinement_count": refinement_count}),
+    };
+
+    let parsed = match grid::parse_grid(
+        &st.file.tile[&name].grid.as_ref().unwrap(),
+        w,
+        h,
+        &palette,
+    ) {
+        Ok(g) => g,
+        Err(e) => return json!({"ok": true, "name": name, "parse_error": format!("{}", e), "refinement_count": refinement_count}),
+    };
+
+    // Render preview
+    let img = renderer::render_grid(&parsed, &palette, 16);
+    let b64 = renderer::png_to_base64(&renderer::encode_png(&img));
+
+    // Run structural critique on updated tile
+    let report = pixl_core::structural::analyze(&parsed, &palette, '.');
+    let critique = pixl_core::structural::critique_text(&report, &name);
+
+    json!({
+        "ok": true,
+        "name": name,
+        "patched_rows": format!("{}-{}", start_row, end_row - 1),
+        "refinement_count": refinement_count,
+        "preview_b64": b64,
+        "critique": critique,
+        "has_errors": pixl_core::structural::has_errors(&report),
+        "has_warnings": pixl_core::structural::has_warnings(&report),
+        "should_refine": pixl_core::structural::has_warnings(&report) && refinement_count < 3,
     })
 }
 
