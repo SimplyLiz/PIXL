@@ -2857,6 +2857,123 @@ fn handle_refine_tile(state: &Mutex<McpState>, args: &Value) -> Value {
     })
 }
 
+// ── Diffusion Bridge ────────────────────────────────────────────────
+
+pub async fn handle_generate_sprite(state: &Mutex<McpState>, args: &Value) -> Value {
+    let prompt = args.get("prompt").and_then(|v| v.as_str()).unwrap_or("");
+    let name = args.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let size_str = args.get("size").and_then(|v| v.as_str()).unwrap_or("16x16");
+    let dither = args.get("dither").and_then(|v| v.as_bool()).unwrap_or(false);
+
+    if prompt.is_empty() || name.is_empty() {
+        return json!({"error": "both 'prompt' and 'name' are required"});
+    }
+
+    let config = match crate::diffusion::DiffusionConfig::from_env() {
+        Some(c) => c,
+        None => {
+            return json!({
+                "error": "OPENAI_API_KEY not set. Set it in your environment to use the diffusion bridge."
+            })
+        }
+    };
+
+    let (w, h) = match parse_size(size_str) {
+        Ok(s) => s,
+        Err(e) => return json!({"error": e}),
+    };
+
+    // Get the active palette from session
+    let palette = {
+        let st = state.lock().unwrap();
+        let palette_name = st
+            .palettes
+            .keys()
+            .next()
+            .cloned()
+            .unwrap_or_default();
+        match st.palettes.get(&palette_name) {
+            Some(p) => (palette_name, p.clone()),
+            None => return json!({"error": "no palette found in session"}),
+        }
+    };
+
+    // Call the diffusion bridge (async — this makes the API call)
+    let result = match crate::diffusion::generate_and_quantize(
+        &config,
+        prompt,
+        w,
+        h,
+        &palette.1,
+        dither,
+    )
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => return json!({"error": format!("diffusion bridge failed: {}", e)}),
+    };
+
+    // Render the quantized grid as preview
+    let preview_img = renderer::render_grid(&result.grid, &palette.1, 16);
+    let preview_b64 = renderer::png_to_base64(&renderer::encode_png(&preview_img));
+
+    // Encode reference image (the raw DALL-E output) for comparison
+    let reference_b64 = renderer::png_to_base64(&result.reference_png);
+
+    // Run structural analysis
+    let report = pixl_core::structural::analyze(&result.grid, &palette.1, '.');
+    let critique = pixl_core::structural::critique_text(&report, &name);
+
+    // Store tile in session
+    {
+        let mut st = state.lock().unwrap();
+        let tile_raw = pixl_core::types::TileRaw {
+            palette: palette.0.clone(),
+            size: Some(size_str.to_string()),
+            encoding: None,
+            symmetry: None,
+            auto_rotate: None,
+            auto_rotate_weight: None,
+            template: None,
+            edge_class: None,
+            corner_class: None,
+            tags: vec!["generated".to_string(), "diffusion".to_string()],
+            target_layer: None,
+            weight: 1.0,
+            palette_swaps: vec![],
+            cycles: vec![],
+            nine_slice: None,
+            visual_height_extra: None,
+            semantic: None,
+            grid: Some(result.grid_string.clone()),
+            rle: None,
+            layout: None,
+        };
+        st.file.tile.insert(name.clone(), tile_raw);
+    }
+
+    json!({
+        "ok": true,
+        "name": name,
+        "size": size_str,
+        "prompt": prompt,
+        "model": config.model,
+        "generated_size": format!("{}x{}", result.generated_size.0, result.generated_size.1),
+        "color_accuracy": format!("{:.1}%", result.color_accuracy * 100.0),
+        "clipped_colors": result.clipped_colors,
+        "dither": dither,
+        "preview_b64": preview_b64,
+        "reference_b64": reference_b64,
+        "grid": result.grid_string,
+        "critique": critique,
+        "has_errors": pixl_core::structural::has_errors(&report),
+        "has_warnings": pixl_core::structural::has_warnings(&report),
+        "hint": "Compare the quantized preview against the reference image. \
+                 Use pixl_critique_tile to analyze structural quality, then \
+                 pixl_refine_tile to fix any issues (outline gaps, palette discipline).",
+    })
+}
+
 fn handle_show_references(state: &Mutex<McpState>, args: &Value) -> Value {
     let st = state.lock().unwrap();
 

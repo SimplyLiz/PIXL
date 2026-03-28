@@ -84,6 +84,8 @@ impl ServerHandler for PixlServer {
         async move {
             let result = if name == "pixl_generate_tile" {
                 handlers::handle_generate_tile(&self.state, &self.inference, &args).await
+            } else if name == "pixl_generate_sprite" {
+                handlers::handle_generate_sprite(&self.state, &args).await
             } else {
                 handlers::handle_tool(&self.state, &name, &args)
             };
@@ -102,6 +104,11 @@ impl ServerHandler for PixlServer {
                         content.push(Content::image(b64.to_string(), "image/png".to_string()));
                     }
                 }
+            }
+
+            // Reference image from diffusion bridge
+            if let Some(b64) = result.get("reference_b64").and_then(|v| v.as_str()) {
+                content.push(Content::image(b64.to_string(), "image/png".to_string()));
             }
 
             let is_error = result.get("error").is_some();

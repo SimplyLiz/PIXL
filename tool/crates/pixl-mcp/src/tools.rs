@@ -232,6 +232,19 @@ pub fn tool_definitions() -> Vec<Tool> {
              (1) generate at 8x8, (2) upscale to 16x16, (3) refine detail with pixl_refine_tile. \
              Returns preview PNG of the upscaled result for visual inspection.",
         ),
+        // ── Diffusion Bridge ──
+        tool(
+            "pixl_generate_sprite",
+            "Generate a pixel art sprite via image AI (DALL-E) + palette quantization. \
+             Args: {prompt (description of the sprite), name (tile name to create), \
+             size? (default '16x16'), dither? (default false)}. \
+             Pipeline: sends prompt to DALL-E → generates reference image → downscales to \
+             target size → quantizes each pixel to the session palette → creates tile in session. \
+             Returns: quantized preview PNG, reference image, PAX grid, color accuracy score, \
+             and structural critique. Requires OPENAI_API_KEY environment variable. \
+             This produces dramatically better results than text-grid generation because the \
+             image model handles spatial layout, proportions, and shading natively.",
+        ),
         // ── Local AI Generation ──
         tool(
             "pixl_generate_tile",

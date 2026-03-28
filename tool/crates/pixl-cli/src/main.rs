@@ -168,6 +168,32 @@ enum Commands {
         out: PathBuf,
     },
 
+    /// Generate a sprite via DALL-E + palette quantization
+    GenerateSprite {
+        /// Path to the .pax file (provides palette)
+        file: PathBuf,
+
+        /// Text prompt describing the sprite
+        #[arg(long)]
+        prompt: String,
+
+        /// Tile name to create
+        #[arg(long)]
+        name: String,
+
+        /// Target size (e.g., "16x16", "32x32")
+        #[arg(long, default_value = "16x16")]
+        size: String,
+
+        /// Enable Bayer dithering
+        #[arg(long)]
+        dither: bool,
+
+        /// Output PNG path (quantized preview)
+        #[arg(long, short, alias = "output")]
+        out: PathBuf,
+    },
+
     /// Show anatomy blueprint for a canvas size
     Blueprint {
         /// Canvas size (e.g., "32x48")
@@ -624,6 +650,16 @@ fn main() {
             out,
         } => {
             cmd_upscale(&file, &tile, factor, &out);
+        }
+        Commands::GenerateSprite {
+            file,
+            prompt,
+            name,
+            size,
+            dither,
+            out,
+        } => {
+            cmd_generate_sprite(&file, &prompt, &name, &size, dither, &out);
         }
         Commands::Blueprint { size, model } => {
             cmd_blueprint(&size, &model);
@@ -1952,6 +1988,100 @@ fn cmd_render_composite(
         scale,
         out.display()
     );
+}
+
+fn cmd_generate_sprite(
+    file: &PathBuf,
+    prompt: &str,
+    name: &str,
+    size_str: &str,
+    dither: bool,
+    out: &PathBuf,
+) {
+    let (_pax_file, palettes) = load_pax(file);
+
+    let palette_name = palettes.keys().next().unwrap_or_else(|| {
+        eprintln!("error: no palettes found in {}", file.display());
+        process::exit(1);
+    });
+    let palette = &palettes[palette_name];
+
+    let (w, h) = match pixl_core::types::parse_size(size_str) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: {}", e);
+            process::exit(1);
+        }
+    };
+
+    let config = match pixl_mcp::diffusion::DiffusionConfig::from_env() {
+        Some(c) => c,
+        None => {
+            eprintln!("error: OPENAI_API_KEY not set");
+            process::exit(1);
+        }
+    };
+
+    println!(
+        "generating sprite '{}' via {} ({}x{})...",
+        name, config.model, w, h
+    );
+    println!("prompt: \"{}\"", prompt);
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let result = rt.block_on(async {
+        pixl_mcp::diffusion::generate_and_quantize(&config, prompt, w, h, palette, dither).await
+    });
+
+    let result = match result {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("error: {}", e);
+            process::exit(1);
+        }
+    };
+
+    println!(
+        "generated {}x{} reference → quantized to {}x{} ({:.1}% color accuracy, {} clipped)",
+        result.generated_size.0,
+        result.generated_size.1,
+        result.width,
+        result.height,
+        result.color_accuracy * 100.0,
+        result.clipped_colors,
+    );
+
+    // Save reference image
+    let ref_path = out.with_file_name(format!(
+        "{}_reference.png",
+        out.file_stem().unwrap_or_default().to_string_lossy()
+    ));
+    ensure_parent_dir(&ref_path);
+    if let Err(e) = std::fs::write(&ref_path, &result.reference_png) {
+        eprintln!("warning: cannot save reference: {}", e);
+    } else {
+        println!("reference -> {}", ref_path.display());
+    }
+
+    // Render quantized preview
+    let img = pixl_render::renderer::render_grid(&result.grid, palette, 8);
+    ensure_parent_dir(out);
+    if let Err(e) = img.save(out) {
+        eprintln!("error: cannot write {}: {}", out.display(), e);
+        process::exit(1);
+    }
+    println!("quantized -> {}", out.display());
+
+    // Print the grid for copy-paste into .pax
+    println!("\nPAX grid ({}x{}):", w, h);
+    println!("'''");
+    println!("{}", result.grid_string);
+    println!("'''");
+
+    // Structural critique
+    let report = pixl_core::structural::analyze(&result.grid, palette, '.');
+    let critique = pixl_core::structural::critique_text(&report, name);
+    println!("\n{}", critique);
 }
 
 fn cmd_upscale(file: &PathBuf, tile_name: &str, factor: u32, out: &PathBuf) {

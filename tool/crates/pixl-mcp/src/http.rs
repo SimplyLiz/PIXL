@@ -70,6 +70,7 @@ pub fn create_router(state: McpState, inference_config: Option<InferenceConfig>)
         .route("/api/tile/refine", post(refine_tile))
         .route("/api/tile/upscale", post(upscale_tile))
         .route("/api/tile/references", post(show_references))
+        .route("/api/tile/generate-sprite", post(generate_sprite))
         .route("/api/tool", post(generic_tool_call))
         .with_state(shared)
 }
@@ -321,6 +322,13 @@ async fn check_composite_seams(State(state): State<SharedState>) -> Json<Value> 
         "pixl_check_seams",
         &Value::Null,
     ))
+}
+
+async fn generate_sprite(
+    State(state): State<SharedState>,
+    Json(args): Json<Value>,
+) -> Json<Value> {
+    Json(handlers::handle_generate_sprite(&state.mcp, &args).await)
 }
 
 async fn show_references(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
