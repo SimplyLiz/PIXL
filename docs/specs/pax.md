@@ -49,6 +49,7 @@ A `.pax` file is UTF-8 text with TOML syntax. Multi-line literal strings
 [tilemap.<name>]              Game tilemaps with layers and WFC constraints
 [backdrop_tile.<name>]        Lightweight tiles for backdrop composition
 [backdrop.<name>]             Large animated background scenes
+[composite.<name>]            Multi-tile sprite composition (32x32+ from 16x16 parts)
 [wfc_rules]                   Semantic WFC constraints
 [atlas]                       Export configuration
 ```
@@ -687,6 +688,110 @@ resolve_frame(sprite, index):
 - Linked targets: valid indices within same sprite
 - All delta changes within sprite dimensions
 - Tag ranges within frame count, non-overlapping
+
+---
+
+## 9.5 Composite Sprites (Multi-Tile Assembly)
+
+Composite sprites assemble multiple smaller tiles (typically 16×16) into larger
+character sprites (32×32+). This solves the quality problem of authoring large
+sprites as monolithic text grids: each component tile is small enough to author
+well, and tiles can be reused across characters.
+
+### Base definition
+
+```toml
+[composite.knight]
+size = "32x32"              # final output dimensions
+tile_size = "16x16"         # grid cell size (must divide size evenly)
+layout = """
+knight_head_l    knight_head_l!h
+knight_torso_l   knight_torso_r
+"""
+```
+
+- `layout` is a whitespace-separated grid of tile references using the same
+  `TileRef` syntax as tilemaps: `name!h` (flip horizontal), `name!v` (flip
+  vertical), `name!hv` (both), `name:shadow`, `name:highlight`.
+- `_` = empty/transparent slot.
+- Grid dimensions must equal `size / tile_size`.
+- All referenced tiles must exist in `[tile.*]` and match `tile_size`.
+
+**Symmetry shortcut:** For symmetric characters, author only the left tiles and
+flip for the right: `knight_head_l  knight_head_l!h`. This guarantees perfect
+seam alignment with zero extra work.
+
+### Variants (slot overrides)
+
+```toml
+[composite.knight.variant.attack]
+slot = { "0_0" = "knight_head_yell_l", "1_0" = "knight_attack_l" }
+```
+
+Only changed slots are specified; unmentioned slots keep the base layout.
+Slot keys use `"row_col"` format (e.g., `"0_0"` = top-left, `"1_1"` = bottom-right).
+
+### Per-tile offsets
+
+```toml
+[composite.knight.offset]
+"0_0" = [0, -2]    # head shifted 2px up
+"1_1" = [3, 0]     # sword arm extends 3px right
+```
+
+Pixel offsets from the slot's grid position. Offset pixels that fall outside the
+composite canvas are clipped. Overlapping tiles: later slots (left-to-right,
+top-to-bottom) overwrite earlier ones for opaque pixels.
+
+### Animation (per-frame tile swaps)
+
+```toml
+[composite.knight.anim.walk]
+fps = 8
+loop = true
+
+[[composite.knight.anim.walk.frame]]
+index = 1
+# base layout — no swaps needed
+
+[[composite.knight.anim.walk.frame]]
+index = 2
+swap = { "1_0" = "knight_walk2_l", "1_1" = "knight_walk2_r" }
+offset = { "0_0" = [0, -1] }   # head bobs up 1px
+
+[[composite.knight.anim.walk.frame]]
+index = 3
+swap = { "1_0" = "knight_walk3_l", "1_1" = "knight_walk3_r" }
+```
+
+Derived animations via mirroring (no extra tiles needed):
+
+```toml
+[composite.knight.anim.walk_left]
+source = "walk"
+mirror = "h"        # flip entire composed result horizontally
+```
+
+### When to use composites vs monolithic tiles
+
+| Use composites for | Keep as monolithic tiles |
+|---------------------|------------------------|
+| Character sprites (animated, variant-rich) | Background/terrain tiles |
+| Multi-part objects with shared components | Small items (potions, coins) |
+| Anything needing walk/attack/idle variants | Seamless effects (water, spells) |
+
+### Validation
+
+- `pixl validate` checks: size divisibility, layout dimensions, tile existence,
+  slot bounds, frame contiguity, source animation references.
+- `pixl validate --check-seams` additionally checks pixel continuity at tile
+  boundaries and reports warnings (not errors) for discontinuities.
+
+### CLI
+
+```
+pixl render-composite FILE --composite knight [--variant attack] [--anim walk --frame 2] [--scale 4] --out knight.png
+```
 
 ---
 

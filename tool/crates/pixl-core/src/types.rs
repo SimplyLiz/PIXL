@@ -38,6 +38,8 @@ pub struct PaxFile {
     pub backdrop_tile: HashMap<String, BackdropTileRaw>,
     #[serde(default)]
     pub backdrop: HashMap<String, BackdropRaw>,
+    #[serde(default)]
+    pub composite: HashMap<String, CompositeRaw>,
 }
 
 // ── Header ──────────────────────────────────────────────────────────
@@ -475,6 +477,88 @@ pub struct ObjectRaw {
     pub tiles: String,
     #[serde(default)]
     pub collision: Option<String>,
+}
+
+// ── Composite Sprites (multi-tile assembly) ─────────────────────────
+
+#[derive(Debug, Deserialize, serde::Serialize)]
+pub struct CompositeRaw {
+    pub size: String,
+    pub tile_size: String,
+    pub layout: String,
+    #[serde(default)]
+    pub offset: HashMap<String, Vec<i32>>,
+    #[serde(default)]
+    pub variant: HashMap<String, CompositeVariantRaw>,
+    #[serde(default)]
+    pub anim: HashMap<String, CompositeAnimRaw>,
+}
+
+#[derive(Debug, Deserialize, serde::Serialize)]
+pub struct CompositeVariantRaw {
+    pub slot: HashMap<String, String>,
+}
+
+#[derive(Debug, Deserialize, serde::Serialize)]
+pub struct CompositeAnimRaw {
+    #[serde(default = "default_composite_fps")]
+    pub fps: u32,
+    #[serde(default = "default_true")]
+    pub r#loop: bool,
+    #[serde(default)]
+    pub mirror: Option<String>,
+    #[serde(default)]
+    pub source: Option<String>,
+    #[serde(default)]
+    pub frame: Vec<CompositeFrameRaw>,
+}
+
+fn default_composite_fps() -> u32 {
+    8
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Deserialize, serde::Serialize)]
+pub struct CompositeFrameRaw {
+    pub index: u32,
+    #[serde(default)]
+    pub swap: HashMap<String, String>,
+    #[serde(default)]
+    pub offset: HashMap<String, Vec<i32>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Composite {
+    pub name: String,
+    pub width: u32,
+    pub height: u32,
+    pub tile_width: u32,
+    pub tile_height: u32,
+    pub cols: u32,
+    pub rows: u32,
+    pub slots: Vec<Vec<TileRef>>,
+    pub offsets: HashMap<(u32, u32), (i32, i32)>,
+    pub variants: HashMap<String, HashMap<(u32, u32), TileRef>>,
+    pub animations: HashMap<String, CompositeAnim>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CompositeAnim {
+    pub fps: u32,
+    pub loop_mode: bool,
+    pub mirror: Option<String>,
+    pub source: Option<String>,
+    pub frames: Vec<CompositeFrame>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CompositeFrame {
+    pub index: u32,
+    pub swaps: HashMap<(u32, u32), TileRef>,
+    pub offsets: HashMap<(u32, u32), (i32, i32)>,
 }
 
 // ── Tile Run Groups ─────────────────────────────────────────────────

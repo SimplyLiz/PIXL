@@ -62,6 +62,10 @@ enum Commands {
         /// Analyze tileset completeness for WFC (missing transition tiles)
         #[arg(long)]
         completeness: bool,
+
+        /// Check seam continuity across composite tile boundaries
+        #[arg(long)]
+        check_seams: bool,
     },
 
     /// Validate and auto-fix edge classes from grid content
@@ -318,6 +322,36 @@ enum Commands {
         out: PathBuf,
     },
 
+    /// Render a composite sprite to PNG
+    RenderComposite {
+        /// Path to the .pax file
+        file: PathBuf,
+
+        /// Composite name
+        #[arg(long)]
+        composite: String,
+
+        /// Variant name (optional)
+        #[arg(long)]
+        variant: Option<String>,
+
+        /// Animation name (optional)
+        #[arg(long)]
+        anim: Option<String>,
+
+        /// Frame index (1-based, optional)
+        #[arg(long)]
+        frame: Option<u32>,
+
+        /// Scale factor
+        #[arg(long, default_value = "4")]
+        scale: u32,
+
+        /// Output PNG path
+        #[arg(long, short, alias = "output")]
+        out: PathBuf,
+    },
+
     /// Convert AI-generated images to true 1:1 pixel art
     Convert {
         /// Input image(s) — file or directory of images
@@ -512,8 +546,9 @@ fn main() {
             file,
             check_edges,
             completeness,
+            check_seams,
         } => {
-            cmd_validate(&file, check_edges);
+            cmd_validate(&file, check_edges, check_seams);
             if completeness {
                 cmd_completeness(&file);
             }
@@ -522,7 +557,7 @@ fn main() {
             if fix {
                 cmd_check_fix(&file);
             } else {
-                cmd_validate(&file, true);
+                cmd_validate(&file, true, false);
             }
         }
         Commands::Render {
@@ -621,6 +656,25 @@ fn main() {
             out,
         } => {
             cmd_render_sprite(&file, &spriteset, &sprite, scale, &out);
+        }
+        Commands::RenderComposite {
+            file,
+            composite,
+            variant,
+            anim,
+            frame,
+            scale,
+            out,
+        } => {
+            cmd_render_composite(
+                &file,
+                &composite,
+                variant.as_deref(),
+                anim.as_deref(),
+                frame,
+                scale,
+                &out,
+            );
         }
         Commands::Convert {
             input,
@@ -753,7 +807,7 @@ fn cmd_serve(
     });
 }
 
-fn cmd_validate(file: &PathBuf, check_edges: bool) {
+fn cmd_validate(file: &PathBuf, check_edges: bool, check_seams: bool) {
     let source = match std::fs::read_to_string(file) {
         Ok(s) => s,
         Err(e) => {
@@ -774,12 +828,13 @@ fn cmd_validate(file: &PathBuf, check_edges: bool) {
 
     // Print stats
     println!(
-        "pixl validate: {} palettes, {} themes, {} stamps, {} tiles, {} sprites",
+        "pixl validate: {} palettes, {} themes, {} stamps, {} tiles, {} sprites, {} composites",
         result.stats.palettes,
         result.stats.themes,
         result.stats.stamps,
         result.stats.tiles,
         result.stats.sprites,
+        result.stats.composites,
     );
 
     // Print warnings
@@ -790,6 +845,23 @@ fn cmd_validate(file: &PathBuf, check_edges: bool) {
     // Print errors
     for e in &result.errors {
         eprintln!("  error: {}", e);
+    }
+
+    // Seam checking (requires resolved tiles)
+    if check_seams && !pax_file.composite.is_empty() {
+        let palettes = pixl_core::parser::resolve_all_palettes(&pax_file).unwrap_or_default();
+        let empty_stamps = std::collections::HashMap::new();
+        let tiles = resolve_all_tiles(&pax_file, &palettes, &empty_stamps);
+
+        let seam_warnings = pixl_core::validate::check_seams(&pax_file, &tiles);
+        for w in &seam_warnings {
+            println!("  seam: {}", w);
+        }
+        if seam_warnings.is_empty() {
+            println!("seams: all composite seams are continuous.");
+        } else {
+            println!("{} seam warning(s)", seam_warnings.len());
+        }
     }
 
     if result.errors.is_empty() {
@@ -1702,6 +1774,147 @@ fn ensure_parent_dir(out: &PathBuf) {
     }
 }
 
+/// Resolve all tiles in a PaxFile to their full grids, returning a map of Tile structs.
+fn resolve_all_tiles(
+    pax_file: &pixl_core::types::PaxFile,
+    palettes: &std::collections::HashMap<String, pixl_core::types::Palette>,
+    stamps: &std::collections::HashMap<String, pixl_core::types::Stamp>,
+) -> std::collections::HashMap<String, pixl_core::types::Tile> {
+    let mut tiles = std::collections::HashMap::new();
+    for (name, _tile_raw) in &pax_file.tile {
+        if let Ok((grid, w, h)) = pixl_core::resolve::resolve_tile_grid(
+            name,
+            &pax_file.tile,
+            palettes,
+            stamps,
+        ) {
+            tiles.insert(
+                name.clone(),
+                pixl_core::types::Tile {
+                    name: name.clone(),
+                    palette: _tile_raw.palette.clone(),
+                    width: w,
+                    height: h,
+                    encoding: pixl_core::types::Encoding::Grid,
+                    symmetry: pixl_core::types::Symmetry::None,
+                    auto_rotate: pixl_core::types::AutoRotate::None,
+                    edge_class: pixl_core::types::EdgeClass {
+                        n: String::new(),
+                        e: String::new(),
+                        s: String::new(),
+                        w: String::new(),
+                    },
+                    tags: vec![],
+                    target_layer: None,
+                    weight: 1.0,
+                    palette_swaps: vec![],
+                    cycles: vec![],
+                    nine_slice: None,
+                    visual_height_extra: None,
+                    semantic: None,
+                    grid,
+                },
+            );
+        }
+    }
+    tiles
+}
+
+fn cmd_render_composite(
+    file: &PathBuf,
+    composite_name: &str,
+    variant: Option<&str>,
+    anim_name: Option<&str>,
+    frame: Option<u32>,
+    scale: u32,
+    out: &PathBuf,
+) {
+    let (pax_file, palettes) = load_pax(file);
+
+    let raw = match pax_file.composite.get(composite_name) {
+        Some(r) => r,
+        None => {
+            eprintln!("error: composite '{}' not found", composite_name);
+            let names: Vec<&String> = pax_file.composite.keys().collect();
+            if names.is_empty() {
+                eprintln!("  (no composites defined in this file)");
+            } else {
+                eprintln!("  available: {}", names.iter().map(|n| n.as_str()).collect::<Vec<_>>().join(", "));
+            }
+            process::exit(1);
+        }
+    };
+
+    let composite = match pixl_core::composite::resolve_composite(raw, composite_name) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("error resolving composite '{}': {}", composite_name, e);
+            process::exit(1);
+        }
+    };
+
+    // Find palette from first non-void tile in the layout
+    let palette_name = composite
+        .slots
+        .iter()
+        .flat_map(|row| row.iter())
+        .find(|s| s.name != "_")
+        .and_then(|s| pax_file.tile.get(&s.name))
+        .map(|t| t.palette.as_str())
+        .unwrap_or_else(|| {
+            eprintln!("error: no tiles found in composite layout");
+            process::exit(1);
+        });
+
+    let palette = match palettes.get(palette_name) {
+        Some(p) => p,
+        None => {
+            eprintln!("error: palette '{}' not found", palette_name);
+            process::exit(1);
+        }
+    };
+
+    let empty_stamps = std::collections::HashMap::new();
+    let tiles = resolve_all_tiles(&pax_file, &palettes, &empty_stamps);
+
+    let img = match pixl_render::renderer::render_composite(
+        &composite,
+        variant,
+        anim_name,
+        frame,
+        &tiles,
+        palette,
+        scale,
+    ) {
+        Ok(img) => img,
+        Err(e) => {
+            eprintln!("error composing '{}': {}", composite_name, e);
+            process::exit(1);
+        }
+    };
+
+    ensure_parent_dir(out);
+    if let Err(e) = img.save(out) {
+        eprintln!("error: cannot write {}: {}", out.display(), e);
+        process::exit(1);
+    }
+
+    let label = match (variant, anim_name, frame) {
+        (Some(v), _, _) => format!("{}:{}", composite_name, v),
+        (_, Some(a), Some(f)) => format!("{}:{}:{}", composite_name, a, f),
+        (_, Some(a), None) => format!("{}:{}", composite_name, a),
+        _ => composite_name.to_string(),
+    };
+    println!(
+        "rendered composite '{}' ({}x{} @{}x) -> {}",
+        label,
+        composite.width,
+        composite.height,
+        scale,
+        out.display()
+    );
+}
+
 fn cmd_render(file: &PathBuf, tile_name: &str, scale: u32, out: &PathBuf) {
     let (pax_file, palettes) = load_pax(file);
 
@@ -1794,13 +2007,94 @@ fn cmd_atlas(
         }
     }
 
-    if atlas_tiles.is_empty() {
+    // Compose composites (base + variants + animation frames) into AtlasTile entries
+    let empty_stamps = std::collections::HashMap::new();
+    let resolved_tiles = resolve_all_tiles(&pax_file, &palettes, &empty_stamps);
+    let mut composite_atlas_tiles: Vec<pixl_render::atlas::AtlasTile> = Vec::new();
+
+    for (cname, raw) in &pax_file.composite {
+        if let Ok(comp) = pixl_core::composite::resolve_composite(raw, cname) {
+            // Base layout
+            if let Ok(grid) =
+                pixl_core::composite::compose_grid(&comp, None, None, &resolved_tiles, '.')
+            {
+                composite_atlas_tiles.push(pixl_render::atlas::AtlasTile {
+                    name: cname.clone(),
+                    width: comp.width,
+                    height: comp.height,
+                    grid,
+                });
+            }
+
+            // Variants
+            for vname in comp.variants.keys() {
+                if let Ok(grid) = pixl_core::composite::compose_grid(
+                    &comp,
+                    Some(vname),
+                    None,
+                    &resolved_tiles,
+                    '.',
+                ) {
+                    composite_atlas_tiles.push(pixl_render::atlas::AtlasTile {
+                        name: format!("{}:{}", cname, vname),
+                        width: comp.width,
+                        height: comp.height,
+                        grid,
+                    });
+                }
+            }
+
+            // Animation frames
+            for (aname, anim) in &comp.animations {
+                for frame in &anim.frames {
+                    if let Ok(grid) = pixl_core::composite::compose_anim_frame(
+                        &comp,
+                        aname,
+                        frame.index,
+                        None,
+                        &resolved_tiles,
+                        '.',
+                    ) {
+                        composite_atlas_tiles.push(pixl_render::atlas::AtlasTile {
+                            name: format!("{}:{}:{}", cname, aname, frame.index),
+                            width: comp.width,
+                            height: comp.height,
+                            grid,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    if atlas_tiles.is_empty() && composite_atlas_tiles.is_empty() {
         eprintln!("error: no resolvable tiles found");
         process::exit(1);
     }
 
     // Use first tile's palette for rendering
-    let first_palette_name = &pax_file.tile.values().next().unwrap().palette;
+    let first_palette_name = pax_file
+        .tile
+        .values()
+        .next()
+        .map(|t| t.palette.as_str())
+        .unwrap_or_else(|| {
+            // Fall back to first composite's tile palette
+            pax_file
+                .composite
+                .values()
+                .next()
+                .and_then(|c| {
+                    let layout_lines: Vec<&str> = c.layout.lines().map(|l| l.trim()).filter(|l| !l.is_empty()).collect();
+                    layout_lines.first().and_then(|line| {
+                        line.split_whitespace().next().and_then(|token| {
+                            let ref_name = pixl_core::types::TileRef::parse(token).name;
+                            pax_file.tile.get(&ref_name).map(|t| t.palette.as_str())
+                        })
+                    })
+                })
+                .unwrap_or("")
+        });
     let palette = &palettes[first_palette_name];
 
     let out_name = out
@@ -1809,28 +2103,89 @@ fn cmd_atlas(
         .to_string_lossy()
         .to_string();
 
-    match pixl_render::atlas::pack_atlas(&atlas_tiles, palette, columns, padding, scale, &out_name)
-    {
-        Ok((img, json)) => {
-            ensure_parent_dir(out);
-            if let Err(e) = img.save(out) {
-                eprintln!("error: cannot write atlas: {}", e);
-                process::exit(1);
-            }
-            println!("atlas: {} tiles -> {}", atlas_tiles.len(), out.display());
-
-            if let Some(map_out) = map_path {
-                let json_str = serde_json::to_string_pretty(&json).unwrap();
-                if let Err(e) = std::fs::write(map_out, json_str) {
-                    eprintln!("error: cannot write JSON: {}", e);
+    // Pack regular tiles
+    if !atlas_tiles.is_empty() {
+        match pixl_render::atlas::pack_atlas(
+            &atlas_tiles,
+            palette,
+            columns,
+            padding,
+            scale,
+            &out_name,
+        ) {
+            Ok((img, json)) => {
+                ensure_parent_dir(out);
+                if let Err(e) = img.save(out) {
+                    eprintln!("error: cannot write atlas: {}", e);
                     process::exit(1);
                 }
-                println!("metadata -> {}", map_out.display());
+                println!("atlas: {} tiles -> {}", atlas_tiles.len(), out.display());
+
+                if let Some(map_out) = map_path {
+                    let json_str = serde_json::to_string_pretty(&json).unwrap();
+                    if let Err(e) = std::fs::write(map_out, json_str) {
+                        eprintln!("error: cannot write JSON: {}", e);
+                        process::exit(1);
+                    }
+                    println!("metadata -> {}", map_out.display());
+                }
+            }
+            Err(e) => {
+                eprintln!("error: {}", e);
+                process::exit(1);
             }
         }
-        Err(e) => {
-            eprintln!("error: {}", e);
-            process::exit(1);
+    }
+
+    // Pack composites in a separate atlas (they may have different dimensions)
+    if !composite_atlas_tiles.is_empty() {
+        let comp_out = out.with_file_name(format!(
+            "{}_composites.png",
+            out.file_stem().unwrap_or_default().to_string_lossy()
+        ));
+        let comp_out_name = comp_out
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+
+        match pixl_render::atlas::pack_atlas(
+            &composite_atlas_tiles,
+            palette,
+            columns.min(4), // fewer columns for larger sprites
+            padding,
+            scale,
+            &comp_out_name,
+        ) {
+            Ok((img, json)) => {
+                ensure_parent_dir(&comp_out);
+                if let Err(e) = img.save(&comp_out) {
+                    eprintln!("error: cannot write composite atlas: {}", e);
+                    process::exit(1);
+                }
+                println!(
+                    "composite atlas: {} entries -> {}",
+                    composite_atlas_tiles.len(),
+                    comp_out.display()
+                );
+
+                if let Some(map_out) = map_path {
+                    let comp_map = map_out.with_file_name(format!(
+                        "{}_composites.json",
+                        map_out.file_stem().unwrap_or_default().to_string_lossy()
+                    ));
+                    let json_str = serde_json::to_string_pretty(&json).unwrap();
+                    if let Err(e) = std::fs::write(&comp_map, json_str) {
+                        eprintln!("error: cannot write JSON: {}", e);
+                        process::exit(1);
+                    }
+                    println!("composite metadata -> {}", comp_map.display());
+                }
+            }
+            Err(e) => {
+                eprintln!("composite atlas error: {}", e);
+                // Non-fatal — regular atlas was already saved
+            }
         }
     }
 }

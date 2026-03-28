@@ -43,6 +43,9 @@ pub fn handle_tool(state: &Mutex<McpState>, tool_name: &str, args: &Value) -> Va
         "pixl_convert_sprite" => handle_convert_sprite(args),
         "pixl_backdrop_import" => handle_backdrop_import(args),
         "pixl_backdrop_render" => handle_backdrop_render(state, args),
+        "pixl_list_composites" => handle_list_composites(state),
+        "pixl_render_composite" => handle_render_composite(state, args),
+        "pixl_check_seams" => handle_check_seams(state),
         _ => json!({"error": format!("unknown tool: {}", tool_name)}),
     }
 }
@@ -2385,6 +2388,213 @@ fn build_palette_ext(
         base: base.symbols,
         extended: std::collections::HashMap::new(),
     }
+}
+
+// ── Composite handlers ──────────────────────────────────────────────
+
+fn handle_list_composites(state: &Mutex<McpState>) -> Value {
+    let st = state.lock().unwrap();
+
+    let composites: Vec<Value> = st
+        .file
+        .composite
+        .iter()
+        .map(|(name, raw)| {
+            let variants: Vec<&String> = raw.variant.keys().collect();
+            let anims: Vec<&String> = raw.anim.keys().collect();
+            json!({
+                "name": name,
+                "size": raw.size,
+                "tile_size": raw.tile_size,
+                "variants": variants,
+                "animations": anims,
+            })
+        })
+        .collect();
+
+    json!({"composites": composites, "count": composites.len()})
+}
+
+fn handle_render_composite(state: &Mutex<McpState>, args: &Value) -> Value {
+    let st = state.lock().unwrap();
+
+    let name = args["name"].as_str().unwrap_or("");
+    let variant = args.get("variant").and_then(|v| v.as_str());
+    let anim = args.get("anim").and_then(|v| v.as_str());
+    let frame = args.get("frame").and_then(|v| v.as_u64()).map(|f| f as u32);
+    let scale = args.get("scale").and_then(|v| v.as_u64()).unwrap_or(8) as u32;
+
+    let raw = match st.file.composite.get(name) {
+        Some(r) => r,
+        None => {
+            let names: Vec<&String> = st.file.composite.keys().collect();
+            return json!({"error": format!("composite '{}' not found. Available: {:?}", name, names)});
+        }
+    };
+
+    let composite = match pixl_core::composite::resolve_composite(raw, name) {
+        Ok(c) => c,
+        Err(e) => return json!({"error": format!("resolve error: {}", e)}),
+    };
+
+    // Find palette from first non-void tile
+    let palette_name = composite
+        .slots
+        .iter()
+        .flat_map(|row| row.iter())
+        .find(|s| s.name != "_")
+        .and_then(|s| st.file.tile.get(&s.name))
+        .map(|t| t.palette.as_str());
+
+    let palette_name = match palette_name {
+        Some(p) => p,
+        None => return json!({"error": "no tiles in composite layout"}),
+    };
+
+    let palette = match st.palettes.get(palette_name) {
+        Some(p) => p,
+        None => return json!({"error": format!("palette '{}' not found", palette_name)}),
+    };
+
+    // Resolve all referenced tiles
+    let empty_stamps = std::collections::HashMap::new();
+    let mut tiles = std::collections::HashMap::new();
+    for (tname, _traw) in &st.file.tile {
+        if let Ok((grid, w, h)) = pixl_core::resolve::resolve_tile_grid(
+            tname,
+            &st.file.tile,
+            &st.palettes,
+            &empty_stamps,
+        ) {
+            tiles.insert(
+                tname.clone(),
+                pixl_core::types::Tile {
+                    name: tname.clone(),
+                    palette: _traw.palette.clone(),
+                    width: w,
+                    height: h,
+                    encoding: pixl_core::types::Encoding::Grid,
+                    symmetry: pixl_core::types::Symmetry::None,
+                    auto_rotate: pixl_core::types::AutoRotate::None,
+                    edge_class: pixl_core::types::EdgeClass {
+                        n: String::new(),
+                        e: String::new(),
+                        s: String::new(),
+                        w: String::new(),
+                    },
+                    tags: vec![],
+                    target_layer: None,
+                    weight: 1.0,
+                    palette_swaps: vec![],
+                    cycles: vec![],
+                    nine_slice: None,
+                    visual_height_extra: None,
+                    semantic: None,
+                    grid,
+                },
+            );
+        }
+    }
+
+    let grid = if let Some(anim_name) = anim {
+        pixl_core::composite::compose_anim_frame(
+            &composite,
+            anim_name,
+            frame.unwrap_or(1),
+            variant,
+            &tiles,
+            '.',
+        )
+    } else {
+        pixl_core::composite::compose_grid(&composite, variant, frame, &tiles, '.')
+    };
+
+    let grid = match grid {
+        Ok(g) => g,
+        Err(e) => return json!({"error": format!("compose error: {}", e)}),
+    };
+
+    let img = renderer::render_grid(&grid, palette, scale);
+    let b64 = renderer::png_to_base64(&renderer::encode_png(&img));
+
+    json!({
+        "ok": true,
+        "name": name,
+        "size": raw.size,
+        "variant": variant,
+        "anim": anim,
+        "frame": frame,
+        "scale": scale,
+        "preview_b64": b64,
+    })
+}
+
+fn handle_check_seams(state: &Mutex<McpState>) -> Value {
+    let st = state.lock().unwrap();
+
+    if st.file.composite.is_empty() {
+        return json!({"ok": true, "message": "no composites defined", "warnings": []});
+    }
+
+    // Resolve tiles for seam checking
+    let empty_stamps = std::collections::HashMap::new();
+    let mut tiles = std::collections::HashMap::new();
+    for (tname, _traw) in &st.file.tile {
+        if let Ok((grid, w, h)) = pixl_core::resolve::resolve_tile_grid(
+            tname,
+            &st.file.tile,
+            &st.palettes,
+            &empty_stamps,
+        ) {
+            tiles.insert(
+                tname.clone(),
+                pixl_core::types::Tile {
+                    name: tname.clone(),
+                    palette: _traw.palette.clone(),
+                    width: w,
+                    height: h,
+                    encoding: pixl_core::types::Encoding::Grid,
+                    symmetry: pixl_core::types::Symmetry::None,
+                    auto_rotate: pixl_core::types::AutoRotate::None,
+                    edge_class: pixl_core::types::EdgeClass {
+                        n: String::new(),
+                        e: String::new(),
+                        s: String::new(),
+                        w: String::new(),
+                    },
+                    tags: vec![],
+                    target_layer: None,
+                    weight: 1.0,
+                    palette_swaps: vec![],
+                    cycles: vec![],
+                    nine_slice: None,
+                    visual_height_extra: None,
+                    semantic: None,
+                    grid,
+                },
+            );
+        }
+    }
+
+    let warnings = validate::check_seams(&st.file, &tiles);
+    let warning_json: Vec<Value> = warnings
+        .iter()
+        .map(|w| {
+            json!({
+                "composite": w.composite,
+                "slot_a": w.slot_a,
+                "slot_b": w.slot_b,
+                "direction": w.direction,
+                "mismatched_count": w.mismatched.len(),
+            })
+        })
+        .collect();
+
+    json!({
+        "ok": true,
+        "warning_count": warnings.len(),
+        "warnings": warning_json,
+    })
 }
 
 fn resolve_backdrop_tile_grids(

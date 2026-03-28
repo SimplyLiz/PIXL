@@ -7,6 +7,7 @@ import '../services/llm_provider.dart';
 import '../models/pixel_canvas.dart';
 import '../providers/tilemap_provider.dart';
 import 'canvas/backdrop_viewport.dart';
+import 'canvas/composite_viewport.dart';
 import 'canvas/canvas_viewport.dart';
 import 'canvas/tilemap_viewport.dart';
 import 'canvas/variant_strip.dart';
@@ -72,6 +73,7 @@ class _StudioShellState extends ConsumerState<StudioShell> {
                         child: switch (mode) {
                           EditorMode.tilemap => const TilemapViewport(),
                           EditorMode.backdrop => const BackdropViewport(),
+                          EditorMode.composite => const CompositeViewport(),
                           _ => const CanvasViewport(),
                         },
                       ),

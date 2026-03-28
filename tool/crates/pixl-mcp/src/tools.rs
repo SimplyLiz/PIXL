@@ -178,6 +178,23 @@ pub fn tool_definitions() -> Vec<Tool> {
             "Build enriched AI prompts for creating a missing transition tile between two tiles. \
              Args: {tile_a, tile_b}. Returns system_prompt + user_prompt with edge context.",
         ),
+        // ── Composites ──
+        tool(
+            "pixl_list_composites",
+            "List all composites in the session with their layout dimensions, variants, \
+             and animation names.",
+        ),
+        tool(
+            "pixl_render_composite",
+            "Render a composite sprite to PNG. Args: {name, variant? (string), anim? (string), \
+             frame? (1-based integer), scale? (default 8)}. Returns base64 PNG preview. \
+             Without anim/frame, renders the base layout (or variant if specified).",
+        ),
+        tool(
+            "pixl_check_seams",
+            "Check seam continuity across tile boundaries in composites. Returns warnings for \
+             pixel discontinuities at adjacent tile edges. No args — checks all composites.",
+        ),
         // ── Local AI Generation ──
         tool(
             "pixl_generate_tile",
