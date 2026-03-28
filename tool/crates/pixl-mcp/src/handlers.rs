@@ -50,6 +50,7 @@ pub fn handle_tool(state: &Mutex<McpState>, tool_name: &str, args: &Value) -> Va
         "pixl_refine_tile" => handle_refine_tile(state, args),
         "pixl_upscale_tile" => handle_upscale_tile(state, args),
         "pixl_show_references" => handle_show_references(state, args),
+        "pixl_remap_tile" => handle_remap_tile(state, args),
         _ => json!({"error": format!("unknown tool: {}", tool_name)}),
     }
 }
@@ -2864,6 +2865,8 @@ pub async fn handle_generate_sprite(state: &Mutex<McpState>, args: &Value) -> Va
     let name = args.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let size_str = args.get("size").and_then(|v| v.as_str()).unwrap_or("16x16");
     let dither = args.get("dither").and_then(|v| v.as_bool()).unwrap_or(false);
+    let auto_palette = args.get("auto_palette").and_then(|v| v.as_bool()).unwrap_or(true);
+    let max_colors = args.get("max_colors").and_then(|v| v.as_u64()).unwrap_or(16) as u32;
 
     if prompt.is_empty() || name.is_empty() {
         return json!({"error": "both 'prompt' and 'name' are required"});
@@ -2899,36 +2902,57 @@ pub async fn handle_generate_sprite(state: &Mutex<McpState>, args: &Value) -> Va
     };
 
     // Call the diffusion bridge (async — this makes the API call)
-    let result = match crate::diffusion::generate_and_quantize(
-        &config,
-        prompt,
-        w,
-        h,
-        &palette.1,
-        dither,
-    )
-    .await
-    {
-        Ok(r) => r,
-        Err(e) => return json!({"error": format!("diffusion bridge failed: {}", e)}),
+    let result = if auto_palette {
+        match crate::diffusion::generate_with_auto_palette(
+            &config, prompt, w, h, max_colors, dither,
+        )
+        .await
+        {
+            Ok(r) => r,
+            Err(e) => return json!({"error": format!("diffusion bridge failed: {}", e)}),
+        }
+    } else {
+        match crate::diffusion::generate_and_quantize(
+            &config, prompt, w, h, &palette.1, dither,
+        )
+        .await
+        {
+            Ok(r) => r,
+            Err(e) => return json!({"error": format!("diffusion bridge failed: {}", e)}),
+        }
     };
 
+    // Use extracted palette for rendering if auto_palette, else session palette
+    let render_palette = result.extracted_palette.as_ref().unwrap_or(&palette.1);
+
     // Render the quantized grid as preview
-    let preview_img = renderer::render_grid(&result.grid, &palette.1, 16);
+    let preview_img = renderer::render_grid(&result.grid, render_palette, 16);
     let preview_b64 = renderer::png_to_base64(&renderer::encode_png(&preview_img));
 
     // Encode reference image (the raw DALL-E output) for comparison
     let reference_b64 = renderer::png_to_base64(&result.reference_png);
 
     // Run structural analysis
-    let report = pixl_core::structural::analyze(&result.grid, &palette.1, '.');
+    let report = pixl_core::structural::analyze(&result.grid, render_palette, '.');
     let critique = pixl_core::structural::critique_text(&report, &name);
+
+    // Store extracted palette in session if auto_palette
+    let tile_palette_name = if auto_palette && result.extracted_palette.is_some() {
+        let pal_name = format!("{}_palette", name);
+        let mut st = state.lock().unwrap();
+        st.palettes
+            .insert(pal_name.clone(), result.extracted_palette.clone().unwrap());
+        drop(st);
+        pal_name
+    } else {
+        palette.0.clone()
+    };
 
     // Store tile in session
     {
         let mut st = state.lock().unwrap();
         let tile_raw = pixl_core::types::TileRaw {
-            palette: palette.0.clone(),
+            palette: tile_palette_name.clone(),
             size: Some(size_str.to_string()),
             encoding: None,
             symmetry: None,
@@ -2968,9 +2992,96 @@ pub async fn handle_generate_sprite(state: &Mutex<McpState>, args: &Value) -> Va
         "critique": critique,
         "has_errors": pixl_core::structural::has_errors(&report),
         "has_warnings": pixl_core::structural::has_warnings(&report),
+        "auto_palette": auto_palette,
+        "palette_name": tile_palette_name,
+        "palette_toml": result.palette_toml,
         "hint": "Compare the quantized preview against the reference image. \
                  Use pixl_critique_tile to analyze structural quality, then \
-                 pixl_refine_tile to fix any issues (outline gaps, palette discipline).",
+                 pixl_refine_tile to fix any issues (outline gaps, palette discipline). \
+                 If auto_palette is true, the palette_toml field contains the extracted \
+                 palette ready to paste into your .pax file.",
+    })
+}
+
+fn handle_remap_tile(state: &Mutex<McpState>, args: &Value) -> Value {
+    let mut st = state.lock().unwrap();
+
+    let name = args["name"].as_str().unwrap_or("").to_string();
+    let target_palette_name = args["target_palette"].as_str().unwrap_or("").to_string();
+
+    if name.is_empty() || target_palette_name.is_empty() {
+        return json!({"error": "both 'name' and 'target_palette' are required"});
+    }
+
+    // Get source tile info
+    let (source_palette_name, size_str, grid_str) = {
+        let tile = match st.file.tile.get(&name) {
+            Some(t) => t,
+            None => return json!({"error": format!("tile '{}' not found", name)}),
+        };
+        (
+            tile.palette.clone(),
+            tile.size.as_deref().unwrap_or("16x16").to_string(),
+            match &tile.grid {
+                Some(g) => g.clone(),
+                None => return json!({"error": "tile has no grid data"}),
+            },
+        )
+    };
+
+    let source_palette = match st.palettes.get(&source_palette_name) {
+        Some(p) => p.clone(),
+        None => return json!({"error": format!("source palette '{}' not found", source_palette_name)}),
+    };
+
+    let target_palette = match st.palettes.get(&target_palette_name) {
+        Some(p) => p.clone(),
+        None => return json!({"error": format!("target palette '{}' not found", target_palette_name)}),
+    };
+
+    let (w, h) = match parse_size(&size_str) {
+        Ok(s) => s,
+        Err(e) => return json!({"error": e}),
+    };
+
+    // Parse current grid
+    let grid: Vec<Vec<char>> = grid_str
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| l.chars().collect())
+        .collect();
+
+    // Remap
+    let remapped = pixl_render::pixelize::remap_grid(&grid, &source_palette, &target_palette, '.');
+
+    let remapped_str: String = remapped
+        .iter()
+        .map(|row| row.iter().collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    // Update tile in session
+    if let Some(tile) = st.file.tile.get_mut(&name) {
+        tile.grid = Some(remapped_str.clone());
+        tile.palette = target_palette_name.clone();
+    }
+
+    // Render preview
+    let preview_img = renderer::render_grid(&remapped, &target_palette, 16);
+    let preview_b64 = renderer::png_to_base64(&renderer::encode_png(&preview_img));
+
+    // Critique
+    let report = pixl_core::structural::analyze(&remapped, &target_palette, '.');
+    let critique = pixl_core::structural::critique_text(&report, &name);
+
+    json!({
+        "ok": true,
+        "name": name,
+        "source_palette": source_palette_name,
+        "target_palette": target_palette_name,
+        "preview_b64": preview_b64,
+        "grid": remapped_str,
+        "critique": critique,
     })
 }
 

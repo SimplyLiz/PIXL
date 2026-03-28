@@ -243,7 +243,17 @@ pub fn tool_definitions() -> Vec<Tool> {
              Returns: quantized preview PNG, reference image, PAX grid, color accuracy score, \
              and structural critique. Requires OPENAI_API_KEY environment variable. \
              This produces dramatically better results than text-grid generation because the \
-             image model handles spatial layout, proportions, and shading natively.",
+             image model handles spatial layout, proportions, and shading natively. \
+             With auto_palette (default true), extracts colors from the generated image for \
+             perfect color fidelity — the palette_toml in the response can be pasted into .pax. \
+             Set auto_palette=false to quantize to the session's existing palette instead.",
+        ),
+        tool(
+            "pixl_remap_tile",
+            "Remap a tile from one palette to another using OKLab nearest-color matching. \
+             Args: {name, target_palette (name of palette in session)}. Maps each symbol \
+             to the perceptually closest symbol in the target palette. Use this after \
+             pixl_generate_sprite with auto_palette to convert the tile to your project palette.",
         ),
         // ── Local AI Generation ──
         tool(
