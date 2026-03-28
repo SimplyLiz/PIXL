@@ -153,6 +153,8 @@ pub async fn generate_and_quantize(
         reference_png: png_bytes,
         extracted_palette: None,
         palette_toml: None,
+        detected_pixel_size: import_result.detected_pixel_size,
+        native_resolution: import_result.native_resolution,
     })
 }
 
@@ -198,6 +200,8 @@ pub async fn generate_with_auto_palette(
         reference_png: png_bytes,
         extracted_palette: Some(palette),
         palette_toml: Some(palette_toml),
+        detected_pixel_size: import_result.detected_pixel_size,
+        native_resolution: import_result.native_resolution,
     })
 }
 
@@ -212,4 +216,8 @@ pub struct GenerateResult {
     pub reference_png: Vec<u8>,
     pub extracted_palette: Option<pixl_core::types::Palette>,
     pub palette_toml: Option<String>,
+    /// Detected pixel block size in the AI-generated image.
+    pub detected_pixel_size: u32,
+    /// Native resolution of the pixel art (before resizing to target).
+    pub native_resolution: (u32, u32),
 }

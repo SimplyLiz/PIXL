@@ -2066,9 +2066,12 @@ fn cmd_generate_sprite(
     let render_palette = result.extracted_palette.as_ref().unwrap_or(session_palette);
 
     println!(
-        "generated {}x{} reference → quantized to {}x{} ({:.1}% color accuracy, {} clipped)",
+        "generated {}x{} (detected {}px blocks → native {}x{}) → target {}x{} ({:.1}% accuracy, {} clipped)",
         result.generated_size.0,
         result.generated_size.1,
+        result.detected_pixel_size,
+        result.native_resolution.0,
+        result.native_resolution.1,
         result.width,
         result.height,
         result.color_accuracy * 100.0,
