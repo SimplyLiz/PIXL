@@ -8,7 +8,9 @@ use pixl_core::types::{Palette, Rgba as PaxRgba};
 /// 2. Center-sample each pixel block (avoids anti-aliasing at block edges)
 /// 3. If native > target, nearest-neighbor downscale
 /// 4. Quantize each pixel to nearest palette symbol
-/// 5. Enforce outlines: boundary pixels → darkest palette color
+/// 5. Flood-fill background removal from corners (strips grey halos)
+/// 6. AA cleanup: snap lone intermediate pixels to dominant neighbor
+/// 7. Enforce outlines on light boundary pixels
 pub fn import_reference(
     reference: &DynamicImage,
     target_width: u32,
@@ -27,7 +29,7 @@ pub fn import_reference(
     // Step 2: Center-sample each pixel block.
     // Instead of Nearest/Lanczos resize, sample the CENTER pixel of each NxN block.
     // This avoids anti-aliasing artifacts at block boundaries.
-    let sampled = if detected > 1 {
+    let mut sampled = if detected > 1 {
         let mut img = RgbaImage::new(native_w, native_h);
         let half = detected / 2;
         for y in 0..native_h {
@@ -37,16 +39,35 @@ pub fn import_reference(
                 img.put_pixel(x, y, *rgba.get_pixel(src_x, src_y));
             }
         }
-        DynamicImage::ImageRgba8(img)
+        img
     } else {
-        reference.clone()
+        rgba.clone()
     };
 
-    // Step 3: Resize to target if native != target
+    // Step 3: Flood-fill background removal from corners.
+    // AI generators produce grey/dark halos that are opaque but not part of the sprite.
+    // Only apply on larger images (AI output) — small images are already pixel art.
+    // Also only apply if the image has significant transparent regions already
+    // (indicating it's a sprite on background, not a full scene).
+    if native_w > 16 || native_h > 16 {
+        let total = (sampled.width() * sampled.height()) as usize;
+        let transparent_before = sampled.pixels().filter(|p| p.0[3] < 128).count();
+        // Only flood-fill if the image already has some transparency (sprite mode)
+        // or if the corners are very dark/grey (background halo)
+        let corner = sampled.get_pixel(0, 0);
+        let corner_dark = (corner.0[0] as u32 + corner.0[1] as u32 + corner.0[2] as u32) < 200;
+        if transparent_before > total / 10 || corner_dark {
+            flood_fill_background(&mut sampled, 40);
+        }
+    }
+
+    let sampled_dyn = DynamicImage::ImageRgba8(sampled);
+
+    // Step 4: Resize to target if native != target
     let final_img = if native_w != target_width || native_h != target_height {
-        sampled.resize_exact(target_width, target_height, image::imageops::Nearest)
+        sampled_dyn.resize_exact(target_width, target_height, image::imageops::Nearest)
     } else {
-        sampled
+        sampled_dyn
     };
 
     // Step 4: Quantize to palette
@@ -92,8 +113,11 @@ pub fn import_reference(
         apply_bayer_dither(&mut grid, &final_img, &palette_entries);
     }
 
-    // Step 5: Enforce outlines — boundary pixels (non-void touching void)
-    // get replaced with the darkest non-void palette color.
+    // Step 6: AA cleanup — lone pixels different from all neighbors are
+    // anti-aliasing artifacts. Snap to most common neighbor color.
+    cleanup_aa_artifacts(&mut grid, void_sym);
+
+    // Step 7: Enforce outlines on light boundary pixels
     enforce_outlines(&mut grid, &palette_entries, void_sym);
 
     let total_pixels = (target_width * target_height) as f64;
@@ -253,6 +277,116 @@ fn next_pot_between(min: u32, max: u32) -> u32 {
 }
 
 // ── Palette quantization helpers ────────────────────────────────────
+
+/// Flood-fill from all 4 corners to detect and remove opaque background pixels.
+/// Marks reached pixels as transparent (alpha = 0). Uses color similarity
+/// tolerance to handle gradients and halos.
+fn flood_fill_background(img: &mut RgbaImage, tolerance: u32) {
+    let (w, h) = img.dimensions();
+    if w == 0 || h == 0 {
+        return;
+    }
+
+    let mut visited = vec![vec![false; w as usize]; h as usize];
+    let mut stack: Vec<(u32, u32)> = Vec::new();
+
+    // Seed from all 4 corners
+    let corners = [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)];
+    for &(cx, cy) in &corners {
+        let corner_color = *img.get_pixel(cx, cy);
+        stack.push((cx, cy));
+
+        while let Some((x, y)) = stack.pop() {
+            if visited[y as usize][x as usize] {
+                continue;
+            }
+            visited[y as usize][x as usize] = true;
+
+            let pixel = *img.get_pixel(x, y);
+
+            // Already transparent — mark and continue
+            if pixel.0[3] < 128 {
+                img.put_pixel(x, y, Rgba([0, 0, 0, 0]));
+                // Push neighbors
+                if x > 0 { stack.push((x - 1, y)); }
+                if x + 1 < w { stack.push((x + 1, y)); }
+                if y > 0 { stack.push((x, y - 1)); }
+                if y + 1 < h { stack.push((x, y + 1)); }
+                continue;
+            }
+
+            // Check color similarity to the corner
+            let dr = (pixel.0[0] as i32 - corner_color.0[0] as i32).unsigned_abs();
+            let dg = (pixel.0[1] as i32 - corner_color.0[1] as i32).unsigned_abs();
+            let db = (pixel.0[2] as i32 - corner_color.0[2] as i32).unsigned_abs();
+            let dist = dr + dg + db;
+
+            if dist <= tolerance {
+                // Similar to corner color → background → make transparent
+                img.put_pixel(x, y, Rgba([0, 0, 0, 0]));
+                if x > 0 { stack.push((x - 1, y)); }
+                if x + 1 < w { stack.push((x + 1, y)); }
+                if y > 0 { stack.push((x, y - 1)); }
+                if y + 1 < h { stack.push((x, y + 1)); }
+            }
+            // Different color → stop flood here (edge of sprite)
+        }
+    }
+}
+
+/// Clean up anti-aliasing artifacts: pixels that differ from ALL 4 neighbors
+/// are likely blended intermediate colors. Replace with the most common
+/// neighbor color.
+fn cleanup_aa_artifacts(grid: &mut [Vec<char>], void_sym: char) {
+    let h = grid.len();
+    if h == 0 {
+        return;
+    }
+    let w = grid[0].len();
+
+    let original = grid.to_vec();
+    for y in 0..h {
+        for x in 0..w {
+            let c = original[y][x];
+            if c == void_sym {
+                continue;
+            }
+
+            // Collect non-void neighbor colors
+            let mut neighbors = Vec::with_capacity(4);
+            if x > 0 && original[y][x - 1] != void_sym {
+                neighbors.push(original[y][x - 1]);
+            }
+            if x + 1 < w && original[y][x + 1] != void_sym {
+                neighbors.push(original[y][x + 1]);
+            }
+            if y > 0 && original[y - 1][x] != void_sym {
+                neighbors.push(original[y - 1][x]);
+            }
+            if y + 1 < h && original[y + 1][x] != void_sym {
+                neighbors.push(original[y + 1][x]);
+            }
+
+            if neighbors.is_empty() {
+                continue;
+            }
+
+            // If current pixel differs from ALL neighbors, it's likely AA
+            let matches_any = neighbors.iter().any(|&n| n == c);
+            if !matches_any && neighbors.len() >= 2 {
+                // Replace with most common neighbor
+                let mut freq: std::collections::HashMap<char, u32> =
+                    std::collections::HashMap::new();
+                for &n in &neighbors {
+                    *freq.entry(n).or_insert(0) += 1;
+                }
+                if let Some((&best, _)) = freq.iter().max_by_key(|(_, count)| *count) {
+                    grid[y][x] = best;
+                }
+            }
+        }
+    }
+}
 
 /// Enforce dark outlines: boundary pixels that are too light get darkened.
 /// Only replaces pixels significantly lighter than the darkest palette color —
