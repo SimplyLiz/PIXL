@@ -290,12 +290,21 @@ fn handle_validate(state: &Mutex<McpState>, args: &Value) -> Value {
         .get("check_edges")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
-    let result = validate::validate(&st.file, check_edges);
+    let quality = args
+        .get("quality")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let result = if quality {
+        validate::validate_quality(&st.file, check_edges, st.knowledge.as_ref())
+    } else {
+        validate::validate(&st.file, check_edges)
+    };
 
     let errors: Vec<String> = result.errors.iter().map(|e| format!("{}", e)).collect();
     let warnings: Vec<String> = result.warnings.clone();
 
-    json!({
+    let mut response = json!({
         "errors": errors,
         "warnings": warnings,
         "stats": {
@@ -305,7 +314,79 @@ fn handle_validate(state: &Mutex<McpState>, args: &Value) -> Value {
             "tiles": result.stats.tiles,
             "sprites": result.stats.sprites,
         }
-    })
+    });
+
+    if let Some(ref qr) = result.quality {
+        let tile_issues: Vec<Value> = qr
+            .tile_reports
+            .iter()
+            .filter(|r| !r.structural.issues.is_empty())
+            .map(|r| {
+                let issues: Vec<Value> = r
+                    .structural
+                    .issues
+                    .iter()
+                    .map(|i| {
+                        let advice: Vec<Value> = r
+                            .kb_advice
+                            .iter()
+                            .filter(|a| a.issue_code == i.code)
+                            .map(|a| {
+                                json!({
+                                    "summary": a.summary,
+                                    "source": a.source_title,
+                                })
+                            })
+                            .collect();
+                        json!({
+                            "code": i.code,
+                            "severity": format!("{:?}", i.severity),
+                            "message": i.message,
+                            "advice": advice,
+                        })
+                    })
+                    .collect();
+                json!({
+                    "tile": r.tile_name,
+                    "verdict": if pixl_core::structural::has_errors(&r.structural) {
+                        "REJECT"
+                    } else if pixl_core::structural::has_warnings(&r.structural) {
+                        "REFINE"
+                    } else {
+                        "ACCEPT"
+                    },
+                    "issues": issues,
+                })
+            })
+            .collect();
+
+        let consistency = qr.consistency.as_ref().map(|sc| {
+            let outliers: Vec<Value> = sc
+                .outliers
+                .iter()
+                .map(|o| {
+                    json!({
+                        "tile": o.tile_name,
+                        "light_direction": o.light_direction,
+                        "deviation": o.deviation,
+                    })
+                })
+                .collect();
+            json!({
+                "mean_light_direction": sc.mean_light_direction,
+                "light_direction_stddev": sc.light_direction_stddev,
+                "outliers": outliers,
+            })
+        });
+
+        response["quality"] = json!({
+            "tiles_analyzed": qr.tiles_analyzed,
+            "tile_issues": tile_issues,
+            "consistency": consistency,
+        });
+    }
+
+    response
 }
 
 fn handle_render_tile(state: &Mutex<McpState>, args: &Value) -> Value {
@@ -2866,7 +2947,7 @@ pub async fn handle_generate_sprite(state: &Mutex<McpState>, args: &Value) -> Va
     let size_str = args.get("size").and_then(|v| v.as_str());
     let dither = args.get("dither").and_then(|v| v.as_bool()).unwrap_or(false);
     let auto_palette = args.get("auto_palette").and_then(|v| v.as_bool()).unwrap_or(true);
-    let max_colors = args.get("max_colors").and_then(|v| v.as_u64()).unwrap_or(16) as u32;
+    let max_colors = args.get("max_colors").and_then(|v| v.as_u64()).unwrap_or(32) as u32;
 
     if prompt.is_empty() || name.is_empty() {
         return json!({"error": "both 'prompt' and 'name' are required"});

@@ -3,11 +3,12 @@ use pixl_core::types::{Palette, Rgba as PaxRgba};
 
 /// Quantize a reference image into a PAX character grid using the given palette.
 ///
-/// Two-step pipeline for AI-generated pixel art:
+/// Pipeline for AI-generated pixel art:
 /// 1. Detect the native pixel grid (how big each "art pixel" is in the source)
-/// 2. Downsample to that native resolution via area averaging (not Lanczos)
-/// 3. If native resolution > target, nearest-neighbor downscale to target
+/// 2. Center-sample each pixel block (avoids anti-aliasing at block edges)
+/// 3. If native > target, nearest-neighbor downscale
 /// 4. Quantize each pixel to nearest palette symbol
+/// 5. Enforce outlines: boundary pixels → darkest palette color
 pub fn import_reference(
     reference: &DynamicImage,
     target_width: u32,
@@ -15,39 +16,40 @@ pub fn import_reference(
     palette: &Palette,
     dither: bool,
 ) -> ImportResult {
-    let (src_w, src_h) = reference.dimensions();
+    let rgba = reference.to_rgba8();
+    let (src_w, src_h) = rgba.dimensions();
 
-    // Step 1: Detect native pixel grid size in the source image.
-    // AI generators render pixel art at high resolution — each "art pixel"
-    // is an NxN block of identical screen pixels. Detect that N.
+    // Step 1: Detect native pixel grid
     let detected = detect_pixel_size(reference);
     let native_w = (src_w / detected).max(1);
     let native_h = (src_h / detected).max(1);
 
-    // Step 2: Downscale to native pixel art resolution.
-    // Use Nearest for clean pixel-snapping (not Lanczos which blurs pixel edges).
-    let native = reference.resize_exact(native_w, native_h, image::imageops::Nearest);
-
-    // Step 3: Find the next power-of-two size >= target that fits within native.
-    // If native is 48x48 and target is 16x16, we use 32x32 as intermediate
-    // (next POT >= 16 that's <= 48), then nearest-neighbor down to 16.
-    let intermediate_w = next_pot_between(target_width, native_w);
-    let intermediate_h = next_pot_between(target_height, native_h);
-
-    let work_img = if intermediate_w != native_w || intermediate_h != native_h {
-        native.resize_exact(intermediate_w, intermediate_h, image::imageops::Nearest)
+    // Step 2: Center-sample each pixel block.
+    // Instead of Nearest/Lanczos resize, sample the CENTER pixel of each NxN block.
+    // This avoids anti-aliasing artifacts at block boundaries.
+    let sampled = if detected > 1 {
+        let mut img = RgbaImage::new(native_w, native_h);
+        let half = detected / 2;
+        for y in 0..native_h {
+            for x in 0..native_w {
+                let src_x = (x * detected + half).min(src_w - 1);
+                let src_y = (y * detected + half).min(src_h - 1);
+                img.put_pixel(x, y, *rgba.get_pixel(src_x, src_y));
+            }
+        }
+        DynamicImage::ImageRgba8(img)
     } else {
-        native
+        reference.clone()
     };
 
-    // Step 4: Final resize to exact target if needed
-    let final_img = if intermediate_w != target_width || intermediate_h != target_height {
-        work_img.resize_exact(target_width, target_height, image::imageops::Nearest)
+    // Step 3: Resize to target if native != target
+    let final_img = if native_w != target_width || native_h != target_height {
+        sampled.resize_exact(target_width, target_height, image::imageops::Nearest)
     } else {
-        work_img
+        sampled
     };
 
-    // Step 5: Quantize to palette
+    // Step 4: Quantize to palette
     let palette_entries: Vec<(char, PaxRgba)> = palette
         .symbols
         .iter()
@@ -89,6 +91,10 @@ pub fn import_reference(
     if dither {
         apply_bayer_dither(&mut grid, &final_img, &palette_entries);
     }
+
+    // Step 5: Enforce outlines — boundary pixels (non-void touching void)
+    // get replaced with the darkest non-void palette color.
+    enforce_outlines(&mut grid, &palette_entries, void_sym);
 
     let total_pixels = (target_width * target_height) as f64;
     let non_void = grid.iter().flat_map(|r| r.iter()).filter(|&&c| c != void_sym).count() as f64;
@@ -248,6 +254,66 @@ fn next_pot_between(min: u32, max: u32) -> u32 {
 
 // ── Palette quantization helpers ────────────────────────────────────
 
+/// Enforce dark outlines: boundary pixels that are too light get darkened.
+/// Only replaces pixels significantly lighter than the darkest palette color —
+/// preserves mid-tone boundary pixels (like purple robe edges).
+fn enforce_outlines(grid: &mut [Vec<char>], palette: &[(char, PaxRgba)], void_sym: char) {
+    let h = grid.len();
+    if h == 0 {
+        return;
+    }
+    let w = grid[0].len();
+
+    // Find darkest non-void palette symbol and its lightness
+    let darkest_entry = palette
+        .iter()
+        .filter(|&(c, rgba)| *c != void_sym && rgba.a >= 128)
+        .min_by(|(_, a), (_, b)| {
+            let la = pixl_core::oklab::lightness(a.r, a.g, a.b);
+            let lb = pixl_core::oklab::lightness(b.r, b.g, b.b);
+            la.partial_cmp(&lb).unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+    let (darkest_sym, darkest_lightness) = match darkest_entry {
+        Some(&(c, ref rgba)) => (c, pixl_core::oklab::lightness(rgba.r, rgba.g, rgba.b)),
+        None => return,
+    };
+
+    // Only darken boundary pixels that are much lighter than the darkest color.
+    // Threshold: if pixel lightness > darkest + 0.35, it's too light for an outline.
+    let lightness_threshold = darkest_lightness + 0.35;
+
+    // Build lightness lookup
+    let lightness_map: std::collections::HashMap<char, f32> = palette
+        .iter()
+        .map(|&(c, ref rgba)| (c, pixl_core::oklab::lightness(rgba.r, rgba.g, rgba.b)))
+        .collect();
+
+    let mut to_darken: Vec<(usize, usize)> = Vec::new();
+    for y in 0..h {
+        for x in 0..w {
+            if grid[y][x] == void_sym {
+                continue;
+            }
+            let touches_void = (x > 0 && grid[y][x - 1] == void_sym)
+                || (x + 1 < w && grid[y][x + 1] == void_sym)
+                || (y > 0 && grid[y - 1][x] == void_sym)
+                || (y + 1 < h && grid[y + 1][x] == void_sym);
+
+            if touches_void {
+                let pixel_l = lightness_map.get(&grid[y][x]).copied().unwrap_or(0.5);
+                if pixel_l > lightness_threshold {
+                    to_darken.push((x, y));
+                }
+            }
+        }
+    }
+
+    for (x, y) in to_darken {
+        grid[y][x] = darkest_sym;
+    }
+}
+
 fn nearest_palette_symbol(pixel: &Rgba<u8>, palette: &[(char, PaxRgba)]) -> (char, f64) {
     palette
         .iter()
@@ -401,8 +467,9 @@ mod tests {
         }
         let result = import_reference(&DynamicImage::ImageRgba8(img), 4, 4, &test_palette(), false);
         for row in &result.grid {
-            assert_eq!(row[0], '+'); // white
-            assert_eq!(row[1], '+'); // white
+            assert_eq!(row[0], '+'); // white (interior)
+            // row[1] is boundary — outline enforcement makes it darkest ('#')
+            assert_eq!(row[1], '#'); // dark outline (was white, but touches void)
             assert_eq!(row[2], '.'); // void
             assert_eq!(row[3], '.'); // void
         }
