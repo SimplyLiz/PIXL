@@ -1,23 +1,47 @@
 # Getting Started with PIXL Studio
 
-## Prerequisites
+## Install
 
-- **macOS** (Apple Silicon recommended for local AI)
-- **Flutter** installed (`flutter doctor` should pass)
-- **Rust toolchain** installed (`rustup`, `cargo`)
-- An LLM API key (Anthropic, OpenAI, Gemini) OR Ollama running locally
+### Option 1: Homebrew (recommended)
 
-## Build & Run
+```bash
+brew install SimplyLiz/pixl/pixl-studio
+```
+
+### Option 2: Download
+
+Download the latest `.dmg` from [GitHub Releases](https://github.com/SimplyLiz/PIXL/releases) and drag PIXL Studio to your Applications folder.
+
+### Option 3: Build from source
+
+Prerequisites: macOS, [Flutter](https://flutter.dev), [Rust toolchain](https://rustup.rs)
 
 ```bash
 # 1. Build the PIXL engine
 cd tool && cargo build --release
 
 # 2. Run Studio
-cd studio && flutter run -d macos
+cd studio && flutter pub get && flutter run -d macos
 ```
 
 Studio automatically starts the engine on launch. If it can't find the binary, you'll see "Engine not connected" in the status bar — make sure `tool/target/release/pixl` exists.
+
+## CLI
+
+You also need the `pixl` CLI for rendering, exporting, and MCP server. Install it separately:
+
+```bash
+# macOS (Apple Silicon)
+curl -fsSL https://github.com/SimplyLiz/PIXL/releases/latest/download/pixl-v1.0.0-aarch64-apple-darwin.tar.gz | tar xz
+sudo mv pixl /usr/local/bin/
+```
+
+Or build from source: `cd tool && cargo build --release`
+
+## Prerequisites
+
+- **macOS** (Apple Silicon recommended for local AI)
+- An LLM API key (Anthropic, OpenAI, Gemini) OR Ollama running locally
 
 ## First Launch
 
