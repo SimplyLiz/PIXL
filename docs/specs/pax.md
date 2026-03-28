@@ -1236,14 +1236,42 @@ The LLM MUST examine palette symbols before writing any grid.
 - Use `linked` for repeated poses
 - Walk cycles: mirror for opposite direction
 
-### SELF-REFINE Loop
+### Sprite Generation Pipeline
 
-Based on Madaan et al., NeurIPS 2023:
-1. Create tile -> examine 16x preview (PNG for tiles, GIF for sprites/cycling)
-2. Refine via `pixl.refine_tile()` -> re-examine
-3. Cap at 3 iterations (diminishing returns per research)
+See [docs/guides/generation-pipeline.md](../guides/generation-pipeline.md)
+for full documentation. Summary of the two generation paths:
 
-### MCP Tool Catalog (19 tools implemented)
+**Path A — Diffusion Bridge (recommended):**
+`pixl_generate_sprite` → DALL-E generates reference image → detect pixel
+grid → center-sample → auto-extract palette → quantize → background
+removal → AA cleanup → outline enforcement → structural critique.
+
+**Path B — LLM Text Grid + Upscale:**
+`pixl_create_tile` at 8×8 → `pixl_upscale_tile` to 16×16 →
+`pixl_critique_tile` → `pixl_refine_tile` to add detail.
+
+### SELF-REFINE Loop (implemented)
+
+Based on Madaan et al., NeurIPS 2023. Now fully implemented:
+
+1. Generate tile → examine rendered preview PNG
+2. `pixl_critique_tile` → structural analysis (outline, centering,
+   contrast, fragmentation) + specific fix instructions
+3. `pixl_refine_tile` → patch specific rows, re-render, re-critique
+4. Cap at 3 iterations (tracked per tile in session state)
+
+### Structural Validators (implemented)
+
+Module: `pixl-core/src/structural.rs`. Checks:
+- Outline coverage (% of boundary pixels that are dark)
+- Canvas utilization (bounding box vs canvas area)
+- Centering (subject center vs canvas center)
+- Contrast (mean OKLab ΔE between adjacent pixels)
+- Connected components (fragmentation detection)
+
+Severity: ERROR (auto-reject) / WARNING (refine) / INFO (ok).
+
+### MCP Tool Catalog (28 tools implemented)
 
 **Discovery:**
 - `pixl_session_start` -> theme, palette, stamps, tiles, light_source, workflow
@@ -1259,12 +1287,31 @@ Based on Madaan et al., NeurIPS 2023:
   existing tiles can go in each direction.
 - `pixl_load_source(source)` -> load a .pax string into session state
 
-**Refinement (SELF-REFINE):**
-- `pixl_check_edge_pair(tile_a, direction, tile_b)` -> compatible: bool, reason
+**Rendering:**
 - `pixl_render_tile(name, scale?)` -> base64 PNG at specified zoom
-- `pixl_render_sprite_gif(spriteset, sprite, scale?)` -> animated base64 GIF.
-  Resolves grid/delta/linked frames. Multimodal LLM examines animation quality.
+- `pixl_render_sprite_gif(spriteset, sprite, scale?)` -> animated base64 GIF
+- `pixl_render_composite(name, variant?, anim?, frame?, scale?)` -> composite PNG
+- `pixl_check_edge_pair(tile_a, direction, tile_b)` -> compatible: bool, reason
 - `pixl_delete_tile(name)` -> removes tile from session
+
+**Generation (Diffusion Bridge):**
+- `pixl_generate_sprite(prompt, name, size?, max_colors?, target_palette?)` ->
+  DALL-E reference + auto-palette quantization + structural critique.
+  Always uses auto-extracted palette. Optional remap to target_palette.
+- `pixl_upscale_tile(name, factor?, new_name?)` -> nearest-neighbor grid upscale
+- `pixl_show_references(query, count?, size?)` -> rendered reference tile PNGs
+
+**Quality (SELF-REFINE):**
+- `pixl_critique_tile(name, scale?)` -> structural analysis + preview PNG +
+  refinement_prompt with row-level fix instructions
+- `pixl_refine_tile(name, start_row, rows)` -> patch grid rows + re-critique
+- `pixl_check_seams` -> composite seam continuity warnings
+- `pixl_remap_tile(name, target_palette)` -> OKLab palette remap
+
+**Composites:**
+- `pixl_list_composites` -> composites with variants and animations
+- `pixl_render_composite(name, variant?, anim?, frame?)` -> preview PNG
+- `pixl_check_seams` -> seam continuity across tile boundaries
 
 **Style:**
 - `pixl_learn_style(tiles?)` -> extract style latent from reference tiles.
@@ -1287,7 +1334,7 @@ Based on Madaan et al., NeurIPS 2023:
 **Export:**
 - `pixl_get_file` -> full .pax TOML source
 
-### HTTP API (20 endpoints, `pixl serve --port 3742`)
+### HTTP API (28+ endpoints, `pixl serve --port 3742`)
 
 All MCP tools are also available as REST endpoints for PIXL Studio:
 
@@ -1297,11 +1344,16 @@ POST /api/palette             GET  /api/themes
 GET  /api/stamps              GET  /api/tiles
 POST /api/tile/create         POST /api/tile/render
 POST /api/tile/delete         POST /api/tile/edge-check
+POST /api/tile/critique       POST /api/tile/refine
+POST /api/tile/upscale        POST /api/tile/references
+POST /api/tile/generate-sprite
 POST /api/validate            POST /api/narrate
 POST /api/style/learn         POST /api/style/check
 POST /api/blueprint           POST /api/sprite/gif
 GET  /api/file                POST /api/generate/context
 POST /api/atlas/pack          POST /api/load
+GET  /api/composites          POST /api/composite/render
+GET  /api/composite/check-seams
 POST /api/tool                (generic: {tool, args})
 ```
 
