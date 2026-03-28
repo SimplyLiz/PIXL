@@ -48,6 +48,7 @@ pub fn handle_tool(state: &Mutex<McpState>, tool_name: &str, args: &Value) -> Va
         "pixl_check_seams" => handle_check_seams(state),
         "pixl_critique_tile" => handle_critique_tile(state, args),
         "pixl_refine_tile" => handle_refine_tile(state, args),
+        "pixl_upscale_tile" => handle_upscale_tile(state, args),
         _ => json!({"error": format!("unknown tool: {}", tool_name)}),
     }
 }
@@ -2813,6 +2814,110 @@ fn handle_refine_tile(state: &Mutex<McpState>, args: &Value) -> Value {
         "has_errors": pixl_core::structural::has_errors(&report),
         "has_warnings": pixl_core::structural::has_warnings(&report),
         "should_refine": pixl_core::structural::has_warnings(&report) && refinement_count < 3,
+    })
+}
+
+fn handle_upscale_tile(state: &Mutex<McpState>, args: &Value) -> Value {
+    let mut st = state.lock().unwrap();
+
+    let name = args["name"].as_str().unwrap_or("").to_string();
+    let factor = args.get("factor").and_then(|v| v.as_u64()).unwrap_or(2) as u32;
+    let new_name = args
+        .get("new_name")
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .unwrap_or_else(|| format!("{}_upscaled", name));
+
+    if factor < 2 || factor > 4 {
+        return json!({"error": "factor must be 2, 3, or 4"});
+    }
+
+    // Extract tile info before mutating state
+    let (palette_name, size_str, grid_str) = {
+        let tile_raw = match st.file.tile.get(&name) {
+            Some(t) => t,
+            None => return json!({"error": format!("tile '{}' not found", name)}),
+        };
+        let palette_name = tile_raw.palette.clone();
+        let size_str = tile_raw.size.as_deref().unwrap_or("8x8").to_string();
+        let grid_str = match &tile_raw.grid {
+            Some(g) => g.clone(),
+            None => return json!({"error": "tile has no grid data"}),
+        };
+        (palette_name, size_str, grid_str)
+    };
+
+    let palette = match st.palettes.get(&palette_name) {
+        Some(p) => p.clone(),
+        None => return json!({"error": format!("palette '{}' not found", palette_name)}),
+    };
+
+    let (w, h) = match parse_size(&size_str) {
+        Ok(s) => s,
+        Err(e) => return json!({"error": e}),
+    };
+
+    // Parse original grid
+    let original = match grid::parse_grid(&grid_str, w, h, &palette) {
+        Ok(g) => g,
+        Err(e) => return json!({"error": format!("{}", e)}),
+    };
+
+    // Upscale
+    let (upscaled, upscaled_str, new_w, new_h) =
+        pixl_core::upscale::upscale_tile_grid(&original, factor);
+
+    // Create new tile in state (reuse all properties except size and grid)
+    // We need to build a TileRaw manually since it doesn't impl Clone
+    let tile_raw = &st.file.tile[&name];
+    let new_tile = pixl_core::types::TileRaw {
+        palette: palette_name.clone(),
+        size: Some(format!("{}x{}", new_w, new_h)),
+        encoding: None,
+        symmetry: None,
+        auto_rotate: None,
+        auto_rotate_weight: None,
+        template: None,
+        edge_class: tile_raw.edge_class.as_ref().map(|ec| pixl_core::types::EdgeClassRaw {
+            n: ec.n.clone(),
+            e: ec.e.clone(),
+            s: ec.s.clone(),
+            w: ec.w.clone(),
+        }),
+        corner_class: None,
+        tags: tile_raw.tags.clone(),
+        target_layer: tile_raw.target_layer.clone(),
+        weight: tile_raw.weight,
+        palette_swaps: tile_raw.palette_swaps.clone(),
+        cycles: tile_raw.cycles.clone(),
+        nine_slice: None,
+        visual_height_extra: None,
+        semantic: None,
+        grid: Some(upscaled_str),
+        rle: None,
+        layout: None,
+    };
+
+    st.file.tile.insert(new_name.clone(), new_tile);
+
+    // Render preview
+    let img = renderer::render_grid(&upscaled, &palette, 8);
+    let b64 = renderer::png_to_base64(&renderer::encode_png(&img));
+
+    // Run structural critique
+    let report = pixl_core::structural::analyze(&upscaled, &palette, '.');
+    let critique = pixl_core::structural::critique_text(&report, &new_name);
+
+    json!({
+        "ok": true,
+        "source": name,
+        "source_size": format!("{}x{}", w, h),
+        "new_name": new_name,
+        "new_size": format!("{}x{}", new_w, new_h),
+        "factor": factor,
+        "preview_b64": b64,
+        "critique": critique,
+        "hint": "The upscaled tile has blocky 2x2 pixel regions. Use pixl_refine_tile to add sub-pixel detail: anti-alias edges, add dithering in flat regions, refine small features like eyes or buttons.",
     })
 }
 
