@@ -2983,6 +2983,8 @@ pub async fn handle_generate_sprite(state: &Mutex<McpState>, args: &Value) -> Va
         "prompt": prompt,
         "model": config.model,
         "generated_size": format!("{}x{}", result.generated_size.0, result.generated_size.1),
+        "detected_pixel_size": result.detected_pixel_size,
+        "native_resolution": format!("{}x{}", result.native_resolution.0, result.native_resolution.1),
         "color_accuracy": format!("{:.1}%", result.color_accuracy * 100.0),
         "clipped_colors": result.clipped_colors,
         "dither": dither,
