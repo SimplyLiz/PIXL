@@ -195,6 +195,24 @@ pub fn tool_definitions() -> Vec<Tool> {
             "Check seam continuity across tile boundaries in composites. Returns warnings for \
              pixel discontinuities at adjacent tile edges. No args — checks all composites.",
         ),
+        // ── SELF-REFINE Loop ──
+        tool(
+            "pixl_critique_tile",
+            "Structural quality critique of a tile. Args: {name, scale? (default 16)}. \
+             Renders the tile to PNG, then runs structural validators: outline coverage, \
+             centering, canvas utilization, contrast, fragmentation. Returns the rendered \
+             preview PNG + a text critique with specific issues and fix instructions. \
+             ALWAYS examine the preview image alongside the critique text. \
+             This is the 'look at what you drew' step in the SELF-REFINE loop.",
+        ),
+        tool(
+            "pixl_refine_tile",
+            "Patch a sub-region of a tile grid. Args: {name, start_row (0-based), \
+             rows (multi-line string — replacement rows)}. Replaces rows starting at \
+             start_row with the provided rows. The replacement rows must be the same width \
+             as the tile. Returns updated preview PNG + new structural critique. \
+             Use this after pixl_critique_tile identifies specific row/region issues.",
+        ),
         // ── Local AI Generation ──
         tool(
             "pixl_generate_tile",

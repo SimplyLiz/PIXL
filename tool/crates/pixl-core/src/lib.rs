@@ -47,6 +47,7 @@ pub mod rle;
 pub mod rotate;
 pub mod skeleton;
 pub mod stampgen;
+pub mod structural;
 pub mod style;
 pub mod symmetry;
 pub mod template;
