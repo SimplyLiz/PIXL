@@ -1749,6 +1749,30 @@ Excluded: `pixl-mcp`, `pixl-cli` (not applicable to WASM).
 | Studio Backdrop Editor | V2.1 | DONE — viewport, zone editor, layer panel |
 | Unified TexturePacker Types | V2.1 | DONE — single source of truth in atlas.rs |
 
+### Shipped Since V2.1
+
+| Feature | Version | Status |
+|---------|---------|--------|
+| Composite Sprites | V2.2 | DONE — `[composite]` PAX section, 2×2+ tile assembly |
+| Composite Variants & Animation | V2.2 | DONE — slot overrides, per-frame tile swaps |
+| Composite Atlas Packing | V2.2 | DONE — separate \_composites.png atlas |
+| Studio Composite Editor | V2.2 | DONE — list, variant/anim selectors, preview |
+| Structural Validators | V2.2 | DONE — outline, centering, contrast, fragmentation |
+| SELF-REFINE Critique Tool | V2.2 | DONE — `pixl_critique_tile` + `pixl_refine_tile` |
+| 8→16 Upscale Workflow | V2.2 | DONE — `pixl_upscale_tile`, CLI `pixl upscale` |
+| Visual References | V2.2 | DONE — `pixl_show_references`, rendered few-shot |
+| Diffusion Bridge (DALL-E) | V2.2 | DONE — `pixl_generate_sprite`, full pipeline |
+| Auto-Palette Extraction | V2.2 | DONE — median-cut + extreme preservation |
+| Palette Remap (OKLab) | V2.2 | DONE — `pixl_remap_tile` |
+| Pixel Grid Detection | V2.2 | DONE — center-sampling, native resolution |
+| Background Removal | V2.2 | DONE — flood-fill from corners |
+| AA Artifact Cleanup | V2.2 | DONE — snap lone pixels to neighbors |
+| Outline Enforcement | V2.2 | DONE — conditional darkening of light boundaries |
+| Seam Continuity Checking | V2.2 | DONE — `pixl validate --check-seams` |
+| MCP Tool Catalog (28 tools) | V2.2 | DONE — 9 new tools added |
+| HTTP API (28+ endpoints) | V2.2 | DONE — composite, critique, diffusion routes |
+| Generation Pipeline Guide | V2.2 | DONE — `docs/guides/generation-pipeline.md` |
+
 ### Remaining — Future
 
 **Skeletal Animation (V3):**

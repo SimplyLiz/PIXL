@@ -272,6 +272,39 @@ All 10 behaviors are selectable in the Studio dropdown. Parameter editors:
 
 ---
 
+## 15. Sprite Generation & Quality (NEW — 2026-03-28)
+
+| Feature | Engine | CLI | MCP | HTTP | Studio |
+|---------|:---:|:---:|:---:|:---:|:---:|
+| Diffusion bridge (DALL-E) | yes | yes | yes | yes | -- |
+| Auto-palette extraction | yes | yes | yes | yes | -- |
+| Palette remap (OKLab) | yes | -- | yes | yes | -- |
+| Pixel grid detection | yes | yes | yes | yes | -- |
+| Center-sampling | yes | yes | yes | yes | -- |
+| Background flood-fill removal | yes | yes | yes | yes | -- |
+| AA artifact cleanup | yes | yes | yes | yes | -- |
+| Outline enforcement | yes | yes | yes | yes | -- |
+| Structural critique | yes | yes | yes | yes | -- |
+| Refinement (row patching) | yes | -- | yes | yes | -- |
+| 8→16 upscale | yes | yes | yes | yes | -- |
+| Visual references | yes | -- | yes | yes | -- |
+
+## 16. Composite Sprites (NEW — 2026-03-28)
+
+| Feature | Engine | CLI | MCP | HTTP | Studio |
+|---------|:---:|:---:|:---:|:---:|:---:|
+| Composite layout | yes | yes | yes | yes | yes |
+| Variants (slot overrides) | yes | yes | yes | yes | yes |
+| Animation (frame swaps) | yes | yes | yes | yes | yes |
+| Per-tile offsets | yes | yes | yes | yes | -- |
+| Seam checking | yes | yes | yes | yes | -- |
+| Composite atlas packing | yes | yes | -- | -- | -- |
+| Composite rendering | yes | yes | yes | yes | yes |
+
+**Note:** Studio composite mode has list panel, variant/animation selectors, and preview viewport. No in-viewport editing yet (tiles edited individually in pixel mode).
+
+---
+
 ## Priority Action Items
 
 ### P0 — MCP tool discovery (9 missing tool definitions)
