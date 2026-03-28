@@ -13,12 +13,7 @@ pub struct GeneratedStamp {
 
 /// Generate stamps for a given pattern type.
 /// `fg` and `bg` are the primary foreground/background palette symbols.
-pub fn generate_stamps(
-    pattern: &str,
-    size: u32,
-    fg: char,
-    bg: char,
-) -> Vec<GeneratedStamp> {
+pub fn generate_stamps(pattern: &str, size: u32, fg: char, bg: char) -> Vec<GeneratedStamp> {
     match pattern {
         "brick_bond" | "brick" => generate_brick_bond(size, fg, bg),
         "checkerboard" | "checker" => generate_checkerboard(size, fg, bg),
@@ -105,7 +100,11 @@ fn generate_checkerboard(size: u32, fg: char, bg: char) -> Vec<GeneratedStamp> {
 
     // 1px checkerboard
     let grid1: Vec<Vec<char>> = (0..s)
-        .map(|y| (0..s).map(|x| if (x + y) % 2 == 0 { fg } else { bg }).collect())
+        .map(|y| {
+            (0..s)
+                .map(|x| if (x + y) % 2 == 0 { fg } else { bg })
+                .collect()
+        })
         .collect();
 
     // 2px checkerboard
@@ -139,7 +138,11 @@ fn generate_diagonal_stripes(size: u32, fg: char, bg: char) -> Vec<GeneratedStam
     let s = size as usize;
 
     let grid_r: Vec<Vec<char>> = (0..s)
-        .map(|y| (0..s).map(|x| if (x + y) % 4 < 2 { fg } else { bg }).collect())
+        .map(|y| {
+            (0..s)
+                .map(|x| if (x + y) % 4 < 2 { fg } else { bg })
+                .collect()
+        })
         .collect();
 
     let grid_l: Vec<Vec<char>> = (0..s)
@@ -170,12 +173,7 @@ fn generate_diagonal_stripes(size: u32, fg: char, bg: char) -> Vec<GeneratedStam
 
 fn generate_bayer_dither(size: u32, fg: char, bg: char) -> Vec<GeneratedStamp> {
     let s = size as usize;
-    let bayer = [
-        [0, 8, 2, 10],
-        [12, 4, 14, 6],
-        [3, 11, 1, 9],
-        [15, 7, 13, 5],
-    ];
+    let bayer = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
 
     // 25% density
     let grid_25: Vec<Vec<char>> = (0..s)
@@ -254,13 +252,7 @@ fn generate_dot_grid(size: u32, fg: char, bg: char) -> Vec<GeneratedStamp> {
     let grid: Vec<Vec<char>> = (0..s)
         .map(|y| {
             (0..s)
-                .map(|x| {
-                    if x % 3 == 1 && y % 3 == 1 {
-                        fg
-                    } else {
-                        bg
-                    }
-                })
+                .map(|x| if x % 3 == 1 && y % 3 == 1 { fg } else { bg })
                 .collect()
         })
         .collect();
@@ -280,13 +272,7 @@ fn generate_crosshatch(size: u32, fg: char, bg: char) -> Vec<GeneratedStamp> {
     let grid: Vec<Vec<char>> = (0..s)
         .map(|y| {
             (0..s)
-                .map(|x| {
-                    if x == s / 2 || y == s / 2 {
-                        fg
-                    } else {
-                        bg
-                    }
-                })
+                .map(|x| if x == s / 2 || y == s / 2 { fg } else { bg })
                 .collect()
         })
         .collect();
@@ -354,7 +340,10 @@ mod tests {
         assert_eq!(stamps.len(), 3);
         // 25% should have fewer fg pixels than 75%
         let count_fg = |grid: &Vec<Vec<char>>| -> usize {
-            grid.iter().flat_map(|r| r.iter()).filter(|&&c| c == '#').count()
+            grid.iter()
+                .flat_map(|r| r.iter())
+                .filter(|&&c| c == '#')
+                .count()
         };
         assert!(count_fg(&stamps[0].grid) < count_fg(&stamps[2].grid));
     }
@@ -363,7 +352,11 @@ mod tests {
     fn all_patterns_produce_output() {
         for pattern in available_patterns() {
             let stamps = generate_stamps(pattern, 4, '#', '.');
-            assert!(!stamps.is_empty(), "pattern '{}' produced no stamps", pattern);
+            assert!(
+                !stamps.is_empty(),
+                "pattern '{}' produced no stamps",
+                pattern
+            );
             for stamp in &stamps {
                 assert_eq!(stamp.grid.len(), 4);
                 assert_eq!(stamp.grid[0].len(), 4);

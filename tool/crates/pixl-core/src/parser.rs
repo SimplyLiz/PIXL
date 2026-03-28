@@ -79,11 +79,12 @@ pub fn resolve_palette_ext(
     raw: &PaletteExtRaw,
     palettes: &HashMap<String, Palette>,
 ) -> Result<PaletteExt, ParseError> {
-    let base_palette = palettes.get(&raw.base).ok_or_else(|| ParseError::Resolve(format!(
+    let base_palette = palettes.get(&raw.base).ok_or_else(|| {
+        ParseError::Resolve(format!(
             "palette_ext '{}': base palette '{}' not found",
             name, raw.base
         ))
-    )?;
+    })?;
 
     let mut extended = HashMap::new();
     for (key, hex) in &raw.symbols {
@@ -112,27 +113,20 @@ fn parse_tilemap_grid(tilemap_str: &str) -> Vec<Vec<TileRef>> {
         .lines()
         .map(|l| l.trim())
         .filter(|l| !l.is_empty())
-        .map(|line| {
-            line.split_whitespace()
-                .map(|s| TileRef::parse(s))
-                .collect()
-        })
+        .map(|line| line.split_whitespace().map(|s| TileRef::parse(s)).collect())
         .collect()
 }
 
 /// Resolve a backdrop into a Backdrop struct.
 /// Supports both single-tilemap (backward compat) and multi-layer formats.
-pub fn resolve_backdrop(
-    name: &str,
-    file: &PaxFile,
-) -> Result<Backdrop, ParseError> {
-    let raw = file.backdrop.get(name).ok_or_else(|| ParseError::Resolve(format!("backdrop '{}' not found", name))
-    )?;
+pub fn resolve_backdrop(name: &str, file: &PaxFile) -> Result<Backdrop, ParseError> {
+    let raw = file
+        .backdrop
+        .get(name)
+        .ok_or_else(|| ParseError::Resolve(format!("backdrop '{}' not found", name)))?;
 
-    let (total_w, total_h) = crate::types::parse_size(&raw.size)
-        .map_err(ParseError::Resolve)?;
-    let (tile_w, tile_h) = crate::types::parse_size(&raw.tile_size)
-        .map_err(ParseError::Resolve)?;
+    let (total_w, total_h) = crate::types::parse_size(&raw.size).map_err(ParseError::Resolve)?;
+    let (tile_w, tile_h) = crate::types::parse_size(&raw.tile_size).map_err(ParseError::Resolve)?;
 
     let cols = total_w / tile_w;
     let rows = total_h / tile_h;
@@ -143,7 +137,11 @@ pub fn resolve_backdrop(
             .iter()
             .map(|lr| {
                 let fade = lr.fade.as_ref().map(|f| {
-                    let target = if f.target == "white" { FadeTarget::White } else { FadeTarget::Black };
+                    let target = if f.target == "white" {
+                        FadeTarget::White
+                    } else {
+                        FadeTarget::Black
+                    };
                     (target, f.amount)
                 });
                 BackdropLayer {
@@ -204,15 +202,31 @@ pub fn resolve_backdrop(
                     speed: z.speed.unwrap_or(2.0),
                 },
                 "color_gradient" => {
-                    let from = z.from.as_deref().and_then(|h| Rgba::from_hex(h).ok())
-                        .unwrap_or(Rgba { r: 0, g: 0, b: 0, a: 255 });
-                    let to = z.to.as_deref().and_then(|h| Rgba::from_hex(h).ok())
-                        .unwrap_or(Rgba { r: 255, g: 255, b: 255, a: 255 });
+                    let from = z
+                        .from
+                        .as_deref()
+                        .and_then(|h| Rgba::from_hex(h).ok())
+                        .unwrap_or(Rgba {
+                            r: 0,
+                            g: 0,
+                            b: 0,
+                            a: 255,
+                        });
+                    let to =
+                        z.to.as_deref()
+                            .and_then(|h| Rgba::from_hex(h).ok())
+                            .unwrap_or(Rgba {
+                                r: 255,
+                                g: 255,
+                                b: 255,
+                                a: 255,
+                            });
                     ZoneBehavior::ColorGradient {
-                        from, to,
+                        from,
+                        to,
                         vertical: z.direction.as_deref() != Some("horizontal"),
                     }
-                },
+                }
                 "mosaic" => ZoneBehavior::Mosaic {
                     size_x: z.size_x.unwrap_or(2),
                     size_y: z.size_y.unwrap_or(2),
@@ -228,15 +242,31 @@ pub fn resolve_backdrop(
                     speed: z.speed.unwrap_or(1.5),
                 },
                 "palette_ramp" => {
-                    let from = z.from.as_deref().and_then(|h| Rgba::from_hex(h).ok())
-                        .unwrap_or(Rgba { r: 0, g: 0, b: 0, a: 255 });
-                    let to = z.to.as_deref().and_then(|h| Rgba::from_hex(h).ok())
-                        .unwrap_or(Rgba { r: 255, g: 255, b: 255, a: 255 });
+                    let from = z
+                        .from
+                        .as_deref()
+                        .and_then(|h| Rgba::from_hex(h).ok())
+                        .unwrap_or(Rgba {
+                            r: 0,
+                            g: 0,
+                            b: 0,
+                            a: 255,
+                        });
+                    let to =
+                        z.to.as_deref()
+                            .and_then(|h| Rgba::from_hex(h).ok())
+                            .unwrap_or(Rgba {
+                                r: 255,
+                                g: 255,
+                                b: 255,
+                                a: 255,
+                            });
                     ZoneBehavior::PaletteRamp {
                         symbol: z.symbol.clone().unwrap_or_default(),
-                        from, to,
+                        from,
+                        to,
                     }
-                },
+                }
                 _ => ZoneBehavior::Cycle {
                     cycle: z.cycle.clone().unwrap_or_default(),
                 },

@@ -1,4 +1,9 @@
-use crate::{handlers, inference::{InferenceConfig, InferenceServer}, state::McpState, tools};
+use crate::{
+    handlers,
+    inference::{InferenceConfig, InferenceServer},
+    state::McpState,
+    tools,
+};
 use rmcp::{
     Error as McpError,
     handler::server::ServerHandler,
@@ -83,8 +88,7 @@ impl ServerHandler for PixlServer {
                 handlers::handle_tool(&self.state, &name, &args)
             };
 
-            let text =
-                serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".to_string());
+            let text = serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".to_string());
 
             let mut content = vec![Content::text(text)];
             if let Some(b64) = result.get("preview_b64").and_then(|v| v.as_str()) {
@@ -125,8 +129,7 @@ pub async fn run_stdio_with_inference(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let server = if let Some(path) = file {
         let source = std::fs::read_to_string(path)?;
-        PixlServer::with_source(&source)
-            .map_err(|e| format!("failed to load {}: {}", path, e))?
+        PixlServer::with_source(&source).map_err(|e| format!("failed to load {}: {}", path, e))?
     } else {
         PixlServer::new()
     }

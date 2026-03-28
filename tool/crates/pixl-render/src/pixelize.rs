@@ -53,11 +53,7 @@ pub struct ConvertBatchResult {
 }
 
 /// Pixelize a single image at a given resolution and color count.
-pub fn pixelize(
-    img: &DynamicImage,
-    max_width: u32,
-    num_colors: u32,
-) -> ConvertResult {
+pub fn pixelize(img: &DynamicImage, max_width: u32, num_colors: u32) -> ConvertResult {
     let (src_w, src_h) = img.dimensions();
     let aspect = src_h as f64 / src_w as f64;
 
@@ -94,10 +90,7 @@ pub fn pixelize(
 ///   medium/      — 160px wide, 32 colors
 ///   large/       — 256px wide, 48 colors
 /// ```
-pub fn convert_batch(
-    input_path: &Path,
-    out_dir: &Path,
-) -> Result<ConvertBatchResult, String> {
+pub fn convert_batch(input_path: &Path, out_dir: &Path) -> Result<ConvertBatchResult, String> {
     let img = image::open(input_path)
         .map_err(|e| format!("cannot open image {}: {}", input_path.display(), e))?;
 
@@ -118,8 +111,7 @@ pub fn convert_batch(
 
     // Copy original
     let orig_dest = originals_dir.join(format!("{stem}.{ext}"));
-    std::fs::copy(input_path, &orig_dest)
-        .map_err(|e| format!("cannot copy original: {e}"))?;
+    std::fs::copy(input_path, &orig_dest).map_err(|e| format!("cannot copy original: {e}"))?;
 
     let mut results = Vec::new();
 
@@ -133,7 +125,9 @@ pub fn convert_batch(
 
         // Save the 1:1 pixel art file
         let out_path = preset_dir.join(format!("{stem}.png"));
-        result.image.save(&out_path)
+        result
+            .image
+            .save(&out_path)
             .map_err(|e| format!("cannot save {}: {e}", out_path.display()))?;
 
         results.push(result);
@@ -154,7 +148,8 @@ pub fn pixelize_to_png_bytes(
 ) -> Result<Vec<u8>, String> {
     let result = pixelize(img, max_width, num_colors);
     let mut buf = std::io::Cursor::new(Vec::new());
-    result.image
+    result
+        .image
         .write_to(&mut buf, image::ImageFormat::Png)
         .map_err(|e| format!("PNG encode error: {e}"))?;
     Ok(buf.into_inner())
@@ -317,7 +312,8 @@ pub fn import_backdrop(
     let effective_h = rows * tile_size;
 
     // Step 1: Extract all unique colors and build palette
-    let mut color_counts: std::collections::HashMap<[u8; 3], u32> = std::collections::HashMap::new();
+    let mut color_counts: std::collections::HashMap<[u8; 3], u32> =
+        std::collections::HashMap::new();
     for y in 0..effective_h {
         for x in 0..effective_w {
             let px = rgba.get_pixel(x, y);
@@ -374,7 +370,8 @@ pub fn import_backdrop(
     }
 
     // Build full color→symbol lookup
-    let mut color_to_sym: std::collections::HashMap<[u8; 3], String> = std::collections::HashMap::new();
+    let mut color_to_sym: std::collections::HashMap<[u8; 3], String> =
+        std::collections::HashMap::new();
     for (ch, color) in &base_syms {
         color_to_sym.insert(*color, ch.to_string());
     }
@@ -401,7 +398,8 @@ pub fn import_backdrop(
                     let px = rgba.get_pixel(col * tile_size + tx, row * tile_size + ty);
                     let rgb = [px.0[0], px.0[1], px.0[2]];
                     let nearest = find_nearest(&rgb, &palette_colors);
-                    let sym = color_to_sym.get(&nearest)
+                    let sym = color_to_sym
+                        .get(&nearest)
                         .cloned()
                         .unwrap_or_else(|| ".".to_string());
                     hasher_data.extend_from_slice(&nearest);
@@ -439,9 +437,7 @@ pub fn import_backdrop(
     let mut pax = String::new();
 
     // Header
-    pax.push_str(&format!(
-        "[pax]\nversion = \"2.0\"\nname = \"{name}\"\n\n"
-    ));
+    pax.push_str(&format!("[pax]\nversion = \"2.0\"\nname = \"{name}\"\n\n"));
 
     // Base palette
     pax.push_str(&format!("[palette.{name}]\n"));
@@ -498,8 +494,12 @@ pub fn import_backdrop(
     pax.push_str("# ── Suggested animation zones (uncomment and tune) ──\n");
     pax.push_str(&format!("# [[backdrop.{name}.zone]]\n"));
     pax.push_str("# name = \"water\"\n");
-    pax.push_str(&format!("# rect = {{ x = 0, y = {}, w = {}, h = {} }}\n",
-        effective_h / 2, effective_w, effective_h / 2));
+    pax.push_str(&format!(
+        "# rect = {{ x = 0, y = {}, w = {}, h = {} }}\n",
+        effective_h / 2,
+        effective_w,
+        effective_h / 2
+    ));
     pax.push_str("# behavior = \"cycle\"\n");
     pax.push_str("# cycle = \"water_shimmer\"\n");
 
@@ -520,9 +520,11 @@ mod tests {
 
     #[test]
     fn pixelize_solid_color() {
-        let img = DynamicImage::ImageRgba8(
-            ImageBuffer::from_pixel(256, 256, Rgba([100, 150, 200, 255])),
-        );
+        let img = DynamicImage::ImageRgba8(ImageBuffer::from_pixel(
+            256,
+            256,
+            Rgba([100, 150, 200, 255]),
+        ));
         let result = pixelize(&img, 32, 8);
         assert_eq!(result.width, 32);
         assert_eq!(result.height, 32);
@@ -535,9 +537,7 @@ mod tests {
 
     #[test]
     fn pixelize_preserves_aspect_ratio() {
-        let img = DynamicImage::ImageRgba8(
-            ImageBuffer::from_pixel(400, 600, Rgba([0, 0, 0, 255])),
-        );
+        let img = DynamicImage::ImageRgba8(ImageBuffer::from_pixel(400, 600, Rgba([0, 0, 0, 255])));
         let result = pixelize(&img, 100, 16);
         assert_eq!(result.width, 100);
         assert_eq!(result.height, 150); // 600/400 * 100
@@ -546,9 +546,14 @@ mod tests {
     #[test]
     fn median_cut_produces_correct_palette_size() {
         let mut pixels = vec![
-            [255, 0, 0], [0, 255, 0], [0, 0, 255],
-            [128, 0, 0], [0, 128, 0], [0, 0, 128],
-            [255, 255, 0], [0, 255, 255],
+            [255, 0, 0],
+            [0, 255, 0],
+            [0, 0, 255],
+            [128, 0, 0],
+            [0, 128, 0],
+            [0, 0, 128],
+            [255, 255, 0],
+            [0, 255, 255],
         ];
         let palette = median_cut(&mut pixels, 4);
         assert!(palette.len() <= 4);

@@ -15,7 +15,6 @@
 /// 5. **Score fusion + sandwich ordering**: results ranked by fused score,
 ///    then reordered so the best passage is first and second-best is last
 ///    (mitigates the "lost in the middle" attention pattern in LLMs).
-
 use bm25::{Document, Language, SearchEngineBuilder};
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
@@ -292,9 +291,9 @@ impl KnowledgeBase {
                 // Single-word: check if any query word contains or is
                 // contained by the entity (min 3 chars to avoid noise)
                 entity.len() >= 3
-                    && query_words.iter().any(|w| {
-                        w.contains(entity.as_str()) || entity.contains(w)
-                    })
+                    && query_words
+                        .iter()
+                        .any(|w| w.contains(entity.as_str()) || entity.contains(w))
             };
             if matched {
                 if let Some(related) = self.entity_relations.get(entity) {
@@ -372,9 +371,9 @@ impl KnowledgeBase {
                 query_lower.contains(entity.as_str())
             } else {
                 entity.len() >= 3
-                    && query_words.iter().any(|w| {
-                        w.contains(entity.as_str()) || entity.contains(w)
-                    })
+                    && query_words
+                        .iter()
+                        .any(|w| w.contains(entity.as_str()) || entity.contains(w))
             };
             if matched {
                 if let Some(related) = self.entity_relations.get(entity) {
@@ -613,7 +612,12 @@ mod tests {
         assert!(results[0].score > 0.0);
         eprintln!("dithering results (k=5, sandwich ordered):");
         for r in &results {
-            eprintln!("  [{:.2}] {} — {}", r.score, r.source_title, &r.summary[..r.summary.len().min(60)]);
+            eprintln!(
+                "  [{:.2}] {} — {}",
+                r.score,
+                r.source_title,
+                &r.summary[..r.summary.len().min(60)]
+            );
         }
 
         // Search for WFC content
@@ -621,14 +625,24 @@ mod tests {
         assert!(!results.is_empty(), "should find WFC passages");
         eprintln!("WFC results:");
         for r in &results {
-            eprintln!("  [{:.2}] {} — {}", r.score, r.source_title, &r.summary[..r.summary.len().min(60)]);
+            eprintln!(
+                "  [{:.2}] {} — {}",
+                r.score,
+                r.source_title,
+                &r.summary[..r.summary.len().min(60)]
+            );
         }
 
         // Creative prompt — tests query decomposition + KG expansion
         let results = kb.search("dark stone wall with moss growing", 5);
         eprintln!("creative prompt results (decomposed):");
         for r in &results {
-            eprintln!("  [{:.2}] {} — {}", r.score, r.source_title, &r.summary[..r.summary.len().min(60)]);
+            eprintln!(
+                "  [{:.2}] {} — {}",
+                r.score,
+                r.source_title,
+                &r.summary[..r.summary.len().min(60)]
+            );
         }
 
         // Retro style query — should find hardware constraint passages
@@ -636,7 +650,12 @@ mod tests {
         assert!(!results.is_empty(), "should find retro/NES passages");
         eprintln!("retro results:");
         for r in &results {
-            eprintln!("  [{:.2}] {} — {}", r.score, r.source_title, &r.summary[..r.summary.len().min(60)]);
+            eprintln!(
+                "  [{:.2}] {} — {}",
+                r.score,
+                r.source_title,
+                &r.summary[..r.summary.len().min(60)]
+            );
         }
 
         // Sandwich ordering test: first result should have highest score,

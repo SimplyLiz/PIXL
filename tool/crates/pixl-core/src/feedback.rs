@@ -109,13 +109,19 @@ impl FeedbackStore {
 
     /// Compute aggregate statistics.
     pub fn stats(&self) -> FeedbackStats {
-        let accepts: Vec<_> = self.events.iter()
+        let accepts: Vec<_> = self
+            .events
+            .iter()
             .filter(|e| e.action == FeedbackAction::Accept)
             .collect();
-        let rejects: Vec<_> = self.events.iter()
+        let rejects: Vec<_> = self
+            .events
+            .iter()
             .filter(|e| e.action == FeedbackAction::Reject)
             .collect();
-        let edits: Vec<_> = self.events.iter()
+        let edits: Vec<_> = self
+            .events
+            .iter()
             .filter(|e| e.action == FeedbackAction::Edit)
             .collect();
 
@@ -127,17 +133,21 @@ impl FeedbackStore {
         };
 
         let avg_accepted_score = {
-            let scores: Vec<f64> = accepts.iter()
-                .filter_map(|e| e.style_score)
-                .collect();
-            if scores.is_empty() { 0.0 } else { scores.iter().sum::<f64>() / scores.len() as f64 }
+            let scores: Vec<f64> = accepts.iter().filter_map(|e| e.style_score).collect();
+            if scores.is_empty() {
+                0.0
+            } else {
+                scores.iter().sum::<f64>() / scores.len() as f64
+            }
         };
 
         let avg_rejected_score = {
-            let scores: Vec<f64> = rejects.iter()
-                .filter_map(|e| e.style_score)
-                .collect();
-            if scores.is_empty() { 0.0 } else { scores.iter().sum::<f64>() / scores.len() as f64 }
+            let scores: Vec<f64> = rejects.iter().filter_map(|e| e.style_score).collect();
+            if scores.is_empty() {
+                0.0
+            } else {
+                scores.iter().sum::<f64>() / scores.len() as f64
+            }
         };
 
         // Count reject reasons
@@ -173,16 +183,21 @@ impl FeedbackStore {
     /// Build generation constraints from feedback history.
     /// This is the structured alternative to prompt injection.
     pub fn constraints(&self) -> FeedbackConstraints {
-        let accepts: Vec<_> = self.events.iter()
+        let accepts: Vec<_> = self
+            .events
+            .iter()
             .filter(|e| e.action == FeedbackAction::Accept || e.action == FeedbackAction::Edit)
             .collect();
-        let rejects: Vec<_> = self.events.iter()
+        let rejects: Vec<_> = self
+            .events
+            .iter()
             .filter(|e| e.action == FeedbackAction::Reject)
             .collect();
 
         // Preferred style: average of accepted tile features
         let preferred_style = {
-            let features: Vec<&StyleLatent> = accepts.iter()
+            let features: Vec<&StyleLatent> = accepts
+                .iter()
                 .filter_map(|e| e.tile_features.as_ref())
                 .collect();
             if features.is_empty() {
@@ -200,29 +215,38 @@ impl FeedbackStore {
                 // Only add constraints that appear multiple times
                 avoid.push(match reason.as_str() {
                     "too_sparse" => "Avoid sparse tiles — increase pixel density.".to_string(),
-                    "too_dense" => "Avoid overly dense tiles — include some transparency or variation.".to_string(),
+                    "too_dense" => {
+                        "Avoid overly dense tiles — include some transparency or variation."
+                            .to_string()
+                    }
                     "wrong_style" => "Match the established style latent closely.".to_string(),
-                    "bad_edges" => "Ensure all edge rows/columns are solid for WFC compatibility.".to_string(),
-                    "palette_violation" => "Use only symbols from the declared palette.".to_string(),
-                    "bad_composition" => "Improve visual balance and element placement.".to_string(),
+                    "bad_edges" => {
+                        "Ensure all edge rows/columns are solid for WFC compatibility.".to_string()
+                    }
+                    "palette_violation" => {
+                        "Use only symbols from the declared palette.".to_string()
+                    }
+                    "bad_composition" => {
+                        "Improve visual balance and element placement.".to_string()
+                    }
                     _ => format!("Address repeated issue: {}", reason),
                 });
             }
         }
 
         // Few-shot examples: last 3 accepted tiles with grids
-        let examples: Vec<FewShotExample> = accepts.iter()
+        let examples: Vec<FewShotExample> = accepts
+            .iter()
             .rev()
             .filter_map(|e| {
-                e.grid.as_ref().map(|grid| {
-                    FewShotExample {
-                        name: e.tile_name.clone(),
-                        grid: grid.iter()
-                            .map(|row| row.iter().collect::<String>())
-                            .collect::<Vec<_>>()
-                            .join("\n"),
-                        tags: e.tags.clone(),
-                    }
+                e.grid.as_ref().map(|grid| FewShotExample {
+                    name: e.tile_name.clone(),
+                    grid: grid
+                        .iter()
+                        .map(|row| row.iter().collect::<String>())
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                    tags: e.tags.clone(),
                 })
             })
             .take(3)
@@ -271,8 +295,16 @@ fn average_latents(latents: &[&StyleLatent]) -> StyleLatent {
         palette_entropy: latents.iter().map(|l| l.palette_entropy).sum::<f64>() / n,
         hue_bias: {
             // Circular mean for hue
-            let x: f64 = latents.iter().map(|l| (l.hue_bias * std::f64::consts::PI / 180.0).cos()).sum::<f64>() / n;
-            let y: f64 = latents.iter().map(|l| (l.hue_bias * std::f64::consts::PI / 180.0).sin()).sum::<f64>() / n;
+            let x: f64 = latents
+                .iter()
+                .map(|l| (l.hue_bias * std::f64::consts::PI / 180.0).cos())
+                .sum::<f64>()
+                / n;
+            let y: f64 = latents
+                .iter()
+                .map(|l| (l.hue_bias * std::f64::consts::PI / 180.0).sin())
+                .sum::<f64>()
+                / n;
             let h = y.atan2(x) * 180.0 / std::f64::consts::PI;
             if h < 0.0 { h + 360.0 } else { h }
         },
@@ -287,7 +319,10 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn now() -> u64 {
-        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
     }
 
     #[test]

@@ -217,10 +217,7 @@ pub fn evaluate_constraints(
                             warnings.push(ThemeError::ConstraintViolation {
                                 name: resolved.name.clone(),
                                 constraint: constraint_name.clone(),
-                                reason: format!(
-                                    "palette_granularity must be 1-8, got {}",
-                                    n
-                                ),
+                                reason: format!("palette_granularity must be 1-8, got {}", n),
                             });
                         }
                     }

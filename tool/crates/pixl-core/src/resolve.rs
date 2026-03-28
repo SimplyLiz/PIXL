@@ -1,12 +1,11 @@
 /// Unified tile grid resolver — resolves any TileRaw to a pixel grid
 /// regardless of encoding (grid, RLE, compose, template, symmetry).
-
 use crate::compose;
 use crate::grid;
 use crate::rle;
 use crate::rotate;
 use crate::symmetry;
-use crate::types::{Palette, Stamp, TileRaw, Symmetry, parse_size};
+use crate::types::{Palette, Stamp, Symmetry, TileRaw, parse_size};
 use std::collections::HashMap;
 use thiserror::Error;
 
@@ -82,7 +81,8 @@ pub fn resolve_tile_grid(
             if let Some((base_name, rotations, flip)) = parse_rotation_suffix(name) {
                 if let Some(base_tile) = tiles.get(base_name) {
                     if base_tile.auto_rotate.is_some() {
-                        let (mut grid, w, h) = resolve_tile_grid(base_name, tiles, palettes, stamps)?;
+                        let (mut grid, w, h) =
+                            resolve_tile_grid(base_name, tiles, palettes, stamps)?;
                         if flip {
                             grid = rotate::flip_grid_h(&grid);
                         }
@@ -100,18 +100,22 @@ pub fn resolve_tile_grid(
 
     // Handle template tiles
     let effective = if let Some(ref template_name) = tile_raw.template {
-        tiles.get(template_name.as_str())
+        tiles
+            .get(template_name.as_str())
             .ok_or_else(|| ResolveError::TemplateNotFound(template_name.clone()))?
     } else {
         tile_raw
     };
 
-    let size_str = effective.size.as_deref()
+    let size_str = effective
+        .size
+        .as_deref()
         .or(tile_raw.size.as_deref())
         .ok_or(ResolveError::NoSize)?;
     let (w, h) = parse_size(size_str).map_err(ResolveError::Size)?;
 
-    let palette = palettes.get(&tile_raw.palette)
+    let palette = palettes
+        .get(&tile_raw.palette)
         .ok_or_else(|| ResolveError::PaletteNotFound(tile_raw.palette.clone()))?;
 
     // Determine symmetry
@@ -150,13 +154,37 @@ pub fn resolve_tile_grid(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{Rgba, EdgeClassRaw};
+    use crate::types::{EdgeClassRaw, Rgba};
 
     fn test_palette() -> Palette {
         let mut symbols = HashMap::new();
-        symbols.insert('.', Rgba { r: 0, g: 0, b: 0, a: 0 });
-        symbols.insert('#', Rgba { r: 42, g: 31, b: 61, a: 255 });
-        symbols.insert('+', Rgba { r: 74, g: 58, b: 109, a: 255 });
+        symbols.insert(
+            '.',
+            Rgba {
+                r: 0,
+                g: 0,
+                b: 0,
+                a: 0,
+            },
+        );
+        symbols.insert(
+            '#',
+            Rgba {
+                r: 42,
+                g: 31,
+                b: 61,
+                a: 255,
+            },
+        );
+        symbols.insert(
+            '+',
+            Rgba {
+                r: 74,
+                g: 58,
+                b: 109,
+                a: 255,
+            },
+        );
         Palette { symbols }
     }
 

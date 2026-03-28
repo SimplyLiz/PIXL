@@ -242,11 +242,21 @@ mod tests {
         let mut symbols = HashMap::new();
         symbols.insert(
             '#',
-            PaxRgba { r: 42, g: 31, b: 61, a: 255 },
+            PaxRgba {
+                r: 42,
+                g: 31,
+                b: 61,
+                a: 255,
+            },
         );
         symbols.insert(
             '+',
-            PaxRgba { r: 74, g: 58, b: 109, a: 255 },
+            PaxRgba {
+                r: 74,
+                g: 58,
+                b: 109,
+                a: 255,
+            },
         );
         Palette { symbols }
     }

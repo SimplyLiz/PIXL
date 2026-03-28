@@ -6,6 +6,7 @@ import '../providers/claude_provider.dart';
 import '../services/llm_provider.dart';
 import '../models/pixel_canvas.dart';
 import '../providers/tilemap_provider.dart';
+import 'canvas/backdrop_viewport.dart';
 import 'canvas/canvas_viewport.dart';
 import 'canvas/tilemap_viewport.dart';
 import 'canvas/variant_strip.dart';
@@ -68,9 +69,11 @@ class _StudioShellState extends ConsumerState<StudioShell> {
                   child: Column(
                     children: [
                       Expanded(
-                        child: mode == EditorMode.tilemap
-                            ? const TilemapViewport()
-                            : const CanvasViewport(),
+                        child: switch (mode) {
+                          EditorMode.tilemap => const TilemapViewport(),
+                          EditorMode.backdrop => const BackdropViewport(),
+                          _ => const CanvasViewport(),
+                        },
                       ),
                       const VariantStrip(),
                     ],

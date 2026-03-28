@@ -1,6 +1,5 @@
 /// Local inference via mlx_lm.server — manages the sidecar process and
 /// sends generation requests with the trained LoRA adapter.
-
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::process::{Child, Command};
@@ -20,7 +19,9 @@ fn find_python_with_mlx() -> String {
         let mut d = dir.clone();
         for _ in 0..5 {
             search_dirs.push(d.clone());
-            if !d.pop() { break; }
+            if !d.pop() {
+                break;
+            }
         }
     }
     // Also check cwd
@@ -41,9 +42,7 @@ fn find_python_with_mlx() -> String {
             let path = base.join(venv);
             if path.exists() {
                 // Check if mlx_lm is importable
-                let check = Command::new(&path)
-                    .args(["-c", "import mlx_lm"])
-                    .output();
+                let check = Command::new(&path).args(["-c", "import mlx_lm"]).output();
                 if let Ok(output) = check {
                     if output.status.success() {
                         return path.to_string_lossy().to_string();
@@ -55,9 +54,7 @@ fn find_python_with_mlx() -> String {
 
     // Fall back to system python
     for name in ["python3", "python"] {
-        let check = Command::new(name)
-            .args(["-c", "import mlx_lm"])
-            .output();
+        let check = Command::new(name).args(["-c", "import mlx_lm"]).output();
         if let Ok(output) = check {
             if output.status.success() {
                 return name.to_string();
@@ -189,11 +186,7 @@ impl InferenceServer {
     }
 
     /// Send a chat completion request to the local model.
-    pub async fn generate(
-        &self,
-        system_prompt: &str,
-        user_prompt: &str,
-    ) -> Result<String, String> {
+    pub async fn generate(&self, system_prompt: &str, user_prompt: &str) -> Result<String, String> {
         let messages = vec![
             serde_json::json!({"role": "system", "content": system_prompt}),
             serde_json::json!({"role": "user", "content": user_prompt}),

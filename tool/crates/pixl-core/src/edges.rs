@@ -131,7 +131,11 @@ mod tests {
     fn classify_majority() {
         // 3 out of 5 chars are '+' -> edge_+
         let class = classify_edge("#+.++");
-        assert_eq!(class, "edge_+", "expected edge_+ for majority +, got {}", class);
+        assert_eq!(
+            class, "edge_+",
+            "expected edge_+ for majority +, got {}",
+            class
+        );
     }
 
     #[test]
@@ -149,7 +153,11 @@ mod tests {
     fn classify_edge_majority_dominant() {
         // 10 '+' out of 16 (62.5%) -> edge_+
         let class = classify_edge("++++s+++s++++s++");
-        assert_eq!(class, "edge_+", "expected edge_+ for majority +, got {}", class);
+        assert_eq!(
+            class, "edge_+",
+            "expected edge_+ for majority +, got {}",
+            class
+        );
     }
 
     #[test]

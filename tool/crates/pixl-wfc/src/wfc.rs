@@ -99,7 +99,8 @@ pub fn run_wfc(
     }
 
     // Build diagnostics from tile names and pin info
-    let diagnostics = diagnose_wfc_failure(rules, &config.tile_names, pins, config.width, config.height);
+    let diagnostics =
+        diagnose_wfc_failure(rules, &config.tile_names, pins, config.width, config.height);
 
     Err(WfcError::ExhaustedRetries {
         retries: config.max_retries,
@@ -418,9 +419,13 @@ pub fn diagnose_wfc_failure(
     if !pins.is_empty() {
         let mut pin_issues = Vec::new();
         for pin in pins {
-            let name = tile_names.get(pin.tile_idx).map(|s| s.as_str()).unwrap_or("?");
+            let name = tile_names
+                .get(pin.tile_idx)
+                .map(|s| s.as_str())
+                .unwrap_or("?");
             let is_border = pin.x == 0 || pin.y == 0 || pin.x == width - 1 || pin.y == height - 1;
-            let is_corner = (pin.x == 0 || pin.x == width - 1) && (pin.y == 0 || pin.y == height - 1);
+            let is_corner =
+                (pin.x == 0 || pin.x == width - 1) && (pin.y == 0 || pin.y == height - 1);
 
             // Check interior-facing directions for compatibility
             let dirs_to_check: Vec<Direction> = Direction::all()
@@ -457,7 +462,10 @@ pub fn diagnose_wfc_failure(
                         let mut shared = compat.clone();
                         shared.intersect_with(np_compat);
                         if shared.count_ones(..) == 0 {
-                            let np_name = tile_names.get(np.tile_idx).map(|s| s.as_str()).unwrap_or("?");
+                            let np_name = tile_names
+                                .get(np.tile_idx)
+                                .map(|s| s.as_str())
+                                .unwrap_or("?");
                             pin_issues.push(format!(
                                 "  pin '{}' at ({},{}) and pin '{}' at ({},{}) are adjacent but have no compatible tile between them",
                                 name, pin.x, pin.y, np_name, np.x, np.y
@@ -486,7 +494,8 @@ pub fn diagnose_wfc_failure(
     }
 
     // 4. Connectivity summary
-    let mut edge_pairs: std::collections::HashMap<(String, String), usize> = std::collections::HashMap::new();
+    let mut edge_pairs: std::collections::HashMap<(String, String), usize> =
+        std::collections::HashMap::new();
     for idx in 0..n {
         for dir in Direction::all() {
             let count = rules.compatible(idx, dir).count_ones(..);
@@ -506,7 +515,10 @@ pub fn diagnose_wfc_failure(
     }
 
     if diags.is_empty() {
-        diags.push("hint: try adding transition tiles with mixed edge classes, or increase max_retries.".to_string());
+        diags.push(
+            "hint: try adding transition tiles with mixed edge classes, or increase max_retries."
+                .to_string(),
+        );
     }
 
     diags

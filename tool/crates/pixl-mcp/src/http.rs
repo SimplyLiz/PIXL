@@ -1,11 +1,14 @@
 /// HTTP API server for PIXL Studio integration.
 /// Exposes the same handlers as the MCP server over REST endpoints.
-
-use crate::{handlers, inference::{InferenceConfig, InferenceServer}, state::McpState};
+use crate::{
+    handlers,
+    inference::{InferenceConfig, InferenceServer},
+    state::McpState,
+};
 use axum::{
+    Json, Router,
     extract::State,
     routing::{get, post},
-    Json, Router,
 };
 use serde_json::Value;
 use std::sync::{Arc, Mutex};
@@ -69,7 +72,11 @@ async fn health() -> &'static str {
 }
 
 async fn session_start(State(state): State<SharedState>) -> Json<Value> {
-    Json(handlers::handle_tool(&state.mcp, "pixl_session_start", &Value::Null))
+    Json(handlers::handle_tool(
+        &state.mcp,
+        "pixl_session_start",
+        &Value::Null,
+    ))
 }
 
 async fn get_palette(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
@@ -89,11 +96,19 @@ async fn delete_tile(State(state): State<SharedState>, Json(args): Json<Value>) 
 }
 
 async fn check_edge_pair(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
-    Json(handlers::handle_tool(&state.mcp, "pixl_check_edge_pair", &args))
+    Json(handlers::handle_tool(
+        &state.mcp,
+        "pixl_check_edge_pair",
+        &args,
+    ))
 }
 
 async fn list_tiles(State(state): State<SharedState>) -> Json<Value> {
-    Json(handlers::handle_tool(&state.mcp, "pixl_list_tiles", &Value::Null))
+    Json(handlers::handle_tool(
+        &state.mcp,
+        "pixl_list_tiles",
+        &Value::Null,
+    ))
 }
 
 async fn validate(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
@@ -124,33 +139,50 @@ async fn render_sprite_gif(
     State(state): State<SharedState>,
     Json(args): Json<Value>,
 ) -> Json<Value> {
-    Json(handlers::handle_tool(&state.mcp, "pixl_render_sprite_gif", &args))
+    Json(handlers::handle_tool(
+        &state.mcp,
+        "pixl_render_sprite_gif",
+        &args,
+    ))
 }
 
 async fn get_file(State(state): State<SharedState>) -> Json<Value> {
-    Json(handlers::handle_tool(&state.mcp, "pixl_get_file", &Value::Null))
+    Json(handlers::handle_tool(
+        &state.mcp,
+        "pixl_get_file",
+        &Value::Null,
+    ))
 }
 
 async fn generate_context(
     State(state): State<SharedState>,
     Json(args): Json<Value>,
 ) -> Json<Value> {
-    Json(handlers::handle_tool(&state.mcp, "pixl_generate_context", &args))
+    Json(handlers::handle_tool(
+        &state.mcp,
+        "pixl_generate_context",
+        &args,
+    ))
 }
 
-async fn generate_tile(
-    State(state): State<SharedState>,
-    Json(args): Json<Value>,
-) -> Json<Value> {
+async fn generate_tile(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
     Json(handlers::handle_generate_tile(&state.mcp, &state.inference, &args).await)
 }
 
 async fn list_themes(State(state): State<SharedState>) -> Json<Value> {
-    Json(handlers::handle_tool(&state.mcp, "pixl_list_themes", &Value::Null))
+    Json(handlers::handle_tool(
+        &state.mcp,
+        "pixl_list_themes",
+        &Value::Null,
+    ))
 }
 
 async fn list_stamps(State(state): State<SharedState>) -> Json<Value> {
-    Json(handlers::handle_tool(&state.mcp, "pixl_list_stamps", &Value::Null))
+    Json(handlers::handle_tool(
+        &state.mcp,
+        "pixl_list_stamps",
+        &Value::Null,
+    ))
 }
 
 async fn pack_atlas(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
@@ -166,27 +198,54 @@ async fn load_source(State(state): State<SharedState>, Json(args): Json<Value>) 
 }
 
 async fn record_feedback(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
-    Json(handlers::handle_tool(&state.mcp, "pixl_record_feedback", &args))
+    Json(handlers::handle_tool(
+        &state.mcp,
+        "pixl_record_feedback",
+        &args,
+    ))
 }
 
 async fn feedback_stats(State(state): State<SharedState>) -> Json<Value> {
-    Json(handlers::handle_tool(&state.mcp, "pixl_feedback_stats", &Value::Null))
+    Json(handlers::handle_tool(
+        &state.mcp,
+        "pixl_feedback_stats",
+        &Value::Null,
+    ))
 }
 
 async fn export_training(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
-    Json(handlers::handle_tool(&state.mcp, "pixl_export_training", &args))
+    Json(handlers::handle_tool(
+        &state.mcp,
+        "pixl_export_training",
+        &args,
+    ))
 }
 
 async fn training_stats(State(state): State<SharedState>) -> Json<Value> {
-    Json(handlers::handle_tool(&state.mcp, "pixl_training_stats", &Value::Null))
+    Json(handlers::handle_tool(
+        &state.mcp,
+        "pixl_training_stats",
+        &Value::Null,
+    ))
 }
 
 async fn feedback_constraints(State(state): State<SharedState>) -> Json<Value> {
-    Json(handlers::handle_tool(&state.mcp, "pixl_feedback_constraints", &Value::Null))
+    Json(handlers::handle_tool(
+        &state.mcp,
+        "pixl_feedback_constraints",
+        &Value::Null,
+    ))
 }
 
-async fn generate_transition(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
-    Json(handlers::handle_tool(&state.mcp, "pixl_generate_transition_context", &args))
+async fn generate_transition(
+    State(state): State<SharedState>,
+    Json(args): Json<Value>,
+) -> Json<Value> {
+    Json(handlers::handle_tool(
+        &state.mcp,
+        "pixl_generate_transition_context",
+        &args,
+    ))
 }
 
 async fn convert_sprite(Json(args): Json<Value>) -> Json<Value> {
@@ -206,11 +265,19 @@ async fn backdrop_import(Json(args): Json<Value>) -> Json<Value> {
 }
 
 async fn backdrop_render(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
-    Json(handlers::handle_tool(&state.mcp, "pixl_backdrop_render", &args))
+    Json(handlers::handle_tool(
+        &state.mcp,
+        "pixl_backdrop_render",
+        &args,
+    ))
 }
 
 async fn check_completeness(State(state): State<SharedState>) -> Json<Value> {
-    Json(handlers::handle_tool(&state.mcp, "pixl_check_completeness", &Value::Null))
+    Json(handlers::handle_tool(
+        &state.mcp,
+        "pixl_check_completeness",
+        &Value::Null,
+    ))
 }
 
 async fn new_from_template(Json(args): Json<Value>) -> Json<Value> {

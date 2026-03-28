@@ -19,7 +19,11 @@ pub fn import_reference(
     let mut clipped = 0u32;
 
     // Build palette lookup vec for efficiency
-    let palette_entries: Vec<(char, PaxRgba)> = palette.symbols.iter().map(|(&c, &rgba)| (c, rgba)).collect();
+    let palette_entries: Vec<(char, PaxRgba)> = palette
+        .symbols
+        .iter()
+        .map(|(&c, &rgba)| (c, rgba))
+        .collect();
 
     for y in 0..target_height {
         let mut row = Vec::with_capacity(target_width as usize);
@@ -90,11 +94,7 @@ fn perceptual_distance(a: &Rgba<u8>, b: &PaxRgba) -> f64 {
 }
 
 /// Apply 4x4 Bayer ordered dithering.
-fn apply_bayer_dither(
-    grid: &mut [Vec<char>],
-    source: &DynamicImage,
-    palette: &[(char, PaxRgba)],
-) {
+fn apply_bayer_dither(grid: &mut [Vec<char>], source: &DynamicImage, palette: &[(char, PaxRgba)]) {
     const BAYER_4X4: [[f64; 4]; 4] = [
         [0.0 / 16.0, 8.0 / 16.0, 2.0 / 16.0, 10.0 / 16.0],
         [12.0 / 16.0, 4.0 / 16.0, 14.0 / 16.0, 6.0 / 16.0],
@@ -131,17 +131,39 @@ mod tests {
 
     fn test_palette() -> Palette {
         let mut symbols = HashMap::new();
-        symbols.insert('.', PaxRgba { r: 0, g: 0, b: 0, a: 255 });
-        symbols.insert('#', PaxRgba { r: 128, g: 128, b: 128, a: 255 });
-        symbols.insert('+', PaxRgba { r: 255, g: 255, b: 255, a: 255 });
+        symbols.insert(
+            '.',
+            PaxRgba {
+                r: 0,
+                g: 0,
+                b: 0,
+                a: 255,
+            },
+        );
+        symbols.insert(
+            '#',
+            PaxRgba {
+                r: 128,
+                g: 128,
+                b: 128,
+                a: 255,
+            },
+        );
+        symbols.insert(
+            '+',
+            PaxRgba {
+                r: 255,
+                g: 255,
+                b: 255,
+                a: 255,
+            },
+        );
         Palette { symbols }
     }
 
     #[test]
     fn import_solid_black_image() {
-        let img = DynamicImage::ImageRgba8(
-            ImageBuffer::from_pixel(32, 32, Rgba([0, 0, 0, 255])),
-        );
+        let img = DynamicImage::ImageRgba8(ImageBuffer::from_pixel(32, 32, Rgba([0, 0, 0, 255])));
         let result = import_reference(&img, 4, 4, &test_palette(), false);
         assert_eq!(result.width, 4);
         assert_eq!(result.height, 4);
@@ -156,9 +178,8 @@ mod tests {
 
     #[test]
     fn import_solid_white_image() {
-        let img = DynamicImage::ImageRgba8(
-            ImageBuffer::from_pixel(32, 32, Rgba([255, 255, 255, 255])),
-        );
+        let img =
+            DynamicImage::ImageRgba8(ImageBuffer::from_pixel(32, 32, Rgba([255, 255, 255, 255])));
         let result = import_reference(&img, 4, 4, &test_palette(), false);
         for row in &result.grid {
             for &ch in row {
@@ -169,9 +190,11 @@ mod tests {
 
     #[test]
     fn import_downscales() {
-        let img = DynamicImage::ImageRgba8(
-            ImageBuffer::from_pixel(256, 256, Rgba([128, 128, 128, 255])),
-        );
+        let img = DynamicImage::ImageRgba8(ImageBuffer::from_pixel(
+            256,
+            256,
+            Rgba([128, 128, 128, 255]),
+        ));
         let result = import_reference(&img, 16, 16, &test_palette(), false);
         assert_eq!(result.grid.len(), 16);
         assert_eq!(result.grid[0].len(), 16);
@@ -179,9 +202,8 @@ mod tests {
 
     #[test]
     fn import_with_dither_produces_grid() {
-        let img = DynamicImage::ImageRgba8(
-            ImageBuffer::from_pixel(32, 32, Rgba([64, 64, 64, 255])),
-        );
+        let img =
+            DynamicImage::ImageRgba8(ImageBuffer::from_pixel(32, 32, Rgba([64, 64, 64, 255])));
         let result = import_reference(&img, 8, 8, &test_palette(), true);
         assert_eq!(result.grid.len(), 8);
         // Dithered result should have a mix of symbols
@@ -189,9 +211,7 @@ mod tests {
 
     #[test]
     fn grid_string_format() {
-        let img = DynamicImage::ImageRgba8(
-            ImageBuffer::from_pixel(4, 4, Rgba([0, 0, 0, 255])),
-        );
+        let img = DynamicImage::ImageRgba8(ImageBuffer::from_pixel(4, 4, Rgba([0, 0, 0, 255])));
         let result = import_reference(&img, 2, 2, &test_palette(), false);
         assert_eq!(result.grid_string, "..\n..");
     }

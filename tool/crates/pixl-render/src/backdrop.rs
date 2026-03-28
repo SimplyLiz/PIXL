@@ -3,8 +3,8 @@
 use image::{ImageBuffer, Rgba, RgbaImage};
 use pixl_core::types::{
     AnimClock, Backdrop, BackdropLayer, BackdropTileRaw, BackdropZone, BlendMode, Cycle,
-    FadeTarget, PaletteExt, Palette, PaxFile, Rgba as PaxRgba, TileModifier, TileRef,
-    ZoneBehavior, ZoneRect,
+    FadeTarget, Palette, PaletteExt, PaxFile, Rgba as PaxRgba, TileModifier, TileRef, ZoneBehavior,
+    ZoneRect,
 };
 use std::collections::HashMap;
 
@@ -22,7 +22,14 @@ pub fn render_backdrop(
         if let Some((target, amount)) = &layer.fade {
             apply_fade(&mut layer_img, *target, *amount);
         }
-        blend_onto(&mut img, &layer_img, layer.blend, layer.opacity, layer.offset_x, layer.offset_y);
+        blend_onto(
+            &mut img,
+            &layer_img,
+            layer.blend,
+            layer.opacity,
+            layer.offset_x,
+            layer.offset_y,
+        );
     }
 
     img
@@ -44,14 +51,26 @@ pub fn render_backdrop_frame(
     // Apply per-tile frame animation (swap tiles based on tick)
     if !animated_tiles.is_empty() {
         apply_tile_animations(
-            &mut frame, backdrop, tile_grids, palette_ext, animated_tiles, tick,
+            &mut frame,
+            backdrop,
+            tile_grids,
+            palette_ext,
+            animated_tiles,
+            tick,
         );
     }
 
     // Apply zone behaviors
     for zone in &backdrop.zones {
         apply_zone_behavior(
-            &mut frame, base_img, backdrop, tile_grids, palette_ext, cycles, zone, tick,
+            &mut frame,
+            base_img,
+            backdrop,
+            tile_grids,
+            palette_ext,
+            cycles,
+            zone,
+            tick,
         );
     }
 
@@ -111,7 +130,8 @@ pub fn render_layer_at_scroll(
                 (tile_x as i32 - layer_ox, tile_y as i32 - layer_oy)
             };
 
-            if draw_x < 0 || draw_y < 0
+            if draw_x < 0
+                || draw_y < 0
                 || draw_x >= backdrop.width as i32
                 || draw_y >= backdrop.height as i32
             {
@@ -119,8 +139,14 @@ pub fn render_layer_at_scroll(
             }
 
             render_tile_at(
-                &mut img, grid, tile_ref, palette_ext,
-                draw_x as u32, draw_y as u32, backdrop.tile_width, backdrop.tile_height,
+                &mut img,
+                grid,
+                tile_ref,
+                palette_ext,
+                draw_x as u32,
+                draw_y as u32,
+                backdrop.tile_width,
+                backdrop.tile_height,
             );
         }
     }
@@ -235,15 +261,9 @@ fn blend_onto(
                 // Standard alpha-over compositing
                 blend_normal(dst_pixel, src_pixel, src_a)
             }
-            BlendMode::Additive => {
-                blend_additive(dst_pixel, src_pixel, src_a)
-            }
-            BlendMode::Multiply => {
-                blend_multiply(dst_pixel, src_pixel, src_a)
-            }
-            BlendMode::Screen => {
-                blend_screen(dst_pixel, src_pixel, src_a)
-            }
+            BlendMode::Additive => blend_additive(dst_pixel, src_pixel, src_a),
+            BlendMode::Multiply => blend_multiply(dst_pixel, src_pixel, src_a),
+            BlendMode::Screen => blend_screen(dst_pixel, src_pixel, src_a),
         };
 
         dst.put_pixel(dx, dy, blended);
@@ -282,9 +302,15 @@ fn blend_multiply(dst: &Rgba<u8>, src: &Rgba<u8>, src_a: f64) -> Rgba<u8> {
 fn blend_screen(dst: &Rgba<u8>, src: &Rgba<u8>, src_a: f64) -> Rgba<u8> {
     // Screen blend: dst + src - dst*src, mixed by src_a
     Rgba([
-        ((dst.0[0] as f64 + src.0[0] as f64 * src_a - dst.0[0] as f64 * src.0[0] as f64 / 255.0 * src_a).clamp(0.0, 255.0)) as u8,
-        ((dst.0[1] as f64 + src.0[1] as f64 * src_a - dst.0[1] as f64 * src.0[1] as f64 / 255.0 * src_a).clamp(0.0, 255.0)) as u8,
-        ((dst.0[2] as f64 + src.0[2] as f64 * src_a - dst.0[2] as f64 * src.0[2] as f64 / 255.0 * src_a).clamp(0.0, 255.0)) as u8,
+        ((dst.0[0] as f64 + src.0[0] as f64 * src_a
+            - dst.0[0] as f64 * src.0[0] as f64 / 255.0 * src_a)
+            .clamp(0.0, 255.0)) as u8,
+        ((dst.0[1] as f64 + src.0[1] as f64 * src_a
+            - dst.0[1] as f64 * src.0[1] as f64 / 255.0 * src_a)
+            .clamp(0.0, 255.0)) as u8,
+        ((dst.0[2] as f64 + src.0[2] as f64 * src_a
+            - dst.0[2] as f64 * src.0[2] as f64 / 255.0 * src_a)
+            .clamp(0.0, 255.0)) as u8,
         dst.0[3].max((src_a.min(1.0) * 255.0) as u8),
     ])
 }
@@ -330,8 +356,14 @@ fn apply_tile_animations(
                     let base_x = col_idx as u32 * backdrop.tile_width;
                     let base_y = row_idx as u32 * backdrop.tile_height;
                     render_tile_at(
-                        frame, grid, tile_ref, palette_ext,
-                        base_x, base_y, backdrop.tile_width, backdrop.tile_height,
+                        frame,
+                        grid,
+                        tile_ref,
+                        palette_ext,
+                        base_x,
+                        base_y,
+                        backdrop.tile_width,
+                        backdrop.tile_height,
                     );
                 }
             }
@@ -359,20 +391,51 @@ fn apply_zone_behavior(
                 apply_cycle(frame, backdrop, tile_grids, palette_ext, cycle, rect, tick);
             }
         }
-        ZoneBehavior::Wave { cycle: name, phase_rows, wave_dx } => {
+        ZoneBehavior::Wave {
+            cycle: name,
+            phase_rows,
+            wave_dx,
+        } => {
             if let Some(cycle) = cycles.get(name) {
-                apply_wave(frame, backdrop, tile_grids, palette_ext, cycle, rect, tick, *phase_rows);
+                apply_wave(
+                    frame,
+                    backdrop,
+                    tile_grids,
+                    palette_ext,
+                    cycle,
+                    rect,
+                    tick,
+                    *phase_rows,
+                );
             }
         }
-        ZoneBehavior::Flicker { cycle: name, density, seed } => {
+        ZoneBehavior::Flicker {
+            cycle: name,
+            density,
+            seed,
+        } => {
             if let Some(cycle) = cycles.get(name) {
-                apply_flicker(frame, backdrop, tile_grids, palette_ext, cycle, rect, tick, *density, *seed);
+                apply_flicker(
+                    frame,
+                    backdrop,
+                    tile_grids,
+                    palette_ext,
+                    cycle,
+                    rect,
+                    tick,
+                    *density,
+                    *seed,
+                );
             }
         }
         ZoneBehavior::ScrollDown { speed, wrap } => {
             apply_scroll_down(frame, base_img, rect, tick, *speed, *wrap);
         }
-        ZoneBehavior::HScrollSine { amplitude, period, speed } => {
+        ZoneBehavior::HScrollSine {
+            amplitude,
+            period,
+            speed,
+        } => {
             apply_hscroll_sine(frame, base_img, rect, tick, *amplitude, *period, *speed);
         }
         ZoneBehavior::ColorGradient { from, to, vertical } => {
@@ -384,11 +447,24 @@ fn apply_zone_behavior(
         ZoneBehavior::Window { .. } => {
             // Window zones are applied during layer compositing, not post-render
         }
-        ZoneBehavior::VScrollSine { amplitude, period, speed } => {
+        ZoneBehavior::VScrollSine {
+            amplitude,
+            period,
+            speed,
+        } => {
             apply_vscroll_sine(frame, base_img, rect, tick, *amplitude, *period, *speed);
         }
         ZoneBehavior::PaletteRamp { symbol, from, to } => {
-            apply_palette_ramp(frame, backdrop, tile_grids, palette_ext, rect, symbol, from, to);
+            apply_palette_ramp(
+                frame,
+                backdrop,
+                tile_grids,
+                palette_ext,
+                rect,
+                symbol,
+                from,
+                to,
+            );
         }
     }
 }
@@ -403,7 +479,9 @@ fn apply_cycle(
     tick: u32,
 ) {
     let len = cycle.symbols.len();
-    if len < 2 { return; }
+    if len < 2 {
+        return;
+    }
     let shift = compute_cycle_shift(cycle, tick);
 
     for py in rect.y..(rect.y + rect.h).min(backdrop.height) {
@@ -429,7 +507,9 @@ fn apply_wave(
     phase_rows: u32,
 ) {
     let len = cycle.symbols.len();
-    if len < 2 { return; }
+    if len < 2 {
+        return;
+    }
     let phase_rows = phase_rows.max(1);
 
     for py in rect.y..(rect.y + rect.h).min(backdrop.height) {
@@ -459,7 +539,9 @@ fn apply_flicker(
     seed: u64,
 ) {
     let len = cycle.symbols.len();
-    if len < 2 { return; }
+    if len < 2 {
+        return;
+    }
     let shift = compute_cycle_shift(cycle, tick);
 
     for py in rect.y..(rect.y + rect.h).min(backdrop.height) {
@@ -498,7 +580,9 @@ fn apply_scroll_down(
                 rect.y + ((py - rect.y + zone_h - (offset % zone_h)) % zone_h)
             } else {
                 let sy = py as i64 - offset as i64;
-                if sy < rect.y as i64 { continue; }
+                if sy < rect.y as i64 {
+                    continue;
+                }
                 sy as u32
             };
             if src_y < base_img.height() {
@@ -526,13 +610,21 @@ fn apply_hscroll_sine(
 
     for py in rect.y..(rect.y + rect.h).min(h) {
         let scanline = (py - rect.y) as f64;
-        let offset = (amplitude as f64 * (phase + scanline * 2.0 * std::f64::consts::PI / period).sin()) as i32;
+        let offset = (amplitude as f64
+            * (phase + scanline * 2.0 * std::f64::consts::PI / period).sin())
+            as i32;
 
-        if offset == 0 { continue; }
+        if offset == 0 {
+            continue;
+        }
 
         for px in rect.x..(rect.x + rect.w).min(w) {
             let src_x = px as i32 - offset;
-            if src_x >= rect.x as i32 && src_x < (rect.x + rect.w) as i32 && src_x >= 0 && (src_x as u32) < w {
+            if src_x >= rect.x as i32
+                && src_x < (rect.x + rect.w) as i32
+                && src_x >= 0
+                && (src_x as u32) < w
+            {
                 frame.put_pixel(px, py, *base_img.get_pixel(src_x as u32, py));
             }
         }
@@ -564,24 +656,25 @@ fn apply_color_gradient(
             let gg = (from.g as f64 * (1.0 - t) + to.g as f64 * t) / 255.0;
             let gb = (from.b as f64 * (1.0 - t) + to.b as f64 * t) / 255.0;
 
-            frame.put_pixel(px, py, Rgba([
-                (pixel.0[0] as f64 * gr).min(255.0) as u8,
-                (pixel.0[1] as f64 * gg).min(255.0) as u8,
-                (pixel.0[2] as f64 * gb).min(255.0) as u8,
-                pixel.0[3],
-            ]));
+            frame.put_pixel(
+                px,
+                py,
+                Rgba([
+                    (pixel.0[0] as f64 * gr).min(255.0) as u8,
+                    (pixel.0[1] as f64 * gg).min(255.0) as u8,
+                    (pixel.0[2] as f64 * gb).min(255.0) as u8,
+                    pixel.0[3],
+                ]),
+            );
         }
     }
 }
 
 /// GBA-style mosaic: pixelate a region with independent X/Y block sizes.
-fn apply_mosaic(
-    frame: &mut RgbaImage,
-    rect: &ZoneRect,
-    size_x: u32,
-    size_y: u32,
-) {
-    if size_x <= 1 && size_y <= 1 { return; }
+fn apply_mosaic(frame: &mut RgbaImage, rect: &ZoneRect, size_x: u32, size_y: u32) {
+    if size_x <= 1 && size_y <= 1 {
+        return;
+    }
     let (w, h) = frame.dimensions();
     let sx = size_x.max(1);
     let sy = size_y.max(1);
@@ -624,14 +717,20 @@ fn apply_vscroll_sine(
 
     for px in rect.x..(rect.x + rect.w).min(w) {
         let column = (px - rect.x) as f64;
-        let offset = (amplitude as f64 * (phase + column * 2.0 * std::f64::consts::PI / period).sin()) as i32;
+        let offset = (amplitude as f64
+            * (phase + column * 2.0 * std::f64::consts::PI / period).sin())
+            as i32;
 
-        if offset == 0 { continue; }
+        if offset == 0 {
+            continue;
+        }
 
         for py in rect.y..(rect.y + rect.h).min(h) {
             let src_y = py as i32 - offset;
-            if src_y >= rect.y as i32 && src_y < (rect.y + rect.h) as i32
-                && src_y >= 0 && (src_y as u32) < h
+            if src_y >= rect.y as i32
+                && src_y < (rect.y + rect.h) as i32
+                && src_y >= 0
+                && (src_y as u32) < h
             {
                 frame.put_pixel(px, py, *base_img.get_pixel(px, src_y as u32));
             }
@@ -679,10 +778,14 @@ fn apply_palette_ramp(
 /// GBA BLDY-style fade: darken to black or brighten to white.
 fn apply_fade(img: &mut RgbaImage, target: FadeTarget, amount: f64) {
     let amount = amount.clamp(0.0, 1.0);
-    if amount < 0.004 { return; }
+    if amount < 0.004 {
+        return;
+    }
 
     for pixel in img.pixels_mut() {
-        if pixel.0[3] == 0 { continue; }
+        if pixel.0[3] == 0 {
+            continue;
+        }
         match target {
             FadeTarget::Black => {
                 // I = I * (1 - amount)
@@ -713,7 +816,11 @@ fn get_symbol_at(
     for layer in backdrop.layers.iter().rev() {
         let col = px / backdrop.tile_width;
         let row = py / backdrop.tile_height;
-        if let Some(tile_ref) = layer.tilemap.get(row as usize).and_then(|r| r.get(col as usize)) {
+        if let Some(tile_ref) = layer
+            .tilemap
+            .get(row as usize)
+            .and_then(|r| r.get(col as usize))
+        {
             if let Some(grid) = tile_grids.get(&tile_ref.name) {
                 let local_x = px % backdrop.tile_width;
                 let local_y = py % backdrop.tile_height;
@@ -745,7 +852,9 @@ fn resolve_symbol_color(sym: &str, palette_ext: &PaletteExt) -> Rgba<u8> {
 
 fn compute_cycle_shift(cycle: &Cycle, tick: u32) -> usize {
     let len = cycle.symbols.len();
-    if len < 2 { return 0; }
+    if len < 2 {
+        return 0;
+    }
     match cycle.direction.as_str() {
         "forward" => (tick as usize) % len,
         "backward" => (len - (tick as usize % len)) % len,
@@ -804,7 +913,9 @@ pub fn resolve_anim_clock_tiles(
 
         // Also check explicit animation field
         if !tile_raw.animation.is_empty() {
-            let frames: Vec<(String, u32)> = tile_raw.animation.iter()
+            let frames: Vec<(String, u32)> = tile_raw
+                .animation
+                .iter()
                 .map(|f| (f.tile.clone(), f.duration_ms))
                 .collect();
             if !frames.is_empty() {
@@ -836,14 +947,20 @@ pub fn export_backdrop_gif(
     let mut frames = Vec::with_capacity(num_frames as usize);
     for tick in 0..num_frames {
         let frame = render_backdrop_frame(
-            &base, backdrop, tile_grids, palette_ext, cycles, palettes, &animated_tiles, tick,
+            &base,
+            backdrop,
+            tile_grids,
+            palette_ext,
+            cycles,
+            palettes,
+            &animated_tiles,
+            tick,
         );
 
         if scale > 1 {
             let (w, h) = frame.dimensions();
-            let scaled = image::imageops::resize(
-                &frame, w * scale, h * scale, image::imageops::Nearest,
-            );
+            let scaled =
+                image::imageops::resize(&frame, w * scale, h * scale, image::imageops::Nearest);
             frames.push(scaled);
         } else {
             frames.push(frame);

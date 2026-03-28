@@ -65,7 +65,10 @@ impl TileEdges {
             s: s.to_string(),
             w: w.to_string(),
             weight,
-            ne: None, se: None, sw: None, nw: None,
+            ne: None,
+            se: None,
+            sw: None,
+            nw: None,
         }
     }
 
@@ -102,8 +105,8 @@ fn corners_compatible(a: &TileEdges, b: &TileEdges, dir: Direction) -> bool {
     // When A is placed in `dir` relative to B:
     // - A's clockwise corner in `dir` must match B's counter-clockwise corner in `dir`
     // Example: A is East of B → A.NW must match B.NE, and A.SW must match B.SE
-    let a_ccw = a.corner_in(dir, false);  // counter-clockwise corner of A facing dir
-    let b_cw = b.corner_in(dir, true);    // clockwise corner of B facing dir
+    let a_ccw = a.corner_in(dir, false); // counter-clockwise corner of A facing dir
+    let b_cw = b.corner_in(dir, true); // clockwise corner of B facing dir
 
     // Only check if BOTH tiles define the relevant corners
     match (a_ccw, b_cw) {

@@ -5,7 +5,6 @@
 ///
 /// Pipeline: PNG -> palette quantize -> symbol assign -> TOML generate
 /// -> affordance tag mapping -> batch validation
-
 use crate::types::{Palette, Rgba};
 use std::collections::HashMap;
 
@@ -40,9 +39,7 @@ pub fn quantize_pixels(
     palette: &Palette,
     void_sym: char,
 ) -> (Vec<Vec<char>>, f64) {
-    let entries: Vec<(char, &Rgba)> = palette.symbols.iter()
-        .map(|(&c, rgba)| (c, rgba))
-        .collect();
+    let entries: Vec<(char, &Rgba)> = palette.symbols.iter().map(|(&c, rgba)| (c, rgba)).collect();
 
     let mut grid = Vec::with_capacity(height as usize);
     let mut total_dist = 0.0;
@@ -67,7 +64,9 @@ pub fn quantize_pixels(
             let mut best_sym = void_sym;
             let mut best_dist = f64::MAX;
             for &(sym, rgba) in &entries {
-                if sym == void_sym { continue; }
+                if sym == void_sym {
+                    continue;
+                }
                 let dr = r as f64 - rgba.r as f64;
                 let dg = g as f64 - rgba.g as f64;
                 let db = b as f64 - rgba.b as f64;
@@ -155,24 +154,30 @@ pub fn generate_pax_stamps(batch: &CorpusBatch) -> String {
 /// Generate training data entries for LoRA fine-tuning.
 /// Each entry is a (description, pax_grid) pair.
 pub fn generate_training_pairs(batch: &CorpusBatch) -> Vec<(String, String)> {
-    batch.entries.iter().map(|entry| {
-        let mut desc_parts = Vec::new();
-        desc_parts.push(format!("a {}x{} pixel art tile", entry.width, entry.height));
-        if let Some(ref aff) = entry.affordance {
-            desc_parts.push(format!("({} type)", aff));
-        }
-        if !entry.tags.is_empty() {
-            desc_parts.push(format!("tagged: {}", entry.tags.join(", ")));
-        }
-        let description = desc_parts.join(" ");
+    batch
+        .entries
+        .iter()
+        .map(|entry| {
+            let mut desc_parts = Vec::new();
+            desc_parts.push(format!("a {}x{} pixel art tile", entry.width, entry.height));
+            if let Some(ref aff) = entry.affordance {
+                desc_parts.push(format!("({} type)", aff));
+            }
+            if !entry.tags.is_empty() {
+                desc_parts.push(format!("tagged: {}", entry.tags.join(", ")));
+            }
+            let description = desc_parts.join(" ");
 
-        let grid_str: String = entry.grid.iter()
-            .map(|row| row.iter().collect::<String>())
-            .collect::<Vec<_>>()
-            .join("\n");
+            let grid_str: String = entry
+                .grid
+                .iter()
+                .map(|row| row.iter().collect::<String>())
+                .collect::<Vec<_>>()
+                .join("\n");
 
-        (description, grid_str)
-    }).collect()
+            (description, grid_str)
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -181,9 +186,33 @@ mod tests {
 
     fn test_palette() -> Palette {
         let mut symbols = HashMap::new();
-        symbols.insert('.', Rgba { r: 0, g: 0, b: 0, a: 0 });
-        symbols.insert('#', Rgba { r: 42, g: 31, b: 61, a: 255 });
-        symbols.insert('+', Rgba { r: 74, g: 58, b: 109, a: 255 });
+        symbols.insert(
+            '.',
+            Rgba {
+                r: 0,
+                g: 0,
+                b: 0,
+                a: 0,
+            },
+        );
+        symbols.insert(
+            '#',
+            Rgba {
+                r: 42,
+                g: 31,
+                b: 61,
+                a: 255,
+            },
+        );
+        symbols.insert(
+            '+',
+            Rgba {
+                r: 74,
+                g: 58,
+                b: 109,
+                a: 255,
+            },
+        );
         Palette { symbols }
     }
 

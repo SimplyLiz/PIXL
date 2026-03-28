@@ -5,7 +5,6 @@
 /// into complete animation frames.
 ///
 /// Uses RotSprite algorithm: scale 8x, rotate, scale back — no new colors.
-
 use crate::types::{Palette, Rgba};
 use std::collections::HashMap;
 
@@ -18,9 +17,9 @@ pub struct BodyPart {
     pub width: u32,
     pub height: u32,
     pub grid: Vec<Vec<char>>,
-    pub pivot: (u32, u32),         // attachment point within the part
-    pub depth: i32,                // z-order for compositing
-    pub symmetric: bool,           // mirror for opposite side
+    pub pivot: (u32, u32), // attachment point within the part
+    pub depth: i32,        // z-order for compositing
+    pub symmetric: bool,   // mirror for opposite side
 }
 
 /// A bone in the skeleton hierarchy.
@@ -28,8 +27,8 @@ pub struct BodyPart {
 pub struct Bone {
     pub name: String,
     pub parent: Option<String>,
-    pub offset: (i32, i32),        // offset from parent bone
-    pub part: String,              // which body part to render
+    pub offset: (i32, i32),                 // offset from parent bone
+    pub part: String,                       // which body part to render
     pub rotation_range: Option<(f32, f32)>, // min/max degrees
 }
 
@@ -37,7 +36,7 @@ pub struct Bone {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Skeleton {
     pub name: String,
-    pub canvas: (u32, u32),        // output sprite size
+    pub canvas: (u32, u32), // output sprite size
     pub bones: Vec<Bone>,
 }
 
@@ -46,9 +45,9 @@ pub struct Skeleton {
 pub struct Keyframe {
     pub frame: u32,
     pub duration_ms: Option<u32>,
-    pub bone_rotations: HashMap<String, f32>,  // bone_name -> degrees
+    pub bone_rotations: HashMap<String, f32>, // bone_name -> degrees
     pub bone_offsets: HashMap<String, (i32, i32)>, // bone_name -> (dx, dy)
-    pub mirror: Option<String>,    // "horizontal" to mirror the frame
+    pub mirror: Option<String>,               // "horizontal" to mirror the frame
 }
 
 /// A skeletal animation.
@@ -65,11 +64,7 @@ pub struct SkeletalAnimation {
 /// Rotate a pixel grid by `degrees` using the RotSprite algorithm.
 /// Scale up 8x, rotate with nearest-neighbor, scale back down.
 /// Preserves the indexed color palette — no new colors introduced.
-pub fn rotsprite_rotate(
-    grid: &[Vec<char>],
-    degrees: f32,
-    void_sym: char,
-) -> Vec<Vec<char>> {
+pub fn rotsprite_rotate(grid: &[Vec<char>], degrees: f32, void_sym: char) -> Vec<Vec<char>> {
     if degrees.abs() < 0.5 {
         return grid.to_vec();
     }
@@ -142,7 +137,9 @@ pub fn composite_pose(
     let mut canvas = vec![vec![void_sym; cw as usize]; ch as usize];
 
     // Build bone hierarchy
-    let bone_map: HashMap<&str, &Bone> = skeleton.bones.iter()
+    let bone_map: HashMap<&str, &Bone> = skeleton
+        .bones
+        .iter()
         .map(|b| (b.name.as_str(), b))
         .collect();
 
@@ -155,22 +152,28 @@ pub fn composite_pose(
 
     for bone_name in &sorted {
         let bone = bone_map[bone_name.as_str()];
-        let parent_pos = bone.parent.as_ref()
+        let parent_pos = bone
+            .parent
+            .as_ref()
             .and_then(|p| world_positions.get(p.as_str()))
             .copied()
             .unwrap_or((cw as i32 / 2, ch as i32 / 2)); // root at center
 
-        let parent_rot = bone.parent.as_ref()
+        let parent_rot = bone
+            .parent
+            .as_ref()
             .and_then(|p| world_rotations.get(p.as_str()))
             .copied()
             .unwrap_or(0.0);
 
-        let extra_offset = keyframe.bone_offsets
+        let extra_offset = keyframe
+            .bone_offsets
             .get(bone_name.as_str())
             .copied()
             .unwrap_or((0, 0));
 
-        let local_rot = keyframe.bone_rotations
+        let local_rot = keyframe
+            .bone_rotations
             .get(bone_name.as_str())
             .copied()
             .unwrap_or(0.0);
@@ -192,17 +195,21 @@ pub fn composite_pose(
     }
 
     // Render body parts sorted by depth
-    let mut render_order: Vec<(&str, i32)> = skeleton.bones.iter()
-        .filter_map(|b| {
-            parts.get(&b.part).map(|p| (b.name.as_str(), p.depth))
-        })
+    let mut render_order: Vec<(&str, i32)> = skeleton
+        .bones
+        .iter()
+        .filter_map(|b| parts.get(&b.part).map(|p| (b.name.as_str(), p.depth)))
         .collect();
     render_order.sort_by_key(|(_, d)| *d);
 
     for (bone_name, _) in &render_order {
         let bone = bone_map[*bone_name];
-        let Some(part) = parts.get(&bone.part) else { continue };
-        let Some(&(wx, wy)) = world_positions.get(*bone_name) else { continue };
+        let Some(part) = parts.get(&bone.part) else {
+            continue;
+        };
+        let Some(&(wx, wy)) = world_positions.get(*bone_name) else {
+            continue;
+        };
         let rotation = world_rotations.get(*bone_name).copied().unwrap_or(0.0);
 
         // Rotate the body part grid
@@ -218,7 +225,8 @@ pub fn composite_pose(
             for rx in 0..rw {
                 let cx = px + rx;
                 let cy = py + ry;
-                if cx >= 0 && cy >= 0 && (cx as usize) < cw as usize && (cy as usize) < ch as usize {
+                if cx >= 0 && cy >= 0 && (cx as usize) < cw as usize && (cy as usize) < ch as usize
+                {
                     let sym = rotated[ry as usize][rx as usize];
                     if sym != void_sym {
                         canvas[cy as usize][cx as usize] = sym;
@@ -244,7 +252,9 @@ pub fn interpolate_keyframes(a: &Keyframe, b: &Keyframe, t: f32) -> Keyframe {
     let mut offsets = HashMap::new();
 
     // Collect all bone names from both keyframes
-    let all_bones: std::collections::HashSet<&str> = a.bone_rotations.keys()
+    let all_bones: std::collections::HashSet<&str> = a
+        .bone_rotations
+        .keys()
         .chain(b.bone_rotations.keys())
         .map(|s| s.as_str())
         .collect();
@@ -256,10 +266,13 @@ pub fn interpolate_keyframes(a: &Keyframe, b: &Keyframe, t: f32) -> Keyframe {
 
         let oa = a.bone_offsets.get(bone).copied().unwrap_or((0, 0));
         let ob = b.bone_offsets.get(bone).copied().unwrap_or((0, 0));
-        offsets.insert(bone.to_string(), (
-            lerp(oa.0 as f32, ob.0 as f32, t).round() as i32,
-            lerp(oa.1 as f32, ob.1 as f32, t).round() as i32,
-        ));
+        offsets.insert(
+            bone.to_string(),
+            (
+                lerp(oa.0 as f32, ob.0 as f32, t).round() as i32,
+                lerp(oa.1 as f32, ob.1 as f32, t).round() as i32,
+            ),
+        );
     }
 
     Keyframe {
@@ -286,7 +299,9 @@ pub fn generate_animation_frames(
 
     if animation.keyframes.len() == 1 {
         let grid = composite_pose(skeleton, parts, &animation.keyframes[0], void_sym);
-        let dur = animation.keyframes[0].duration_ms.unwrap_or(1000 / animation.fps.max(1));
+        let dur = animation.keyframes[0]
+            .duration_ms
+            .unwrap_or(1000 / animation.fps.max(1));
         frames.push((grid, dur));
         return frames;
     }
@@ -344,7 +359,9 @@ fn topological_sort(bones: &[Bone]) -> Vec<String> {
         visited: &mut std::collections::HashSet<String>,
         sorted: &mut Vec<String>,
     ) {
-        if visited.contains(name) { return; }
+        if visited.contains(name) {
+            return;
+        }
         visited.insert(name.to_string());
         if let Some(bone) = bone_map.get(name) {
             if let Some(ref parent) = bone.parent {
@@ -425,10 +442,7 @@ mod tests {
 
     #[test]
     fn rotsprite_identity() {
-        let grid = vec![
-            vec!['#', '+'],
-            vec!['+', '#'],
-        ];
+        let grid = vec![vec!['#', '+'], vec!['+', '#']];
         let result = rotsprite_rotate(&grid, 0.0, '.');
         assert_eq!(result, grid);
     }
@@ -482,7 +496,8 @@ mod tests {
         assert_eq!(canvas[0].len(), 16);
 
         // Should have some non-void pixels
-        let non_void: usize = canvas.iter()
+        let non_void: usize = canvas
+            .iter()
             .flat_map(|r| r.iter())
             .filter(|&&c| c != '.')
             .count();
@@ -508,7 +523,11 @@ mod tests {
 
         let mid = interpolate_keyframes(&a, &b, 0.5);
         let arm_rot = mid.bone_rotations["arm"];
-        assert!((arm_rot - 0.0).abs() < 0.01, "midpoint should be ~0, got {}", arm_rot);
+        assert!(
+            (arm_rot - 0.0).abs() < 0.01,
+            "midpoint should be ~0, got {}",
+            arm_rot
+        );
     }
 
     #[test]
@@ -524,14 +543,18 @@ mod tests {
             looping: true,
             keyframes: vec![
                 Keyframe {
-                    frame: 0, duration_ms: None,
+                    frame: 0,
+                    duration_ms: None,
                     bone_rotations: [("head".to_string(), 0.0)].into(),
-                    bone_offsets: HashMap::new(), mirror: None,
+                    bone_offsets: HashMap::new(),
+                    mirror: None,
                 },
                 Keyframe {
-                    frame: 2, duration_ms: None,
+                    frame: 2,
+                    duration_ms: None,
                     bone_rotations: [("head".to_string(), 5.0)].into(),
-                    bone_offsets: [("root".to_string(), (0, -1))].into(), mirror: None,
+                    bone_offsets: [("root".to_string(), (0, -1))].into(),
+                    mirror: None,
                 },
             ],
         };
@@ -549,9 +572,27 @@ mod tests {
     #[test]
     fn topological_sort_order() {
         let bones = vec![
-            Bone { name: "head".to_string(), parent: Some("root".to_string()), offset: (0, 0), part: "head".to_string(), rotation_range: None },
-            Bone { name: "root".to_string(), parent: None, offset: (0, 0), part: "torso".to_string(), rotation_range: None },
-            Bone { name: "arm".to_string(), parent: Some("root".to_string()), offset: (0, 0), part: "arm".to_string(), rotation_range: None },
+            Bone {
+                name: "head".to_string(),
+                parent: Some("root".to_string()),
+                offset: (0, 0),
+                part: "head".to_string(),
+                rotation_range: None,
+            },
+            Bone {
+                name: "root".to_string(),
+                parent: None,
+                offset: (0, 0),
+                part: "torso".to_string(),
+                rotation_range: None,
+            },
+            Bone {
+                name: "arm".to_string(),
+                parent: Some("root".to_string()),
+                offset: (0, 0),
+                part: "arm".to_string(),
+                rotation_range: None,
+            },
         ];
         let sorted = topological_sort(&bones);
         let root_idx = sorted.iter().position(|s| s == "root").unwrap();

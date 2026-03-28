@@ -2,7 +2,6 @@
 /// Generates N variants from a base tile by applying controlled mutations:
 /// crack placement, detail shifting, moss/erosion density, and sub-region swaps.
 /// All variations stay within the source palette and respect the style latent.
-
 use crate::types::Palette;
 use rand::prelude::*;
 
@@ -27,7 +26,11 @@ pub fn generate_variants(
     let mut rng = StdRng::seed_from_u64(seed);
 
     let h = base_grid.len();
-    let w = if h > 0 { base_grid[0].len() } else { return variants };
+    let w = if h > 0 {
+        base_grid[0].len()
+    } else {
+        return variants;
+    };
 
     // Collect non-void symbols used in the base tile
     let used_symbols: Vec<char> = {
@@ -296,10 +299,42 @@ mod tests {
 
     fn test_palette() -> Palette {
         let mut symbols = HashMap::new();
-        symbols.insert('.', Rgba { r: 0, g: 0, b: 0, a: 0 });
-        symbols.insert('#', Rgba { r: 42, g: 31, b: 61, a: 255 });
-        symbols.insert('+', Rgba { r: 74, g: 58, b: 109, a: 255 });
-        symbols.insert('s', Rgba { r: 26, g: 15, b: 46, a: 255 });
+        symbols.insert(
+            '.',
+            Rgba {
+                r: 0,
+                g: 0,
+                b: 0,
+                a: 0,
+            },
+        );
+        symbols.insert(
+            '#',
+            Rgba {
+                r: 42,
+                g: 31,
+                b: 61,
+                a: 255,
+            },
+        );
+        symbols.insert(
+            '+',
+            Rgba {
+                r: 74,
+                g: 58,
+                b: 109,
+                a: 255,
+            },
+        );
+        symbols.insert(
+            's',
+            Rgba {
+                r: 26,
+                g: 15,
+                b: 46,
+                a: 255,
+            },
+        );
         Palette { symbols }
     }
 
@@ -337,7 +372,10 @@ mod tests {
                 break;
             }
         }
-        assert!(any_different, "at least one variant should differ from base");
+        assert!(
+            any_different,
+            "at least one variant should differ from base"
+        );
     }
 
     #[test]
@@ -362,7 +400,11 @@ mod tests {
         // (pixel_noise and crack avoid row 0 and row h-1)
         for v in &variants {
             if v.mutation == "pixel_noise" || v.mutation == "crack" {
-                assert_eq!(v.grid[0], grid[0], "top edge should be preserved for {}", v.mutation);
+                assert_eq!(
+                    v.grid[0], grid[0],
+                    "top edge should be preserved for {}",
+                    v.mutation
+                );
                 assert_eq!(
                     v.grid[grid.len() - 1],
                     grid[grid.len() - 1],
@@ -391,7 +433,10 @@ mod tests {
         let v1 = generate_variants("wall", &grid, &palette, 3, 42, '.');
         let v2 = generate_variants("wall", &grid, &palette, 3, 99, '.');
         let any_diff = v1.iter().zip(v2.iter()).any(|(a, b)| a.grid != b.grid);
-        assert!(any_diff, "different seeds should produce different variants");
+        assert!(
+            any_diff,
+            "different seeds should produce different variants"
+        );
     }
 
     #[test]

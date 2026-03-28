@@ -31,11 +31,7 @@ pub struct StyleLatent {
 
 impl StyleLatent {
     /// Extract a style latent from a set of reference tile grids.
-    pub fn extract(
-        grids: &[&Vec<Vec<char>>],
-        palette: &Palette,
-        void_sym: char,
-    ) -> Self {
+    pub fn extract(grids: &[&Vec<Vec<char>>], palette: &Palette, void_sym: char) -> Self {
         if grids.is_empty() {
             return Self::default();
         }
@@ -177,7 +173,11 @@ impl StyleLatent {
 
         // Circular mean for hue
         let hue_bias = hue_y_sum.atan2(hue_x_sum) * 180.0 / std::f64::consts::PI;
-        let hue_bias = if hue_bias < 0.0 { hue_bias + 360.0 } else { hue_bias };
+        let hue_bias = if hue_bias < 0.0 {
+            hue_bias + 360.0
+        } else {
+            hue_bias
+        };
 
         StyleLatent {
             light_direction,
@@ -193,22 +193,20 @@ impl StyleLatent {
     }
 
     /// Score a tile against this style latent. Returns 0.0-1.0 (1.0 = perfect match).
-    pub fn score_tile(
-        &self,
-        grid: &[Vec<char>],
-        palette: &Palette,
-        void_sym: char,
-    ) -> f64 {
+    pub fn score_tile(&self, grid: &[Vec<char>], palette: &Palette, void_sym: char) -> f64 {
         let tile_latent = Self::extract(&[&grid.to_vec()], palette, void_sym);
 
         // Weighted distance across 8 dimensions
         let diffs = [
             (self.light_direction - tile_latent.light_direction).abs() * 2.0,
-            ((self.run_length_mean - tile_latent.run_length_mean) / self.run_length_mean.max(1.0)).abs(),
+            ((self.run_length_mean - tile_latent.run_length_mean) / self.run_length_mean.max(1.0))
+                .abs(),
             (self.shadow_ratio - tile_latent.shadow_ratio).abs() * 3.0,
-            ((self.palette_breadth - tile_latent.palette_breadth) / self.palette_breadth.max(1.0)).abs(),
+            ((self.palette_breadth - tile_latent.palette_breadth) / self.palette_breadth.max(1.0))
+                .abs(),
             (self.pixel_density - tile_latent.pixel_density).abs() * 2.0,
-            ((self.palette_entropy - tile_latent.palette_entropy) / self.palette_entropy.max(0.1)).abs(),
+            ((self.palette_entropy - tile_latent.palette_entropy) / self.palette_entropy.max(0.1))
+                .abs(),
             hue_distance_normalized(self.hue_bias, tile_latent.hue_bias),
             (self.luminance_mean - tile_latent.luminance_mean).abs() * 2.0,
         ];
@@ -305,11 +303,51 @@ mod tests {
 
     fn dungeon_palette() -> Palette {
         let mut symbols = HashMap::new();
-        symbols.insert('.', Rgba { r: 0, g: 0, b: 0, a: 0 });
-        symbols.insert('#', Rgba { r: 42, g: 31, b: 61, a: 255 });
-        symbols.insert('+', Rgba { r: 74, g: 58, b: 109, a: 255 });
-        symbols.insert('s', Rgba { r: 26, g: 15, b: 46, a: 255 });
-        symbols.insert('g', Rgba { r: 45, g: 90, b: 39, a: 255 });
+        symbols.insert(
+            '.',
+            Rgba {
+                r: 0,
+                g: 0,
+                b: 0,
+                a: 0,
+            },
+        );
+        symbols.insert(
+            '#',
+            Rgba {
+                r: 42,
+                g: 31,
+                b: 61,
+                a: 255,
+            },
+        );
+        symbols.insert(
+            '+',
+            Rgba {
+                r: 74,
+                g: 58,
+                b: 109,
+                a: 255,
+            },
+        );
+        symbols.insert(
+            's',
+            Rgba {
+                r: 26,
+                g: 15,
+                b: 46,
+                a: 255,
+            },
+        );
+        symbols.insert(
+            'g',
+            Rgba {
+                r: 45,
+                g: 90,
+                b: 39,
+                a: 255,
+            },
+        );
         Palette { symbols }
     }
 

@@ -133,18 +133,43 @@ mod tests {
     #[test]
     fn white_has_full_lightness() {
         let lab = rgb_to_oklab(255, 255, 255);
-        assert!((lab.l - 1.0).abs() < 0.01, "white L should be ~1, got {}", lab.l);
+        assert!(
+            (lab.l - 1.0).abs() < 0.01,
+            "white L should be ~1, got {}",
+            lab.l
+        );
     }
 
     #[test]
     fn roundtrip_preserves_color() {
-        let test_colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (128, 64, 192), (42, 31, 61)];
+        let test_colors = [
+            (255, 0, 0),
+            (0, 255, 0),
+            (0, 0, 255),
+            (128, 64, 192),
+            (42, 31, 61),
+        ];
         for (r, g, b) in test_colors {
             let lab = rgb_to_oklab(r, g, b);
             let (r2, g2, b2) = oklab_to_rgb(&lab);
-            assert!((r as i16 - r2 as i16).abs() <= 1, "R roundtrip: {} -> {}", r, r2);
-            assert!((g as i16 - g2 as i16).abs() <= 1, "G roundtrip: {} -> {}", g, g2);
-            assert!((b as i16 - b2 as i16).abs() <= 1, "B roundtrip: {} -> {}", b, b2);
+            assert!(
+                (r as i16 - r2 as i16).abs() <= 1,
+                "R roundtrip: {} -> {}",
+                r,
+                r2
+            );
+            assert!(
+                (g as i16 - g2 as i16).abs() <= 1,
+                "G roundtrip: {} -> {}",
+                g,
+                g2
+            );
+            assert!(
+                (b as i16 - b2 as i16).abs() <= 1,
+                "B roundtrip: {} -> {}",
+                b,
+                b2
+            );
         }
     }
 
@@ -158,7 +183,12 @@ mod tests {
         let rg_dist = delta_e(&red, &green);
         let rdr_dist = delta_e(&red, &dark_red);
 
-        assert!(rg_dist > rdr_dist, "red-green ({:.3}) should be farther than red-dark_red ({:.3})", rg_dist, rdr_dist);
+        assert!(
+            rg_dist > rdr_dist,
+            "red-green ({:.3}) should be farther than red-dark_red ({:.3})",
+            rg_dist,
+            rdr_dist
+        );
     }
 
     #[test]
@@ -172,19 +202,33 @@ mod tests {
     #[test]
     fn dungeon_palette_contrast() {
         // Verify the dungeon palette has good contrast in OKLab
-        let shadow = rgb_to_oklab(0x12, 0x09, 0x1f);    // s
-        let bg = rgb_to_oklab(0x2a, 0x1f, 0x3d);        // #
-        let fg = rgb_to_oklab(0x5a, 0x48, 0x78);         // +
-        let hi = rgb_to_oklab(0x80, 0x70, 0xa8);         // h
-        let white = rgb_to_oklab(0xd8, 0xd0, 0xe8);      // w
+        let shadow = rgb_to_oklab(0x12, 0x09, 0x1f); // s
+        let bg = rgb_to_oklab(0x2a, 0x1f, 0x3d); // #
+        let fg = rgb_to_oklab(0x5a, 0x48, 0x78); // +
+        let hi = rgb_to_oklab(0x80, 0x70, 0xa8); // h
+        let white = rgb_to_oklab(0xd8, 0xd0, 0xe8); // w
 
         // Each step should have meaningful lightness difference
-        assert!(fg.l - bg.l > 0.05, "fg-bg contrast too low: {:.3}", fg.l - bg.l);
-        assert!(hi.l - fg.l > 0.05, "hi-fg contrast too low: {:.3}", hi.l - fg.l);
-        assert!(white.l - hi.l > 0.10, "w-hi contrast too low: {:.3}", white.l - hi.l);
+        assert!(
+            fg.l - bg.l > 0.05,
+            "fg-bg contrast too low: {:.3}",
+            fg.l - bg.l
+        );
+        assert!(
+            hi.l - fg.l > 0.05,
+            "hi-fg contrast too low: {:.3}",
+            hi.l - fg.l
+        );
+        assert!(
+            white.l - hi.l > 0.10,
+            "w-hi contrast too low: {:.3}",
+            white.l - hi.l
+        );
 
         eprintln!("Dungeon palette OKLab lightness:");
-        eprintln!("  s={:.3} #={:.3} +={:.3} h={:.3} w={:.3}",
-            shadow.l, bg.l, fg.l, hi.l, white.l);
+        eprintln!(
+            "  s={:.3} #={:.3} +={:.3} h={:.3} w={:.3}",
+            shadow.l, bg.l, fg.l, hi.l, white.l
+        );
     }
 }

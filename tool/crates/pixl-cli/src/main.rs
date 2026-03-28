@@ -508,7 +508,11 @@ fn main() {
         Commands::Project { action } => {
             cmd_project(action);
         }
-        Commands::Validate { file, check_edges, completeness } => {
+        Commands::Validate {
+            file,
+            check_edges,
+            completeness,
+        } => {
             cmd_validate(&file, check_edges);
             if completeness {
                 cmd_completeness(&file);
@@ -561,7 +565,9 @@ fn main() {
             pin,
             format,
         } => {
-            cmd_narrate(&file, width, height, seed, &rule, &out, &weight, &pin, &format);
+            cmd_narrate(
+                &file, width, height, seed, &rule, &out, &weight, &pin, &format,
+            );
         }
         Commands::Vary {
             file,
@@ -593,7 +599,11 @@ fn main() {
         } => {
             cmd_import(&image, &size, &pax, &palette, dither, out.as_deref());
         }
-        Commands::New { theme, out, generate } => {
+        Commands::New {
+            theme,
+            out,
+            generate,
+        } => {
             if generate {
                 cmd_new_generate(&theme, &out);
             } else {
@@ -650,11 +660,22 @@ fn main() {
         } => {
             cmd_corpus(&dir, &pax, &palette, &size, &out, training.as_deref());
         }
-        Commands::Mcp { file, model, adapter, inference_port } => {
+        Commands::Mcp {
+            file,
+            model,
+            adapter,
+            inference_port,
+        } => {
             let inf = build_inference_config(model, adapter, inference_port);
             cmd_mcp(file.as_deref(), inf);
         }
-        Commands::Serve { port, file, model, adapter, inference_port } => {
+        Commands::Serve {
+            port,
+            file,
+            model,
+            adapter,
+            inference_port,
+        } => {
             let inf = build_inference_config(model, adapter, inference_port);
             cmd_serve(port, file.as_deref(), inf);
         }
@@ -686,14 +707,13 @@ async fn cmd_mcp_async(
     let result = match (file, inference) {
         (_, Some(config)) => {
             pixl_mcp::server::run_stdio_with_inference(
-                file.map(|p| p.to_string_lossy().as_ref().to_owned()).as_deref(),
+                file.map(|p| p.to_string_lossy().as_ref().to_owned())
+                    .as_deref(),
                 config,
             )
             .await
         }
-        (Some(path), None) => {
-            pixl_mcp::server::run_stdio_with_file(&path.to_string_lossy()).await
-        }
+        (Some(path), None) => pixl_mcp::server::run_stdio_with_file(&path.to_string_lossy()).await,
         (None, None) => pixl_mcp::server::run_stdio().await,
     };
 
@@ -810,10 +830,7 @@ fn cmd_completeness(file: &PathBuf) {
     if report.disconnected_pairs.is_empty() {
         println!("All edge classes are connected — WFC can reach every terrain type.");
     } else {
-        println!(
-            "Disconnected pairs: {}",
-            report.disconnected_pairs.len()
-        );
+        println!("Disconnected pairs: {}", report.disconnected_pairs.len());
         for (a, b) in &report.disconnected_pairs {
             println!("  {} <-> {} (no transition tile)", a, b);
         }
@@ -1020,7 +1037,13 @@ fn cmd_corpus(
         // Sanitize name for TOML key
         let name = file_stem
             .chars()
-            .map(|c| if c.is_alphanumeric() || c == '_' { c } else { '_' })
+            .map(|c| {
+                if c.is_alphanumeric() || c == '_' {
+                    c
+                } else {
+                    '_'
+                }
+            })
             .collect::<String>();
 
         match image::open(png_path) {
@@ -1099,8 +1122,14 @@ fn cmd_corpus(
 
 fn cmd_new(theme: &str, out: &PathBuf) {
     let themes = [
-        ("dark_fantasy", include_str!("../../../themes/dark_fantasy.pax")),
-        ("light_fantasy", include_str!("../../../themes/light_fantasy.pax")),
+        (
+            "dark_fantasy",
+            include_str!("../../../themes/dark_fantasy.pax"),
+        ),
+        (
+            "light_fantasy",
+            include_str!("../../../themes/light_fantasy.pax"),
+        ),
         ("sci_fi", include_str!("../../../themes/sci_fi.pax")),
         ("nature", include_str!("../../../themes/nature.pax")),
         ("gameboy", include_str!("../../../themes/gameboy.pax")),
@@ -1163,38 +1192,71 @@ fn cmd_new_generate(theme: &str, out: &PathBuf) {
     };
 
     // Step 3: Get palette info
-    let palette_name = pax_file.theme.values()
+    let palette_name = pax_file
+        .theme
+        .values()
         .next()
         .map(|t| t.palette.as_str())
         .unwrap_or("unknown");
-    let palette_info = pax_file.palette.iter()
+    let palette_info = pax_file
+        .palette
+        .iter()
         .next()
         .map(|(_, pal_raw)| {
-            pal_raw.iter()
+            pal_raw
+                .iter()
                 .map(|(sym, hex)| format!("'{}' = {}", sym, hex))
                 .collect::<Vec<_>>()
                 .join(", ")
         })
         .unwrap_or_default();
 
-    let canvas = pax_file.theme.values()
+    let canvas = pax_file
+        .theme
+        .values()
         .next()
         .and_then(|t| t.canvas)
         .unwrap_or(16);
 
-    let light_source = pax_file.theme.values()
+    let light_source = pax_file
+        .theme
+        .values()
         .next()
         .and_then(|t| t.light_source.as_deref())
         .unwrap_or("top-left");
 
     // Step 4: Generate prompts for each tile type
     let tile_specs = [
-        ("wall_solid", "solid/solid/solid/solid", "A solid wall tile with brick or stone pattern. Use highlight on top-left edges, shadow on bottom-right. Full mortar lines between blocks."),
-        ("floor_stone", "floor/floor/floor/floor", "A walkable floor tile. Use irregular stone sizes, scattered highlights, mortar gaps. Should look different from wall."),
-        ("floor_variant", "floor/floor/floor/floor", "A second floor variant — cracked, mossy, or decorated. Should tile seamlessly with floor_stone."),
-        ("wall_floor_n", "solid/solid/floor/solid", "A wall-to-floor transition tile. Top half wall pattern, bottom half floor pattern. Dither the boundary with 2-3 rows of blended pixels. auto_rotate=4way gives all 4 cardinal transitions."),
-        ("wall_corner_ne", "solid/solid/floor/floor", "A corner tile where wall (top-right) meets floor (bottom-left). Diagonal boundary with dithered edge. auto_rotate=4way gives all 4 corners."),
-        ("door_ns", "floor/solid/floor/solid", "A door/passage tile allowing movement through walls. Floor on north/south, solid wall on east/west. auto_rotate=4way gives both orientations."),
+        (
+            "wall_solid",
+            "solid/solid/solid/solid",
+            "A solid wall tile with brick or stone pattern. Use highlight on top-left edges, shadow on bottom-right. Full mortar lines between blocks.",
+        ),
+        (
+            "floor_stone",
+            "floor/floor/floor/floor",
+            "A walkable floor tile. Use irregular stone sizes, scattered highlights, mortar gaps. Should look different from wall.",
+        ),
+        (
+            "floor_variant",
+            "floor/floor/floor/floor",
+            "A second floor variant — cracked, mossy, or decorated. Should tile seamlessly with floor_stone.",
+        ),
+        (
+            "wall_floor_n",
+            "solid/solid/floor/solid",
+            "A wall-to-floor transition tile. Top half wall pattern, bottom half floor pattern. Dither the boundary with 2-3 rows of blended pixels. auto_rotate=4way gives all 4 cardinal transitions.",
+        ),
+        (
+            "wall_corner_ne",
+            "solid/solid/floor/floor",
+            "A corner tile where wall (top-right) meets floor (bottom-left). Diagonal boundary with dithered edge. auto_rotate=4way gives all 4 corners.",
+        ),
+        (
+            "door_ns",
+            "floor/solid/floor/solid",
+            "A door/passage tile allowing movement through walls. Floor on north/south, solid wall on east/west. auto_rotate=4way gives both orientations.",
+        ),
     ];
 
     println!();
@@ -1210,7 +1272,8 @@ fn cmd_new_generate(theme: &str, out: &PathBuf) {
         let knowledge = if let Some(ref kb) = kb {
             let query = format!("{} {} pixel art tile", description, theme);
             let results = kb.search(&query, 3);
-            results.iter()
+            results
+                .iter()
                 .map(|r| format!("[{}] {}", r.source_title, r.content))
                 .collect::<Vec<_>>()
                 .join("\n")
@@ -1219,9 +1282,15 @@ fn cmd_new_generate(theme: &str, out: &PathBuf) {
         };
 
         println!("--- {} (edges: {}) ---", name, edges);
-        println!("SYSTEM: You are a pixel art tile designer. Output ONLY a {}x{} character grid.", canvas, canvas);
+        println!(
+            "SYSTEM: You are a pixel art tile designer. Output ONLY a {}x{} character grid.",
+            canvas, canvas
+        );
         println!("Palette ({}): {}", palette_name, palette_info);
-        println!("Light source: {}. Use highlight symbols on lit edges, shadow on dark edges.", light_source);
+        println!(
+            "Light source: {}. Use highlight symbols on lit edges, shadow on dark edges.",
+            light_source
+        );
         println!();
         if !knowledge.is_empty() {
             println!("KNOWLEDGE:");
@@ -1232,8 +1301,14 @@ fn cmd_new_generate(theme: &str, out: &PathBuf) {
         println!();
     }
 
-    println!("# To use: pipe each section to an LLM, extract the {}x{} grid,", canvas, canvas);
-    println!("# and add it to {} as [tile.NAME] with the specified edge_class.", out.display());
+    println!(
+        "# To use: pipe each section to an LLM, extract the {}x{} grid,",
+        canvas, canvas
+    );
+    println!(
+        "# and add it to {} as [tile.NAME] with the specified edge_class.",
+        out.display()
+    );
 }
 
 fn cmd_check_fix(file: &PathBuf) {
@@ -1410,7 +1485,8 @@ fn cmd_export(file: &PathBuf, format: &str, out_dir: &PathBuf) {
 
     let mut tile_names: Vec<String> = Vec::new();
     let mut tile_grids: Vec<Vec<Vec<char>>> = Vec::new();
-    let mut collision_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut collision_map: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
 
     for (name, tile_raw) in &pax_file.tile {
         if tile_raw.template.is_some() || tile_raw.grid.is_none() {
@@ -1421,7 +1497,9 @@ fn cmd_export(file: &PathBuf, format: &str, out_dir: &PathBuf) {
             Ok(s) => s,
             Err(_) => continue,
         };
-        if let Ok(grid) = pixl_core::grid::parse_grid(tile_raw.grid.as_ref().unwrap(), w, h, palette) {
+        if let Ok(grid) =
+            pixl_core::grid::parse_grid(tile_raw.grid.as_ref().unwrap(), w, h, palette)
+        {
             tile_names.push(name.clone());
             tile_grids.push(grid);
             if let Some(ref sem) = tile_raw.semantic {
@@ -1437,7 +1515,8 @@ fn cmd_export(file: &PathBuf, format: &str, out_dir: &PathBuf) {
         let mut order: Vec<usize> = (0..tile_names.len()).collect();
         order.sort_by(|&a, &b| tile_names[a].cmp(&tile_names[b]));
         let sorted_names: Vec<String> = order.iter().map(|&i| tile_names[i].clone()).collect();
-        let sorted_grids: Vec<Vec<Vec<char>>> = order.iter().map(|&i| tile_grids[i].clone()).collect();
+        let sorted_grids: Vec<Vec<Vec<char>>> =
+            order.iter().map(|&i| tile_grids[i].clone()).collect();
         tile_names = sorted_names;
         tile_grids = sorted_grids;
         // collision_map is keyed by name so it doesn't need reordering
@@ -1478,7 +1557,11 @@ fn cmd_export(file: &PathBuf, format: &str, out_dir: &PathBuf) {
                     img.save(&atlas_path).unwrap();
                     let json_str = serde_json::to_string_pretty(&json).unwrap();
                     std::fs::write(&json_path, json_str).unwrap();
-                    println!("texturepacker: {} -> {}", atlas_path.display(), json_path.display());
+                    println!(
+                        "texturepacker: {} -> {}",
+                        atlas_path.display(),
+                        json_path.display()
+                    );
                 }
                 Err(e) => {
                     eprintln!("error: {}", e);
@@ -1568,7 +1651,10 @@ fn cmd_export(file: &PathBuf, format: &str, out_dir: &PathBuf) {
         }
 
         _ => {
-            eprintln!("error: unknown format '{}'. Supported: texturepacker, tiled, godot", format);
+            eprintln!(
+                "error: unknown format '{}'. Supported: texturepacker, tiled, godot",
+                format
+            );
             process::exit(1);
         }
     }
@@ -1665,7 +1751,11 @@ fn cmd_render(file: &PathBuf, tile_name: &str, scale: u32, out: &PathBuf) {
 
     println!(
         "rendered '{}' ({}x{} @{}x) -> {}",
-        tile_name, w, h, scale, out.display()
+        tile_name,
+        w,
+        h,
+        scale,
+        out.display()
     );
 }
 
@@ -1750,14 +1840,12 @@ fn cmd_preview(file: &PathBuf, tile_name: &str, out: &PathBuf, show_grid: bool) 
 
     let tile_raw = match pax_file.tile.get(tile_name) {
         Some(t) => t,
-        None => {
-            pixl_core::resolve::base_tile_name(tile_name)
-                .and_then(|base| pax_file.tile.get(base))
-                .unwrap_or_else(|| {
-                    eprintln!("error: tile '{}' not found", tile_name);
-                    process::exit(1);
-                })
-        }
+        None => pixl_core::resolve::base_tile_name(tile_name)
+            .and_then(|base| pax_file.tile.get(base))
+            .unwrap_or_else(|| {
+                eprintln!("error: tile '{}' not found", tile_name);
+                process::exit(1);
+            }),
     };
 
     let palette = match palettes.get(&tile_raw.palette) {
@@ -1883,10 +1971,15 @@ fn cmd_narrate(
     {
         let mut order: Vec<usize> = (0..tile_names_ordered.len()).collect();
         order.sort_by(|&a, &b| tile_names_ordered[a].cmp(&tile_names_ordered[b]));
-        let sorted_names: Vec<String> = order.iter().map(|&i| tile_names_ordered[i].clone()).collect();
+        let sorted_names: Vec<String> = order
+            .iter()
+            .map(|&i| tile_names_ordered[i].clone())
+            .collect();
         let sorted_edges: Vec<_> = order.iter().map(|&i| tile_edges[i].clone()).collect();
-        let sorted_affordances: Vec<_> = order.iter().map(|&i| tile_affordances[i].clone()).collect();
-        let sorted_grids: Vec<Vec<Vec<char>>> = order.iter().map(|&i| tile_grids[i].clone()).collect();
+        let sorted_affordances: Vec<_> =
+            order.iter().map(|&i| tile_affordances[i].clone()).collect();
+        let sorted_grids: Vec<Vec<Vec<char>>> =
+            order.iter().map(|&i| tile_grids[i].clone()).collect();
         tile_names_ordered = sorted_names;
         tile_edges = sorted_edges;
         tile_affordances = sorted_affordances;
@@ -2028,7 +2121,9 @@ fn cmd_narrate(
 
     if predicates.is_empty() && rules.is_empty() {
         // Default: border with first obstacle tile
-        eprintln!("hint: no rules provided. Use -r 'border:wall' -r 'region:room:walkable:4x4:center'");
+        eprintln!(
+            "hint: no rules provided. Use -r 'border:wall' -r 'region:room:walkable:4x4:center'"
+        );
     }
 
     // Convert --pin args to Pin structs
@@ -2058,7 +2153,13 @@ fn cmd_narrate(
     let is_json = matches!(format, OutputFormat::Json);
 
     if !is_json {
-        println!("narrate: {}x{} map, seed={}, {} rules", width, height, seed, rules.len());
+        println!(
+            "narrate: {}x{} map, seed={}, {} rules",
+            width,
+            height,
+            seed,
+            rules.len()
+        );
     }
 
     match pixl_wfc::narrate::narrate_map(
@@ -2124,8 +2225,11 @@ fn cmd_narrate(
                 for (ty, row) in result.grid.iter().enumerate() {
                     for (tx, &tile_idx) in row.iter().enumerate() {
                         if tile_idx < tile_grids.len() {
-                            let tile_img =
-                                pixl_render::renderer::render_grid(&tile_grids[tile_idx], palette, scale);
+                            let tile_img = pixl_render::renderer::render_grid(
+                                &tile_grids[tile_idx],
+                                palette,
+                                scale,
+                            );
                             let ox = tx as u32 * tile_size.0 * scale;
                             let oy = ty as u32 * tile_size.1 * scale;
                             for py in 0..tile_img.height() {
@@ -2201,7 +2305,8 @@ fn cmd_vary(
         }
     };
 
-    let variants = pixl_core::vary::generate_variants(tile_name, &base_grid, palette, count, seed, '.');
+    let variants =
+        pixl_core::vary::generate_variants(tile_name, &base_grid, palette, count, seed, '.');
 
     for v in &variants {
         println!("[tile.{}]", v.name);
@@ -2233,7 +2338,12 @@ fn cmd_vary(
         }
     }
 
-    println!("# Generated {} variant(s) from '{}' (seed={})", variants.len(), tile_name, seed);
+    println!(
+        "# Generated {} variant(s) from '{}' (seed={})",
+        variants.len(),
+        tile_name,
+        seed
+    );
 }
 
 fn cmd_generate_stamps(pattern: &str, size: u32, fg: char, bg: char) {
@@ -2259,7 +2369,11 @@ fn cmd_generate_stamps(pattern: &str, size: u32, fg: char, bg: char) {
         println!();
     }
 
-    println!("# Generated {} stamp(s) for pattern '{}'", stamps.len(), pattern);
+    println!(
+        "# Generated {} stamp(s) for pattern '{}'",
+        stamps.len(),
+        pattern
+    );
 }
 
 fn cmd_style(file: &PathBuf, tiles_filter: Option<&str>) {
@@ -2281,7 +2395,8 @@ fn cmd_style(file: &PathBuf, tiles_filter: Option<&str>) {
     };
 
     // Collect grids from selected tiles
-    let tile_names: Option<Vec<&str>> = tiles_filter.map(|s| s.split(',').map(|t| t.trim()).collect());
+    let tile_names: Option<Vec<&str>> =
+        tiles_filter.map(|s| s.split(',').map(|t| t.trim()).collect());
 
     let mut grids: Vec<Vec<Vec<char>>> = Vec::new();
     let mut used_names: Vec<String> = Vec::new();
@@ -2382,7 +2497,13 @@ fn cmd_import(
     }
 }
 
-fn cmd_render_sprite(file_path: &PathBuf, spriteset_name: &str, sprite_name: &str, scale: u32, out: &PathBuf) {
+fn cmd_render_sprite(
+    file_path: &PathBuf,
+    spriteset_name: &str,
+    sprite_name: &str,
+    scale: u32,
+    out: &PathBuf,
+) {
     let source = match std::fs::read_to_string(file_path) {
         Ok(s) => s,
         Err(e) => {
@@ -2393,12 +2514,18 @@ fn cmd_render_sprite(file_path: &PathBuf, spriteset_name: &str, sprite_name: &st
 
     let pax = match pixl_core::parser::parse_pax(&source) {
         Ok(f) => f,
-        Err(e) => { eprintln!("error: {}", e); process::exit(1); }
+        Err(e) => {
+            eprintln!("error: {}", e);
+            process::exit(1);
+        }
     };
 
     let palettes = match pixl_core::parser::resolve_all_palettes(&pax) {
         Ok(p) => p,
-        Err(e) => { eprintln!("error: {}", e); process::exit(1); }
+        Err(e) => {
+            eprintln!("error: {}", e);
+            process::exit(1);
+        }
     };
 
     let spriteset = match pax.spriteset.get(spriteset_name) {
@@ -2406,39 +2533,58 @@ fn cmd_render_sprite(file_path: &PathBuf, spriteset_name: &str, sprite_name: &st
         None => {
             eprintln!("error: spriteset '{}' not found", spriteset_name);
             let names: Vec<_> = pax.spriteset.keys().collect();
-            if !names.is_empty() { eprintln!("  available: {:?}", names); }
+            if !names.is_empty() {
+                eprintln!("  available: {:?}", names);
+            }
             process::exit(1);
         }
     };
 
     let palette = match palettes.get(&spriteset.palette) {
         Some(p) => p,
-        None => { eprintln!("error: palette '{}' not found", spriteset.palette); process::exit(1); }
+        None => {
+            eprintln!("error: palette '{}' not found", spriteset.palette);
+            process::exit(1);
+        }
     };
 
     let (sw, sh) = match pixl_core::types::parse_size(&spriteset.size) {
         Ok(s) => s,
-        Err(e) => { eprintln!("error: {}", e); process::exit(1); }
+        Err(e) => {
+            eprintln!("error: {}", e);
+            process::exit(1);
+        }
     };
 
     let sprite = match spriteset.sprite.iter().find(|s| s.name == sprite_name) {
         Some(s) => s,
         None => {
             let names: Vec<_> = spriteset.sprite.iter().map(|s| &s.name).collect();
-            eprintln!("error: sprite '{}' not found in '{}'", sprite_name, spriteset_name);
-            if !names.is_empty() { eprintln!("  available: {:?}", names); }
+            eprintln!(
+                "error: sprite '{}' not found in '{}'",
+                sprite_name, spriteset_name
+            );
+            if !names.is_empty() {
+                eprintln!("  available: {:?}", names);
+            }
             process::exit(1);
         }
     };
 
     // Resolve frames using the new animate module
-    let resolved = match pixl_core::animate::resolve_sprite_frames(sprite, sw, sh, palette, sprite.fps) {
-        Ok(f) => f,
-        Err(e) => { eprintln!("error: {}", e); process::exit(1); }
-    };
+    let resolved =
+        match pixl_core::animate::resolve_sprite_frames(sprite, sw, sh, palette, sprite.fps) {
+            Ok(f) => f,
+            Err(e) => {
+                eprintln!("error: {}", e);
+                process::exit(1);
+            }
+        };
 
     // Apply color cycles if the spriteset references any
-    let cycle_refs: Vec<&pixl_core::types::Cycle> = spriteset.cycles.iter()
+    let cycle_refs: Vec<&pixl_core::types::Cycle> = spriteset
+        .cycles
+        .iter()
         .filter_map(|name| pax.cycle.get(name))
         .collect();
 
@@ -2454,7 +2600,10 @@ fn cmd_render_sprite(file_path: &PathBuf, spriteset_name: &str, sprite_name: &st
                 let tick = i as u64;
                 let effective = if !cycle_refs.is_empty() {
                     let cycled = pixl_core::animate::resolve_frames_with_cycles(
-                        &[frame.clone()], &cycle_refs, palette, tick,
+                        &[frame.clone()],
+                        &cycle_refs,
+                        palette,
+                        tick,
                     );
                     cycled.into_iter().next().unwrap()
                 } else {
@@ -2471,9 +2620,17 @@ fn cmd_render_sprite(file_path: &PathBuf, spriteset_name: &str, sprite_name: &st
                     eprintln!("error: {}", e);
                     process::exit(1);
                 }
-                println!("{} frames -> {} ({} fps)", resolved.len(), out.display(), sprite.fps);
+                println!(
+                    "{} frames -> {} ({} fps)",
+                    resolved.len(),
+                    out.display(),
+                    sprite.fps
+                );
             }
-            Err(e) => { eprintln!("error: {}", e); process::exit(1); }
+            Err(e) => {
+                eprintln!("error: {}", e);
+                process::exit(1);
+            }
         }
     } else {
         // Render as horizontal spritesheet PNG
@@ -2491,11 +2648,23 @@ fn cmd_render_sprite(file_path: &PathBuf, spriteset_name: &str, sprite_name: &st
             eprintln!("error: {}", e);
             process::exit(1);
         }
-        println!("{} frames -> {} ({}x{} spritesheet)", resolved.len(), out.display(), sheet_w, frame_h);
+        println!(
+            "{} frames -> {} ({}x{} spritesheet)",
+            resolved.len(),
+            out.display(),
+            sheet_w,
+            frame_h
+        );
     }
 }
 
-fn cmd_backdrop_import(image_path: &PathBuf, name: &str, max_colors: u32, tile_size: u32, out: &PathBuf) {
+fn cmd_backdrop_import(
+    image_path: &PathBuf,
+    name: &str,
+    max_colors: u32,
+    tile_size: u32,
+    out: &PathBuf,
+) {
     use image::GenericImageView;
 
     let img = match image::open(image_path) {
@@ -2593,16 +2762,24 @@ fn cmd_backdrop_render(
             }
         } else {
             // No extended palette — build from base only
-            let base = palettes.get(&backdrop_raw.palette).cloned()
-                .unwrap_or_else(|| pixl_core::types::Palette { symbols: std::collections::HashMap::new() });
+            let base = palettes
+                .get(&backdrop_raw.palette)
+                .cloned()
+                .unwrap_or_else(|| pixl_core::types::Palette {
+                    symbols: std::collections::HashMap::new(),
+                });
             pixl_core::types::PaletteExt {
                 base: base.symbols,
                 extended: std::collections::HashMap::new(),
             }
         }
     } else {
-        let base = palettes.get(&backdrop_raw.palette).cloned()
-            .unwrap_or_else(|| pixl_core::types::Palette { symbols: std::collections::HashMap::new() });
+        let base = palettes
+            .get(&backdrop_raw.palette)
+            .cloned()
+            .unwrap_or_else(|| pixl_core::types::Palette {
+                symbols: std::collections::HashMap::new(),
+            });
         pixl_core::types::PaletteExt {
             base: base.symbols,
             extended: std::collections::HashMap::new(),
@@ -2610,15 +2787,20 @@ fn cmd_backdrop_render(
     };
 
     // Resolve tile grids — parse RLE with ext support for each backdrop_tile
-    let mut tile_grids: std::collections::HashMap<String, Vec<Vec<String>>> = std::collections::HashMap::new();
+    let mut tile_grids: std::collections::HashMap<String, Vec<Vec<String>>> =
+        std::collections::HashMap::new();
     for (tile_name, tile_raw) in &pax.backdrop_tile {
-        let (tw, th) = tile_raw.size.as_deref()
+        let (tw, th) = tile_raw
+            .size
+            .as_deref()
             .and_then(|s| pixl_core::types::parse_size(s).ok())
             .unwrap_or((backdrop.tile_width, backdrop.tile_height));
 
         if let Some(rle) = &tile_raw.rle {
             match pixl_core::rle::parse_rle_ext(rle, tw, th, &palette_ext) {
-                Ok(grid) => { tile_grids.insert(tile_name.clone(), grid); }
+                Ok(grid) => {
+                    tile_grids.insert(tile_name.clone(), grid);
+                }
                 Err(e) => {
                     eprintln!("warning: tile '{}' RLE error: {}", tile_name, e);
                 }
@@ -2637,14 +2819,22 @@ fn cmd_backdrop_render(
 
     println!(
         "Backdrop '{}': {}x{} ({} tiles resolved)",
-        name, backdrop.width, backdrop.height, tile_grids.len()
+        name,
+        backdrop.width,
+        backdrop.height,
+        tile_grids.len()
     );
 
     if frames == 0 {
         // Static render
         let img = pixl_render::backdrop::render_backdrop(&backdrop, &tile_grids, &palette_ext);
         let final_img = if scale > 1 {
-            image::imageops::resize(&img, img.width() * scale, img.height() * scale, image::imageops::Nearest)
+            image::imageops::resize(
+                &img,
+                img.width() * scale,
+                img.height() * scale,
+                image::imageops::Nearest,
+            )
         } else {
             img
         };
@@ -2676,11 +2866,21 @@ fn cmd_backdrop_render(
             eprintln!("error: {}", e);
             process::exit(1);
         }
-        println!("Saved {}-frame animated backdrop: {}", frames, out.display());
+        println!(
+            "Saved {}-frame animated backdrop: {}",
+            frames,
+            out.display()
+        );
     }
 }
 
-fn cmd_convert(input: &PathBuf, out: &PathBuf, width: Option<u32>, colors: u32, preview: Option<u32>) {
+fn cmd_convert(
+    input: &PathBuf,
+    out: &PathBuf,
+    width: Option<u32>,
+    colors: u32,
+    preview: Option<u32>,
+) {
     let image_extensions = ["png", "jpg", "jpeg", "bmp", "gif", "webp", "tiff", "tga"];
 
     let inputs: Vec<PathBuf> = if input.is_dir() {
@@ -2747,8 +2947,14 @@ fn cmd_convert(input: &PathBuf, out: &PathBuf, width: Option<u32>, colors: u32, 
             if let Err(e) = final_img.save(&out_path) {
                 eprintln!("  error saving {}: {}", out_path.display(), e);
             } else {
-                println!("  {} -> {} ({}x{}, {} colors)",
-                    path.display(), out_path.display(), result.width, result.height, colors);
+                println!(
+                    "  {} -> {} ({}x{}, {} colors)",
+                    path.display(),
+                    out_path.display(),
+                    result.width,
+                    result.height,
+                    colors
+                );
             }
         }
     } else {
@@ -2756,10 +2962,17 @@ fn cmd_convert(input: &PathBuf, out: &PathBuf, width: Option<u32>, colors: u32, 
         for path in &inputs {
             match pixl_render::pixelize::convert_batch(path, out) {
                 Ok(batch) => {
-                    println!("  {} ({}x{})", path.display(), batch.original_size.0, batch.original_size.1);
+                    println!(
+                        "  {} ({}x{})",
+                        path.display(),
+                        batch.original_size.0,
+                        batch.original_size.1
+                    );
                     for r in &batch.results {
-                        println!("    {} -> {}x{}, {} colors",
-                            r.preset_name, r.width, r.height, r.num_colors);
+                        println!(
+                            "    {} -> {}x{}, {} colors",
+                            r.preset_name, r.width, r.height, r.num_colors
+                        );
                     }
                 }
                 Err(e) => {

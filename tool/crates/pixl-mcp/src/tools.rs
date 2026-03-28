@@ -24,10 +24,7 @@ pub fn tool_definitions() -> Vec<Tool> {
             "pixl_list_themes",
             "List available themes with palette name, scale, canvas size, light source.",
         ),
-        tool(
-            "pixl_list_stamps",
-            "List available stamps with sizes.",
-        ),
+        tool("pixl_list_stamps", "List available stamps with sizes."),
         // ── Creation ──
         tool(
             "pixl_create_tile",

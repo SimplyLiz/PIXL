@@ -553,6 +553,7 @@ class _ModeToggle extends ConsumerWidget {
         children: [
           modeButton(EditorMode.pixel, Icons.edit, 'Pixel'),
           modeButton(EditorMode.tilemap, Icons.grid_view, 'Tilemap'),
+          modeButton(EditorMode.backdrop, Icons.landscape, 'Backdrop'),
         ],
       ),
     );

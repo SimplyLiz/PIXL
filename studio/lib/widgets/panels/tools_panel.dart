@@ -19,6 +19,7 @@ import '../../theme/studio_theme.dart';
 import '../../utils/grid_parser.dart';
 import '../color_picker_dialog.dart';
 import '../sprite_preview_dialog.dart';
+import 'backdrop_panel.dart';
 
 enum _PanelTab { palette, style, generate, tiles }
 
@@ -37,7 +38,17 @@ class _ToolsPanelState extends ConsumerState<ToolsPanel> {
   Widget build(BuildContext context) {
     final mode = ref.watch(editorModeProvider);
     final isTilemap = mode == EditorMode.tilemap;
+    final isBackdrop = mode == EditorMode.backdrop;
     final theme = Theme.of(context);
+
+    // Backdrop mode: show dedicated panel instead of tabs
+    if (isBackdrop) {
+      return Container(
+        width: 220,
+        decoration: StudioTheme.rightPanelDecoration,
+        child: const BackdropPanel(),
+      );
+    }
 
     return Container(
       width: 220,

@@ -97,14 +97,8 @@ fn nearest_color(palette: &[[u8; 3]], target: &[u8; 3]) -> u8 {
 }
 
 /// Encode RGBA images with uniform frame duration as a looping GIF.
-pub fn encode_rgba_gif(
-    frames: &[RgbaImage],
-    duration_ms: u32,
-) -> Result<Vec<u8>, String> {
-    let pairs: Vec<(RgbaImage, u32)> = frames
-        .iter()
-        .map(|f| (f.clone(), duration_ms))
-        .collect();
+pub fn encode_rgba_gif(frames: &[RgbaImage], duration_ms: u32) -> Result<Vec<u8>, String> {
+    let pairs: Vec<(RgbaImage, u32)> = frames.iter().map(|f| (f.clone(), duration_ms)).collect();
     encode_gif(&pairs, true)
 }
 

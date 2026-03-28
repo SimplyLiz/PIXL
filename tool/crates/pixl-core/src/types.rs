@@ -152,9 +152,15 @@ pub struct AnimClock {
     pub mode: String,
 }
 
-fn default_anim_fps() -> u32 { 6 }
-fn default_anim_frames() -> u32 { 4 }
-fn default_anim_mode() -> String { "loop".to_string() }
+fn default_anim_fps() -> u32 {
+    6
+}
+fn default_anim_frames() -> u32 {
+    4
+}
+fn default_anim_mode() -> String {
+    "loop".to_string()
+}
 
 // ── Stamp ───────────────────────────────────────────────────────────
 
@@ -875,22 +881,58 @@ pub struct BackdropZone {
 
 #[derive(Debug, Clone)]
 pub enum ZoneBehavior {
-    Cycle { cycle: String },
-    Wave { cycle: String, phase_rows: u32, wave_dx: i32 },
-    Flicker { cycle: String, density: f64, seed: u64 },
-    ScrollDown { speed: f64, wrap: bool },
+    Cycle {
+        cycle: String,
+    },
+    Wave {
+        cycle: String,
+        phase_rows: u32,
+        wave_dx: i32,
+    },
+    Flicker {
+        cycle: String,
+        density: f64,
+        seed: u64,
+    },
+    ScrollDown {
+        speed: f64,
+        wrap: bool,
+    },
     /// SNES HDMA-style sinusoidal horizontal scroll per scanline.
-    HScrollSine { amplitude: u32, period: u32, speed: f64 },
+    HScrollSine {
+        amplitude: u32,
+        period: u32,
+        speed: f64,
+    },
     /// Per-pixel color tint gradient across the zone rect.
-    ColorGradient { from: Rgba, to: Rgba, vertical: bool },
+    ColorGradient {
+        from: Rgba,
+        to: Rgba,
+        vertical: bool,
+    },
     /// GBA-style pixelation with independent X/Y block sizes.
-    Mosaic { size_x: u32, size_y: u32 },
+    Mosaic {
+        size_x: u32,
+        size_y: u32,
+    },
     /// GBA WIN0/WIN1-style rendering window: control layer visibility + effects.
-    Window { layers_visible: Vec<String>, blend_override: Option<BlendMode>, opacity_override: Option<f64> },
+    Window {
+        layers_visible: Vec<String>,
+        blend_override: Option<BlendMode>,
+        opacity_override: Option<f64>,
+    },
     /// Genesis VSRAM-style per-column vertical scroll with sine offset.
-    VScrollSine { amplitude: u32, period: u32, speed: f64 },
+    VScrollSine {
+        amplitude: u32,
+        period: u32,
+        speed: f64,
+    },
     /// Konami raster-style per-scanline palette entry interpolation.
-    PaletteRamp { symbol: String, from: Rgba, to: Rgba },
+    PaletteRamp {
+        symbol: String,
+        from: Rgba,
+        to: Rgba,
+    },
 }
 
 // ── Size parsing helper ─────────────────────────────────────────────

@@ -26,8 +26,12 @@ pub struct TilemapRaw {
     pub objects: Vec<TilemapObjectPlacement>,
 }
 
-fn default_tile_width() -> u32 { 16 }
-fn default_tile_height() -> u32 { 16 }
+fn default_tile_width() -> u32 {
+    16
+}
+fn default_tile_height() -> u32 {
+    16
+}
 
 /// A single layer in a tilemap.
 #[derive(Debug, Deserialize, serde::Serialize)]
@@ -50,7 +54,9 @@ pub struct TilemapLayerRaw {
     pub grid: Option<String>,
 }
 
-fn default_blend() -> String { "normal".to_string() }
+fn default_blend() -> String {
+    "normal".to_string()
+}
 
 /// WFC constraint painting for tilemaps.
 #[derive(Debug, Deserialize, serde::Serialize)]
@@ -185,11 +191,7 @@ pub fn resolve_tilemap(raw: &TilemapRaw) -> Tilemap {
                     g.lines()
                         .map(|l| l.trim())
                         .filter(|l| !l.is_empty())
-                        .map(|line| {
-                            line.split_whitespace()
-                                .map(|s| TileRef::parse(s))
-                                .collect()
-                        })
+                        .map(|line| line.split_whitespace().map(|s| TileRef::parse(s)).collect())
                         .collect()
                 })
                 .unwrap_or_default();
@@ -203,7 +205,11 @@ pub fn resolve_tilemap(raw: &TilemapRaw) -> Tilemap {
                     Some("top_only") => CollisionMode::TopOnly,
                     _ => CollisionMode::Full,
                 },
-                layer_role: lr.layer_role.as_deref().map(LayerRole::from_str).unwrap_or(LayerRole::Custom),
+                layer_role: lr
+                    .layer_role
+                    .as_deref()
+                    .map(LayerRole::from_str)
+                    .unwrap_or(LayerRole::Custom),
                 cycles: lr.cycles.clone(),
                 scroll_factor: lr.scroll_factor.unwrap_or(1.0),
                 grid,
@@ -267,20 +273,41 @@ mod tests {
     #[test]
     fn layers_sorted_by_z_order() {
         let mut layers = HashMap::new();
-        layers.insert("fg".to_string(), TilemapLayerRaw {
-            z_order: 2, blend: "normal".to_string(), collision: false,
-            collision_mode: None, layer_role: Some("foreground".to_string()),
-            cycles: vec![], scroll_factor: None, grid: Some("a".to_string()),
-        });
-        layers.insert("bg".to_string(), TilemapLayerRaw {
-            z_order: 0, blend: "normal".to_string(), collision: false,
-            collision_mode: None, layer_role: Some("background".to_string()),
-            cycles: vec![], scroll_factor: None, grid: Some("b".to_string()),
-        });
+        layers.insert(
+            "fg".to_string(),
+            TilemapLayerRaw {
+                z_order: 2,
+                blend: "normal".to_string(),
+                collision: false,
+                collision_mode: None,
+                layer_role: Some("foreground".to_string()),
+                cycles: vec![],
+                scroll_factor: None,
+                grid: Some("a".to_string()),
+            },
+        );
+        layers.insert(
+            "bg".to_string(),
+            TilemapLayerRaw {
+                z_order: 0,
+                blend: "normal".to_string(),
+                collision: false,
+                collision_mode: None,
+                layer_role: Some("background".to_string()),
+                cycles: vec![],
+                scroll_factor: None,
+                grid: Some("b".to_string()),
+            },
+        );
 
         let raw = TilemapRaw {
-            width: 1, height: 1, tile_width: 16, tile_height: 16,
-            layer: layers, constraints: None, objects: vec![],
+            width: 1,
+            height: 1,
+            tile_width: 16,
+            tile_height: 16,
+            layer: layers,
+            constraints: None,
+            objects: vec![],
         };
 
         let tm = resolve_tilemap(&raw);
@@ -291,16 +318,28 @@ mod tests {
     #[test]
     fn tile_ref_with_flips_in_grid() {
         let mut layers = HashMap::new();
-        layers.insert("main".to_string(), TilemapLayerRaw {
-            z_order: 0, blend: "normal".to_string(), collision: false,
-            collision_mode: None, layer_role: None, cycles: vec![],
-            scroll_factor: None,
-            grid: Some("wall!h wall!v wall!hv:shadow".to_string()),
-        });
+        layers.insert(
+            "main".to_string(),
+            TilemapLayerRaw {
+                z_order: 0,
+                blend: "normal".to_string(),
+                collision: false,
+                collision_mode: None,
+                layer_role: None,
+                cycles: vec![],
+                scroll_factor: None,
+                grid: Some("wall!h wall!v wall!hv:shadow".to_string()),
+            },
+        );
 
         let raw = TilemapRaw {
-            width: 3, height: 1, tile_width: 16, tile_height: 16,
-            layer: layers, constraints: None, objects: vec![],
+            width: 3,
+            height: 1,
+            tile_width: 16,
+            tile_height: 16,
+            layer: layers,
+            constraints: None,
+            objects: vec![],
         };
 
         let tm = resolve_tilemap(&raw);

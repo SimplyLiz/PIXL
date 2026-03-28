@@ -3,7 +3,6 @@
 /// Transforms spatial descriptions into WFC constraint configurations,
 /// then generates a tilemap. The LLM (or a rule parser) extracts
 /// predicates from natural language; the WFC engine assembles the map.
-
 use crate::adjacency::{AdjacencyRules, TileEdges};
 use crate::semantic::{self, SemanticRule, TileAffordance};
 use crate::wfc::{self, Pin, WfcConfig, WfcError, WfcResult};
@@ -15,14 +14,12 @@ pub enum Predicate {
     /// Place a specific region at a biased position.
     Region {
         name: String,
-        tile_type: String,       // affordance or tile name pattern
+        tile_type: String,        // affordance or tile name pattern
         min_size: (usize, usize), // minimum width x height in tiles
         position: Position,
     },
     /// Border the map with a specific tile type.
-    Border {
-        tile_type: String,
-    },
+    Border { tile_type: String },
     /// Ensure a path exists between two points.
     PathRequired {
         from: (usize, usize),
@@ -225,7 +222,8 @@ pub fn narrate_map(
         config.width,
         config.height,
     );
-    let diagnostics = wfc::diagnose_wfc_failure(rules, &tile_names, &last_pins, config.width, config.height);
+    let diagnostics =
+        wfc::diagnose_wfc_failure(rules, &tile_names, &last_pins, config.width, config.height);
 
     Err(WfcError::ExhaustedRetries {
         retries: config.max_retries,
@@ -251,16 +249,37 @@ fn build_pins_from_predicates(
             Predicate::Border { tile_type } => {
                 if let Some(idx) = find_tile_for_type(tile_type, name_to_idx, affordance_to_tiles) {
                     for x in 0..width {
-                        pins.push(Pin { x, y: 0, tile_idx: idx });
-                        pins.push(Pin { x, y: height - 1, tile_idx: idx });
+                        pins.push(Pin {
+                            x,
+                            y: 0,
+                            tile_idx: idx,
+                        });
+                        pins.push(Pin {
+                            x,
+                            y: height - 1,
+                            tile_idx: idx,
+                        });
                     }
                     for y in 1..height - 1 {
-                        pins.push(Pin { x: 0, y, tile_idx: idx });
-                        pins.push(Pin { x: width - 1, y, tile_idx: idx });
+                        pins.push(Pin {
+                            x: 0,
+                            y,
+                            tile_idx: idx,
+                        });
+                        pins.push(Pin {
+                            x: width - 1,
+                            y,
+                            tile_idx: idx,
+                        });
                     }
                 }
             }
-            Predicate::Region { tile_type, min_size, position, .. } => {
+            Predicate::Region {
+                tile_type,
+                min_size,
+                position,
+                ..
+            } => {
                 if let Some(idx) = find_tile_for_type(tile_type, name_to_idx, affordance_to_tiles) {
                     let (bx, by) = position.bias_center();
                     let cx = (bx * width as f64) as usize;
@@ -271,7 +290,11 @@ fn build_pins_from_predicates(
                         for dx in 0..min_size.0.min(3) {
                             let px = (cx + dx).saturating_sub(half_w).min(width - 1);
                             let py = (cy + dy).saturating_sub(half_h).min(height - 1);
-                            pins.push(Pin { x: px, y: py, tile_idx: idx });
+                            pins.push(Pin {
+                                x: px,
+                                y: py,
+                                tile_idx: idx,
+                            });
                         }
                     }
                 }
@@ -405,8 +428,12 @@ mod tests {
             TileEdges::new("floor", "floor", "floor", "floor", "floor", 2.0),
         ];
         let affordances = vec![
-            TileAffordance { affordance: Some("obstacle".to_string()) },
-            TileAffordance { affordance: Some("walkable".to_string()) },
+            TileAffordance {
+                affordance: Some("obstacle".to_string()),
+            },
+            TileAffordance {
+                affordance: Some("walkable".to_string()),
+            },
         ];
         (tiles, affordances)
     }
@@ -424,7 +451,12 @@ mod tests {
     fn parse_region_predicate() {
         let pred = parse_predicate("region:boss:obstacle:4x4:southeast").unwrap();
         match pred {
-            Predicate::Region { name, tile_type, min_size, .. } => {
+            Predicate::Region {
+                name,
+                tile_type,
+                min_size,
+                ..
+            } => {
                 assert_eq!(name, "boss");
                 assert_eq!(tile_type, "obstacle");
                 assert_eq!(min_size, (4, 4));
@@ -455,19 +487,13 @@ mod tests {
             height: 6,
             seed: 42,
             max_retries: 5,
-            predicates: vec![
-                Predicate::Border {
-                    tile_type: "wall".to_string(),
-                },
-            ],
+            predicates: vec![Predicate::Border {
+                tile_type: "wall".to_string(),
+            }],
             extra_pins: vec![],
         };
 
-        let result = narrate_map(
-            &tiles, &affordances, &rules,
-            &[], &[], 3.0,
-            &config,
-        ).unwrap();
+        let result = narrate_map(&tiles, &affordances, &rules, &[], &[], 3.0, &config).unwrap();
 
         // Border should be walls (index 0)
         for x in 0..6 {
@@ -490,22 +516,16 @@ mod tests {
             height: 8,
             seed: 42,
             max_retries: 5,
-            predicates: vec![
-                Predicate::Region {
-                    name: "boss".to_string(),
-                    tile_type: "obstacle".to_string(),
-                    min_size: (2, 2),
-                    position: Position::Southeast,
-                },
-            ],
+            predicates: vec![Predicate::Region {
+                name: "boss".to_string(),
+                tile_type: "obstacle".to_string(),
+                min_size: (2, 2),
+                position: Position::Southeast,
+            }],
             extra_pins: vec![],
         };
 
-        let result = narrate_map(
-            &tiles, &affordances, &rules,
-            &[], &[], 3.0,
-            &config,
-        ).unwrap();
+        let result = narrate_map(&tiles, &affordances, &rules, &[], &[], 3.0, &config).unwrap();
 
         // Southeast quadrant should have obstacle tiles (index 0)
         let grid = &result.grid;
@@ -513,7 +533,10 @@ mod tests {
             .flat_map(|y| (4..8).map(move |x| grid[y][x]))
             .filter(|&t| t == 0)
             .count();
-        assert!(se_obstacles > 0, "southeast should have obstacles from region bias");
+        assert!(
+            se_obstacles > 0,
+            "southeast should have obstacles from region bias"
+        );
     }
 
     #[test]
@@ -526,8 +549,12 @@ mod tests {
             vec![0, 0, 0, 0, 0],
         ];
         let affordances = vec![
-            TileAffordance { affordance: Some("obstacle".to_string()) },
-            TileAffordance { affordance: Some("walkable".to_string()) },
+            TileAffordance {
+                affordance: Some("obstacle".to_string()),
+            },
+            TileAffordance {
+                affordance: Some("walkable".to_string()),
+            },
         ];
 
         assert!(check_path(&grid, &affordances, (1, 1), (3, 3)));

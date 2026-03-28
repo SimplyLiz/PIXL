@@ -105,7 +105,9 @@ pub fn resolve_frames_with_cycles(
                         .map(|&ch| {
                             // Check each cycle for this symbol
                             for c in cycles {
-                                if let Some(rgba) = cycle::cycle_color_at_frame(ch, c, palette, tick) {
+                                if let Some(rgba) =
+                                    cycle::cycle_color_at_frame(ch, c, palette, tick)
+                                {
                                     // Find which symbol has this color
                                     for (&sym, &col) in &palette.symbols {
                                         if col == rgba {
@@ -150,10 +152,12 @@ fn resolve_delta_frame(
     base_grids: &HashMap<u32, Vec<Vec<char>>>,
 ) -> Result<Vec<Vec<char>>, AnimError> {
     let base_idx = frame.base.unwrap_or(1);
-    let base_grid = base_grids.get(&base_idx).ok_or_else(|| AnimError::FrameError {
-        index: frame.index,
-        reason: format!("delta base frame {base_idx} not found"),
-    })?;
+    let base_grid = base_grids
+        .get(&base_idx)
+        .ok_or_else(|| AnimError::FrameError {
+            index: frame.index,
+            reason: format!("delta base frame {base_idx} not found"),
+        })?;
 
     let mut grid = base_grid.clone();
     for change in &frame.changes {
@@ -204,9 +208,33 @@ mod tests {
 
     fn test_palette() -> Palette {
         let mut symbols = HashMap::new();
-        symbols.insert('.', Rgba { r: 0, g: 0, b: 0, a: 0 });
-        symbols.insert('#', Rgba { r: 42, g: 31, b: 61, a: 255 });
-        symbols.insert('+', Rgba { r: 74, g: 58, b: 109, a: 255 });
+        symbols.insert(
+            '.',
+            Rgba {
+                r: 0,
+                g: 0,
+                b: 0,
+                a: 0,
+            },
+        );
+        symbols.insert(
+            '#',
+            Rgba {
+                r: 42,
+                g: 31,
+                b: 61,
+                a: 255,
+            },
+        );
+        symbols.insert(
+            '+',
+            Rgba {
+                r: 74,
+                g: 58,
+                b: 109,
+                a: 255,
+            },
+        );
         Palette { symbols }
     }
 

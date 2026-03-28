@@ -1,7 +1,6 @@
 /// PIXL project files (.pixlproject) for cross-session continuity.
 /// A project organizes multiple .pax files (worlds), persists the style
 /// latent, and tracks authoring progress.
-
 use crate::style::StyleLatent;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -69,10 +68,8 @@ impl PixlProject {
 
     /// Save the project to a .pixlproject file.
     pub fn save(&self, path: &Path) -> Result<(), String> {
-        let source =
-            toml::to_string_pretty(self).map_err(|e| format!("serialize error: {}", e))?;
-        std::fs::write(path, source)
-            .map_err(|e| format!("cannot write {}: {}", path.display(), e))
+        let source = toml::to_string_pretty(self).map_err(|e| format!("serialize error: {}", e))?;
+        std::fs::write(path, source).map_err(|e| format!("cannot write {}: {}", path.display(), e))
     }
 
     /// Get the style description for prompt injection.

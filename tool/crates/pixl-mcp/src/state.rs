@@ -71,8 +71,11 @@ impl McpState {
             if let Ok(json) = std::fs::read_to_string(&fb_path) {
                 if let Ok(store) = FeedbackStore::from_json(&json) {
                     state.feedback = store;
-                    eprintln!("loaded {} feedback events from {}",
-                        state.feedback.events().len(), fb_path.display());
+                    eprintln!(
+                        "loaded {} feedback events from {}",
+                        state.feedback.events().len(),
+                        fb_path.display()
+                    );
                 }
             }
         }
@@ -86,7 +89,11 @@ impl McpState {
             let fb_path = Self::feedback_path(src);
             let json = self.feedback.to_json();
             if let Err(e) = std::fs::write(&fb_path, json) {
-                eprintln!("warning: could not save feedback to {}: {}", fb_path.display(), e);
+                eprintln!(
+                    "warning: could not save feedback to {}: {}",
+                    fb_path.display(),
+                    e
+                );
             }
         }
     }
@@ -100,13 +107,15 @@ impl McpState {
         let filename = "pixelart-knowledge-base.json";
         let candidates: Vec<PathBuf> = [
             // Next to the .pax file
-            pax_path.and_then(|p| p.parent()).map(|d| d.join("knowledge").join(filename)),
+            pax_path
+                .and_then(|p| p.parent())
+                .map(|d| d.join("knowledge").join(filename)),
             // Relative to current working directory
             Some(PathBuf::from("knowledge").join(filename)),
             // Relative to the binary
-            std::env::current_exe().ok().and_then(|p| {
-                p.parent().map(|d| d.join("knowledge").join(filename))
-            }),
+            std::env::current_exe()
+                .ok()
+                .and_then(|p| p.parent().map(|d| d.join("knowledge").join(filename))),
             // PIXL repo layout: tool/knowledge/
             Some(PathBuf::from("tool/knowledge").join(filename)),
             // Corpus output directory
@@ -126,7 +135,11 @@ impl McpState {
 
     fn feedback_path(pax_path: &std::path::Path) -> PathBuf {
         let mut fb = pax_path.to_path_buf();
-        let stem = fb.file_stem().unwrap_or_default().to_string_lossy().to_string();
+        let stem = fb
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
         fb.set_file_name(format!("{}.feedback.json", stem));
         fb
     }

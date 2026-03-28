@@ -1,13 +1,12 @@
+use crate::rotate;
 /// Tileset completeness analyzer.
 ///
 /// Examines a tileset's edge classes and reports which transition tiles
 /// are missing for WFC to generate connected maps. Runs proactively
 /// before narrate/WFC to prevent contradictions.
-
 use crate::types::{PaxFile, TileRaw};
-use crate::rotate;
-use std::collections::{HashMap, HashSet, BTreeSet};
 use serde::Serialize;
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 /// A missing transition tile that the tileset needs.
 #[derive(Debug, Clone, Serialize)]
@@ -224,9 +223,7 @@ pub fn analyze(pax: &PaxFile) -> CompletenessReport {
         for mt in &missing_tiles {
             s.push_str(&format!(
                 "  - {} ({}→{}, auto_rotate=4way recommended)\n",
-                mt.name,
-                mt.edge_class.n,
-                mt.edge_class.s,
+                mt.name, mt.edge_class.n, mt.edge_class.s,
             ));
         }
         s.push_str(&format!(
@@ -304,7 +301,11 @@ mod tests {
     fn fully_connected_tileset() {
         let pax = parse(CONNECTED_PAX);
         let report = analyze(&pax);
-        assert!(report.disconnected_pairs.is_empty(), "should be fully connected: {:?}", report.disconnected_pairs);
+        assert!(
+            report.disconnected_pairs.is_empty(),
+            "should be fully connected: {:?}",
+            report.disconnected_pairs
+        );
         assert_eq!(report.score, 1.0);
         assert!(report.missing_tiles.is_empty());
     }
@@ -313,8 +314,14 @@ mod tests {
     fn missing_transition() {
         let pax = parse(DISCONNECTED_PAX);
         let report = analyze(&pax);
-        assert!(!report.disconnected_pairs.is_empty(), "should detect disconnection");
-        assert!(!report.missing_tiles.is_empty(), "should recommend missing tiles");
+        assert!(
+            !report.disconnected_pairs.is_empty(),
+            "should detect disconnection"
+        );
+        assert!(
+            !report.missing_tiles.is_empty(),
+            "should recommend missing tiles"
+        );
         assert!(report.score < 1.0);
     }
 
@@ -323,9 +330,14 @@ mod tests {
         let pax = parse(THREE_CLASS_PAX);
         let report = analyze(&pax);
         assert!(!report.disconnected_pairs.is_empty());
-        let water_missing: Vec<_> = report.missing_tiles.iter()
+        let water_missing: Vec<_> = report
+            .missing_tiles
+            .iter()
             .filter(|m| m.name.contains("water"))
             .collect();
-        assert!(!water_missing.is_empty(), "should recommend water transition tiles");
+        assert!(
+            !water_missing.is_empty(),
+            "should recommend water transition tiles"
+        );
     }
 }
