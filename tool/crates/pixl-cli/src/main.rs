@@ -193,10 +193,6 @@ enum Commands {
         #[arg(long)]
         dither: bool,
 
-        /// Extract palette from generated image (default: true)
-        #[arg(long, default_value = "true")]
-        auto_palette: bool,
-
         /// Max colors for auto-palette extraction
         #[arg(long, default_value = "32")]
         max_colors: u32,
@@ -670,11 +666,10 @@ fn main() {
             name,
             size,
             dither,
-            auto_palette,
             max_colors,
             out,
         } => {
-            cmd_generate_sprite(&file, &prompt, &name, &size, dither, auto_palette, max_colors, &out);
+            cmd_generate_sprite(&file, &prompt, &name, &size, dither, max_colors, &out);
         }
         Commands::Blueprint { size, model } => {
             cmd_blueprint(&size, &model);
@@ -2100,7 +2095,6 @@ fn cmd_generate_sprite(
     name: &str,
     size_str: &str,
     dither: bool,
-    auto_palette: bool,
     max_colors: u32,
     out: &PathBuf,
 ) {
@@ -2137,26 +2131,17 @@ fn cmd_generate_sprite(
         _ => "auto".to_string(),
     };
     println!(
-        "generating sprite '{}' via {} ({}, auto_palette={})...",
-        name, config.model, size_display, auto_palette
+        "generating sprite '{}' via {} ({}, {} colors)...",
+        name, config.model, size_display, max_colors
     );
     println!("prompt: \"{}\"", prompt);
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     let result = rt.block_on(async {
-        if auto_palette {
-            pixl_mcp::diffusion::generate_with_auto_palette(
-                &config, prompt, target_w, target_h, max_colors, dither,
-            )
-            .await
-        } else {
-            let w = target_w.unwrap_or(16);
-            let h = target_h.unwrap_or(16);
-            pixl_mcp::diffusion::generate_and_quantize(
-                &config, prompt, w, h, session_palette, dither,
-            )
-            .await
-        }
+        pixl_mcp::diffusion::generate_with_auto_palette(
+            &config, prompt, target_w, target_h, max_colors, dither,
+        )
+        .await
     });
 
     let result = match result {
