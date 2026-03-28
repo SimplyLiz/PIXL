@@ -1728,59 +1728,46 @@ Excluded: `pixl-mcp`, `pixl-cli` (not applicable to WASM).
 | WASM Playground | DONE | 8 wasm-bindgen exports, live PAX editor in browser |
 | Dogfood Fixes | DONE | 10 bugs found + fixed from first real usage session |
 
+### Shipped Since V1.5
+
+| Feature | Version | Status |
+|---------|---------|--------|
+| Procedural Variation Engine | V1.6 | DONE — `pixl vary` with 6 mutation types |
+| Tile Completeness Analysis | V1.6 | DONE — `pixl validate --completeness` |
+| Feedback & Training Pipeline | V1.7 | DONE — accept/reject/export JSONL |
+| MAP-Elites Data Synthesis | V1.8 | DONE — `training/map_elites.py` |
+| LoRA Fine-tuning Pipeline | V1.8 | DONE — MLX training + inference |
+| PIXL Studio (Flutter Desktop) | V2.0 | DONE — pixel canvas, tilemap, chat, export |
+| Sprite Conversion Pipeline | V2.1 | DONE — `pixl convert` (AI → pixel art) |
+| Backdrop Format Extension | V2.1 | DONE — palette_ext, backdrop tiles, scenes |
+| Multi-layer Parallax | V2.1 | DONE — layers with scroll_factor, blend, opacity |
+| 10 Zone Behaviors | V2.1 | DONE — cycle, wave, flicker, scroll, HDMA, mosaic, etc. |
+| Retro Hardware Effects | V2.1 | DONE — shadow/highlight, scanline effects, palette ramp |
+| Corner Edge Matching | V2.1 | DONE — 8-neighbor WFC (Godot terrain-style) |
+| Core Tilemap Types | V2.1 | DONE — layers, z-order, collision, WFC constraints |
+| Animation Module | V2.1 | DONE — `animate.rs`, `pixl render-sprite` |
+| Studio Backdrop Editor | V2.1 | DONE — viewport, zone editor, layer panel |
+| Unified TexturePacker Types | V2.1 | DONE — single source of truth in atlas.rs |
+
 ### Remaining — Future
 
-**Procedural Variation Engine:**
-- Auto-generate N tile variants conditioned on style latent
-- Crack placement, moss/erosion density, color jitter
-- `pixl vary <tile> --count 4 --seed 42`
-
-**Skeletal Animation (V2):**
+**Skeletal Animation (V3):**
 - Body part sprites + RotSprite rotation + bone interpolation
+- See spec Section 19.1 for format specification
 
-**Fine-tuned PAX LoRA (V2+):**
-- Train on GameTileNet corpus converted to .pax format
+**Tilemap Direct Editing (V3):**
+- Visual tilemap painting in Studio
+- Object placement API
+- Tile run auto-tiling
 
-### V1.6 — GameTileNet Corpus Integration (~1–2 weeks)
-
-**Conversion pipeline** (this is real work, not just "copy files"):
-- PNG → indexed palette quantization (reduce to 16 colors per tile)
-- Symbol assignment from quantized palette
-- TOML `.pax` stamp generation with size, palette, grid
-- GameTileNet affordance label → PAX semantic tag mapping
-- Batch validation of all 2,142 converted stamps
-- Tool: `pixl import-corpus <gameTileNet-dir/> --palette <name>`
-
-**Integration:**
-- Ship as built-in stamp library in `corpus/`
-- Stamp browser MCP tool: `pixl.browse_stamps(affordance?, biome?, tags?)`
-- LLM can search: "show me walkable forest floor stamps" → filtered results
-- Adopt GameTileNet's 361 normalized tags as the canonical tag vocabulary
-
-### V2.0 — PIXL Studio (Flutter Desktop)
-
-- Desktop app in `studio/` talking to `pixl` Rust backend (via HTTP API or FFI)
-- Live preview panel — edit .pax text, see rendered tiles instantly
-- Tile palette browser — visual grid of all tiles with affordance labels
-- WFC map preview — generate and preview maps interactively
-- Stamp library browser with GameTileNet corpus, drag-and-drop composition
-- Narrative-to-map UI: text prompt → live map generation
-- Export wizard for game engines (TexturePacker + Tiled + GBStudio)
-- Theme editor with live palette preview
-
-### V2.x — Advanced Features
-
-- **Skeletal animation system** — body part sprites + RotSprite rotation +
-  bone interpolation. Author 6-8 body parts, define 3-4 skeletal keyframe
-  poses, system generates complete spritesheets. 4-directional movement via
-  mirror. RotSprite preserves pixel aesthetic (no new colors). See spec
-  Section 19.1 for full format specification.
-- Parallax layer definitions
+**Advanced Features (V3+):**
 - Sound effect tags on tiles (footstep type, ambient)
 - Collaborative editing via CRDT-based .pax sync
 - Fine-tuned small LLM (3B–7B) specifically trained on PAX format
 - Public stamp/theme registry (npm-style for pixel art building blocks)
-- Training data pipeline: convert OpenGameArt CC0 assets to .pax for LLM training
+
+See `docs/feature_parity_report.md` for the complete feature-by-feature
+matrix across Engine/CLI/MCP/HTTP/Studio.
 
 ---
 
