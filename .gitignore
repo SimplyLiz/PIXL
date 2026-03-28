@@ -35,6 +35,9 @@ studio/.flutter-plugins-dependencies
 training/.venv/
 training/data/
 training/data_matched/
+training/data_cytopia/
+training/data_me/
+__pycache__/
 training/adapters/
 *.venv
 corpus/

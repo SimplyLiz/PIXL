@@ -1,0 +1,46 @@
+# PIXL License
+
+Copyright (c) 2026 TasteHub / Lisa. All rights reserved.
+
+## Terms
+
+This software is provided under a dual-license model:
+
+### 1. Free Use
+
+You may use, copy, modify, and distribute this software **at no cost** for:
+
+- **Open source projects** — any project released under an
+  [OSI-approved license](https://opensource.org/licenses).
+- **Non-commercial use** — personal projects, education, research, evaluation,
+  and any other use that does not generate revenue or provide a commercial
+  advantage.
+
+### 2. Commercial Use — One-Time License (29 EUR)
+
+If you use this software as part of a **commercial product or service**
+(including SaaS, internal business tools, or client work), a one-time license
+fee of **29 EUR** is required per organization.
+
+This grants a perpetual, non-exclusive, worldwide license to use, modify, and
+distribute the software in commercial contexts, including with your own API
+keys (BYOK).
+
+To purchase a commercial license, contact: **lisa@tastehub.io**
+
+### 3. Restrictions
+
+- You may **not** sell, sublicense, or redistribute the software itself
+  (modified or unmodified) as a standalone product.
+- You may **not** offer a hosted service whose primary value is this software
+  without a commercial license.
+
+## Disclaimer
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

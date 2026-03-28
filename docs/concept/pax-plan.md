@@ -1,8 +1,8 @@
 # PAX — Pixel Art eXchange Format
 ## Complete Technical Specification & Go Implementation Plan
 
-**Version:** 0.1-draft  
-**Author:** Lisa / TasteHub GmbH  
+**Version:** 0.1-draft
+**Author:** Lisa / TasteHub GmbH
 **Date:** March 2026
 
 ---

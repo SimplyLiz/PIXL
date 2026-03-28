@@ -348,10 +348,10 @@ This is knowledge the static 8K system prompt can't carry — specific value per
 | Investigate SELF-REFINE failure | **MCP** | `cv_query` | LLM (during refinement) |
 | Get full source of a reference tile | **MCP** | `cv_expand` | LLM (when studying examples) |
 | Verify a design claim | **MCP** | `cv_verify` | LLM (when uncertain) |
-| Validate edges | **pixl-mcp** | `pixl.validate_tile()` | LLM (during generation) |
-| Render PAX to PNG | **pixl-mcp** | `pixl.render_tile()` | LLM (during SELF-REFINE) |
-| Get active palette | **pixl-mcp** | `pixl.get_palette()` | LLM (during generation) |
-| Generate WFC map | **pixl-mcp** | `pixl.generate_wfc_map()` | LLM (map generation) |
+| Validate edges | **pixl-mcp** | `pixl_validate` | LLM (during generation) |
+| Render PAX to PNG | **pixl-mcp** | `pixl_render_tile` | LLM (during SELF-REFINE) |
+| Get active palette | **pixl-mcp** | `pixl_get_palette` | LLM (during generation) |
+| Generate WFC map | **pixl-mcp** | `pixl_narrate_map` | LLM (map generation) |
 
 **Rule of thumb:**
 - **CV API** = PIXL's backend making the LLM smarter before it runs
@@ -509,7 +509,7 @@ Without CV, the LLM has to invent spatial design rules from its training data. W
    - loot_room(size: 1x, count: 3) CONNECTED_BY corridor TO hub
    - style: dark_forest, irregular_shapes
 
-3. LLM calls pixl.generate_wfc_map() with:
+3. LLM calls pixl_narrate_map with:
    - Tile set: existing forest dungeon tiles from CV
    - Semantic constraints: from spatial predicates
    - Edge constraints: from tile declarations

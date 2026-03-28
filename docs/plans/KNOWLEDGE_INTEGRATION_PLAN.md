@@ -4,7 +4,7 @@
 **Feature:** Context-Aware Pixel Art Knowledge System
 **Date:** 2026-03-24
 **Team:** Lisa + Claude
-**Status:** Planning
+**Status:** Implemented (BM25 knowledge base is live in engine)
 
 ---
 

@@ -1,13 +1,20 @@
-"""Prepare palette-matched training data.
+"""Prepare palette-matched training data with rich feature labels.
 
-Instead of forcing everything into dark_fantasy, we:
+Improvements over V1 (informed by TileGPT research):
 1. Auto-extract a palette from each tileset's actual colors
 2. Quantize each tileset with its own palette
-3. Augment with rotations/flips (4x data)
-4. Merge into training JSONL
+3. Compute visual features per tile (density, symmetry, edge complexity, dominant color)
+4. Generate structured labels from features (not just "a tile from X")
+5. Augment with rotations (4x data)
+6. Feature-stratified sampling to ensure uniform coverage (TileGPT's key finding)
+
+Usage:
+    python prepare_matched.py
+    python prepare_matched.py --assets /path/to/GameTileNet/Assets --stratify
 """
 
 import json
+import math
 import os
 import random
 from collections import Counter
@@ -118,6 +125,124 @@ def augment(grid):
     return [grid, r90, r180, r270]
 
 
+def compute_tile_features(grid):
+    """Compute visual features from a character grid.
+
+    Returns dict with: density, symmetry_h, symmetry_v, edge_complexity,
+    unique_symbols, dominant_symbol, dominant_ratio.
+    """
+    h = len(grid)
+    w = len(grid[0]) if h > 0 else 0
+    total = h * w
+    if total == 0:
+        return {}
+
+    # Density: fraction of non-void cells
+    non_void = sum(1 for row in grid for c in row if c != ".")
+    density = non_void / total
+
+    # Symmetry: horizontal and vertical
+    h_matches = 0
+    v_matches = 0
+    for y in range(h):
+        for x in range(w // 2):
+            if grid[y][x] == grid[y][w - 1 - x]:
+                h_matches += 1
+    for y in range(h // 2):
+        for x in range(w):
+            if grid[y][x] == grid[h - 1 - y][x]:
+                v_matches += 1
+    half_cells = (h * (w // 2)) or 1
+    symmetry_h = h_matches / half_cells
+    half_cells_v = ((h // 2) * w) or 1
+    symmetry_v = v_matches / half_cells_v
+
+    # Edge complexity: count transitions along borders
+    edges = 0
+    edge_total = 0
+    for y in range(h):
+        for x in range(w):
+            if x < w - 1:
+                edge_total += 1
+                if grid[y][x] != grid[y][x + 1]:
+                    edges += 1
+            if y < h - 1:
+                edge_total += 1
+                if grid[y][x] != grid[y + 1][x]:
+                    edges += 1
+    edge_complexity = edges / edge_total if edge_total else 0
+
+    # Symbol distribution
+    counts = Counter(c for row in grid for c in row if c != ".")
+    unique_symbols = len(counts)
+    if counts:
+        dominant_sym, dominant_count = counts.most_common(1)[0]
+        dominant_ratio = dominant_count / non_void if non_void else 0
+    else:
+        dominant_sym = "."
+        dominant_ratio = 1.0
+
+    return {
+        "density": density,
+        "symmetry_h": symmetry_h,
+        "symmetry_v": symmetry_v,
+        "edge_complexity": edge_complexity,
+        "unique_symbols": unique_symbols,
+        "dominant_symbol": dominant_sym,
+        "dominant_ratio": dominant_ratio,
+    }
+
+
+def features_to_label(features, tileset_name, rotation_suffix=""):
+    """Convert computed features to a structured label string.
+
+    TileGPT finding: structured labels with feature values dramatically
+    improve prompt adherence vs. generic descriptions.
+    """
+    parts = [f"tileset:{tileset_name}"]
+
+    d = features.get("density", 0)
+    if d < 0.2:
+        parts.append("density:sparse")
+    elif d < 0.5:
+        parts.append("density:moderate")
+    elif d < 0.8:
+        parts.append("density:dense")
+    else:
+        parts.append("density:solid")
+
+    sym = max(features.get("symmetry_h", 0), features.get("symmetry_v", 0))
+    if sym > 0.85:
+        parts.append("symmetry:high")
+    elif sym > 0.6:
+        parts.append("symmetry:medium")
+    else:
+        parts.append("symmetry:low")
+
+    ec = features.get("edge_complexity", 0)
+    if ec < 0.15:
+        parts.append("detail:flat")
+    elif ec < 0.35:
+        parts.append("detail:simple")
+    elif ec < 0.55:
+        parts.append("detail:moderate")
+    else:
+        parts.append("detail:complex")
+
+    uc = features.get("unique_symbols", 0)
+    if uc <= 2:
+        parts.append("colors:minimal")
+    elif uc <= 4:
+        parts.append("colors:few")
+    else:
+        parts.append("colors:rich")
+
+    if rotation_suffix:
+        parts.append(f"rotation:{rotation_suffix}")
+
+    return ", ".join(parts)
+
+
 def to_chat(desc, grid_str, palette_desc):
     """Convert to chat format with palette context."""
     user_msg = f"Palette: {palette_desc}\n{desc}"
@@ -130,7 +255,49 @@ def to_chat(desc, grid_str, palette_desc):
     }
 
 
+def stratified_sample(pairs_with_features, max_per_bin=50, seed=42):
+    """Stratified sampling to ensure uniform feature coverage.
+
+    TileGPT's key finding: MAP-Elites (uniform coverage, Gini~0) dramatically
+    outperforms random sampling (Gini~1). We approximate this by binning on
+    density × edge_complexity and capping per-bin count.
+    """
+    bins = {}
+    for pair, features in pairs_with_features:
+        d_bin = min(int(features.get("density", 0) * 5), 4)      # 5 bins
+        e_bin = min(int(features.get("edge_complexity", 0) * 5), 4)  # 5 bins
+        key = (d_bin, e_bin)
+        if key not in bins:
+            bins[key] = []
+        bins[key].append(pair)
+
+    # Report coverage
+    total_bins = 25  # 5x5
+    filled = sum(1 for v in bins.values() if len(v) > 0)
+    print(f"  Feature coverage: {filled}/{total_bins} bins filled")
+    for key in sorted(bins.keys()):
+        print(f"    bin {key}: {len(bins[key])} samples")
+
+    # Cap each bin, shuffle within bin
+    rng = random.Random(seed)
+    result = []
+    for key in sorted(bins.keys()):
+        items = bins[key]
+        rng.shuffle(items)
+        result.extend(items[:max_per_bin])
+
+    rng.shuffle(result)
+    return result
+
+
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Prepare palette-matched training data")
+    parser.add_argument("--assets", type=str, default=ASSETS_DIR, help="Path to GameTileNet Assets dir")
+    parser.add_argument("--stratify", action="store_true", help="Use stratified sampling for uniform coverage")
+    parser.add_argument("--max-per-bin", type=int, default=200, help="Max samples per feature bin (with --stratify)")
+    args = parser.parse_args()
+
     try:
         from PIL import Image
     except ImportError:
@@ -141,12 +308,17 @@ def main():
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    all_pairs = []
+    all_pairs = []          # (chat_dict, features_dict) tuples
     total_images = 0
     skipped = 0
 
-    tileset_dirs = sorted(Path(ASSETS_DIR).iterdir())
+    assets_dir = args.assets
+    tileset_dirs = sorted(Path(assets_dir).iterdir())
     print(f"Processing {len(tileset_dirs)} tilesets...")
+
+    # Feature distribution tracking
+    density_hist = Counter()
+    detail_hist = Counter()
 
     for tileset_dir in tileset_dirs:
         if not tileset_dir.is_dir():
@@ -164,7 +336,7 @@ def main():
                 pixels, img = load_image(str(png), 16)
                 all_pixels.extend(pixels)
                 loaded.append((png, pixels))
-            except Exception as e:
+            except Exception:
                 skipped += 1
                 continue
 
@@ -187,29 +359,43 @@ def main():
                 skipped += 1
                 continue
 
-            name = png.stem
-            desc = f"a 16x16 pixel art tile from {tileset_dir.name}"
+            # Compute features for the original (un-augmented) grid
+            features = compute_tile_features(grid)
+
+            # Track distribution
+            density_hist[features_to_label(features, "").split("density:")[1].split(",")[0]] += 1
 
             # Augment: original + 3 rotations
+            rotation_labels = ["", "90", "180", "270"]
             for i, aug_grid in enumerate(augment(grid)):
-                suffix = ["", " (rotated 90)", " (rotated 180)", " (rotated 270)"][i]
                 grid_str = grid_to_string(aug_grid)
-                pair = to_chat(desc + suffix, grid_str, palette_desc)
-                all_pairs.append(pair)
+                # Rich label instead of generic description
+                label = features_to_label(features, tileset_dir.name, rotation_labels[i])
+                pair = to_chat(label, grid_str, palette_desc)
+                all_pairs.append((pair, features))
 
     print(f"\nTotal: {total_images} images -> {len(all_pairs)} training pairs ({skipped} skipped)")
+    print(f"Density distribution: {dict(density_hist)}")
+
+    # Extract just the chat dicts
+    if args.stratify:
+        print("\nApplying stratified sampling...")
+        chat_data = stratified_sample(all_pairs, max_per_bin=args.max_per_bin)
+        print(f"After stratification: {len(chat_data)} samples")
+    else:
+        chat_data = [pair for pair, _ in all_pairs]
 
     # Shuffle and split
     random.seed(42)
-    random.shuffle(all_pairs)
+    random.shuffle(chat_data)
 
-    n = len(all_pairs)
+    n = len(chat_data)
     train_end = int(n * 0.9)
     valid_end = int(n * 0.95)
 
-    train = all_pairs[:train_end]
-    valid = all_pairs[train_end:valid_end]
-    test = all_pairs[valid_end:]
+    train = chat_data[:train_end]
+    valid = chat_data[train_end:valid_end]
+    test = chat_data[valid_end:]
 
     print(f"Split: {len(train)} train, {len(valid)} valid, {len(test)} test")
 
@@ -221,10 +407,11 @@ def main():
         print(f"Wrote {path}")
 
     # Stats
-    sample = all_pairs[0]["messages"][2]["content"]
+    sample = chat_data[0]["messages"][2]["content"]
     non_void = sum(1 for c in sample if c not in (".", "\n"))
     total_chars = sum(1 for c in sample if c != "\n")
     print(f"\nSample density: {non_void}/{total_chars} ({100*non_void/max(total_chars,1):.0f}% non-void)")
+    print(f"Sample label: {chat_data[0]['messages'][1]['content'][:200]}")
     print(f"Sample grid:\n{sample[:200]}")
 
 

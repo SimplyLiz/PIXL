@@ -1,0 +1,15 @@
+# LoRA fine-tuning config for MAP-Elites + Cytopia map generator
+model: "mlx-community/Qwen2.5-3B-Instruct-4bit"
+train: true
+data: "data_me"
+adapter_path: "adapters/pixl-mapgen"
+lora_layers: 24
+lora_rank: 16
+batch_size: 1
+learning_rate: 2e-5
+iters: 8154
+val_batches: 25
+steps_per_eval: 500
+save_every: 500
+max_seq_length: 1280
+seed: 42

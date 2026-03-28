@@ -14,11 +14,15 @@ Rules:
 - Output ONLY the grid, no explanation"""
 
 TEST_PROMPTS = [
+    # Legacy prompts (v1 format)
     "a 16x16 pixel art tile (obstacle type)",
     "a 16x16 pixel art tile (walkable type)",
-    "a 16x16 pixel art tile (hazard type)",
     "a 16x16 pixel art tile tagged: stone, wall",
     "a 16x16 pixel art tile tagged: grass, floor",
+    # Rich feature-based prompts (v2 format — matches prepare_matched.py labels)
+    "Palette: '#'=(32,32,48) '+'=(64,64,80) '='=(96,96,112) '~'=(128,128,144)\ntileset:Terrain, density:dense, symmetry:low, detail:moderate, colors:few",
+    "Palette: '#'=(16,48,16) '+'=(32,96,32) '='=(64,144,64) '~'=(96,192,96)\ntileset:Nature, density:solid, symmetry:medium, detail:simple, colors:few",
+    "Palette: '#'=(48,32,16) '+'=(96,64,32) '='=(144,112,80) '~'=(192,176,144)\ntileset:Items, density:sparse, symmetry:high, detail:complex, colors:few",
 ]
 
 
