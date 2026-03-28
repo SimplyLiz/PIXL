@@ -63,6 +63,9 @@ pub fn create_router(state: McpState, inference_config: Option<InferenceConfig>)
         .route("/api/convert", post(convert_sprite))
         .route("/api/backdrop/import", post(backdrop_import))
         .route("/api/backdrop/render", post(backdrop_render))
+        .route("/api/composites", get(list_composites))
+        .route("/api/composite/render", post(render_composite))
+        .route("/api/composite/check-seams", get(check_composite_seams))
         .route("/api/tool", post(generic_tool_call))
         .with_state(shared)
 }
@@ -290,6 +293,30 @@ async fn new_from_template(Json(args): Json<Value>) -> Json<Value> {
 
 async fn export_engine(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
     Json(handlers::handle_tool(&state.mcp, "pixl_export", &args))
+}
+
+async fn list_composites(State(state): State<SharedState>) -> Json<Value> {
+    Json(handlers::handle_tool(
+        &state.mcp,
+        "pixl_list_composites",
+        &Value::Null,
+    ))
+}
+
+async fn render_composite(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
+    Json(handlers::handle_tool(
+        &state.mcp,
+        "pixl_render_composite",
+        &args,
+    ))
+}
+
+async fn check_composite_seams(State(state): State<SharedState>) -> Json<Value> {
+    Json(handlers::handle_tool(
+        &state.mcp,
+        "pixl_check_seams",
+        &Value::Null,
+    ))
 }
 
 /// Generic tool call endpoint — accepts { "tool": "pixl_xxx", "args": {...} }

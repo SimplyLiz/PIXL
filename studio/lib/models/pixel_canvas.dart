@@ -216,7 +216,7 @@ class CanvasSnapshot {
 // ── Tilemap Mode ──────────────────────────────────────────
 
 /// Editor modes — pixel editing or tilemap painting.
-enum EditorMode { pixel, tilemap, backdrop }
+enum EditorMode { pixel, tilemap, backdrop, composite }
 
 /// Tools available in tilemap mode.
 enum TilemapTool { stamp, eraser, bucket, eyedropper }
