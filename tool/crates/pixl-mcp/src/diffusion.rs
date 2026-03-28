@@ -160,11 +160,15 @@ pub async fn generate_and_quantize(
 
 /// Full pipeline with auto-palette: generate image → extract colors → quantize → PAX grid.
 /// Produces a palette matched to the generated image for maximum color fidelity.
+///
+/// If `target_width`/`target_height` are None, automatically uses the native pixel art
+/// resolution snapped to the next valid PAX canvas size (8, 16, 24, 32, 48, 64).
+/// This preserves maximum detail from the AI-generated reference.
 pub async fn generate_with_auto_palette(
     config: &DiffusionConfig,
     prompt: &str,
-    target_width: u32,
-    target_height: u32,
+    target_width: Option<u32>,
+    target_height: Option<u32>,
     max_colors: u32,
     dither: bool,
 ) -> Result<GenerateResult, String> {
@@ -176,6 +180,20 @@ pub async fn generate_with_auto_palette(
 
     let (gen_w, gen_h) = img.dimensions();
 
+    // Detect native pixel art resolution
+    let detected = pixl_render::import::detect_pixel_size_pub(&img);
+    let native_w = (gen_w / detected).max(1);
+    let native_h = (gen_h / detected).max(1);
+
+    // If no target specified, snap native to nearest valid PAX canvas size
+    let (tw, th) = match (target_width, target_height) {
+        (Some(w), Some(h)) => (w, h),
+        _ => {
+            let snapped = snap_to_canvas_size(native_w.max(native_h));
+            (snapped, snapped)
+        }
+    };
+
     // Extract palette from the generated image
     let colors = pixl_render::pixelize::extract_palette(&img, max_colors);
     if colors.is_empty() {
@@ -185,15 +203,15 @@ pub async fn generate_with_auto_palette(
     let palette = pixl_render::pixelize::build_pax_palette(&colors, [0, 0, 0, 0]);
     let palette_toml = pixl_render::pixelize::palette_to_toml("auto", &colors);
 
-    // Quantize using the extracted palette
+    // Quantize using the extracted palette at the resolved target size
     let import_result =
-        pixl_render::import::import_reference(&img, target_width, target_height, &palette, dither);
+        pixl_render::import::import_reference(&img, tw, th, &palette, dither);
 
     Ok(GenerateResult {
         grid: import_result.grid,
         grid_string: import_result.grid_string,
-        width: target_width,
-        height: target_height,
+        width: tw,
+        height: th,
         color_accuracy: import_result.color_accuracy,
         clipped_colors: import_result.clipped_colors,
         generated_size: (gen_w, gen_h),
@@ -203,6 +221,16 @@ pub async fn generate_with_auto_palette(
         detected_pixel_size: import_result.detected_pixel_size,
         native_resolution: import_result.native_resolution,
     })
+}
+
+/// Snap a pixel dimension to the nearest valid PAX canvas size.
+fn snap_to_canvas_size(n: u32) -> u32 {
+    const SIZES: &[u32] = &[8, 16, 24, 32, 48, 64];
+    SIZES
+        .iter()
+        .min_by_key(|&&s| (s as i32 - n as i32).unsigned_abs())
+        .copied()
+        .unwrap_or(32)
 }
 
 pub struct GenerateResult {
