@@ -132,6 +132,11 @@ pub struct ImportResult {
 
 // ── Pixel grid detection ────────────────────────────────────────────
 
+/// Public wrapper for pixel size detection (used by diffusion bridge).
+pub fn detect_pixel_size_pub(img: &DynamicImage) -> u32 {
+    detect_pixel_size(img)
+}
+
 /// Detect the size of each "art pixel" in a high-resolution pixel art image.
 ///
 /// Scans horizontal and vertical edges to find the most common block size.

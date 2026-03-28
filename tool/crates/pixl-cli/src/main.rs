@@ -181,8 +181,8 @@ enum Commands {
         #[arg(long)]
         name: String,
 
-        /// Target size (e.g., "16x16", "32x32")
-        #[arg(long, default_value = "16x16")]
+        /// Target size (e.g., "16x16", "32x32", or "auto" to detect from generated image)
+        #[arg(long, default_value = "auto")]
         size: String,
 
         /// Enable Bayer dithering
@@ -2018,11 +2018,15 @@ fn cmd_generate_sprite(
     });
     let session_palette = &palettes[palette_name];
 
-    let (w, h) = match pixl_core::types::parse_size(size_str) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error: {}", e);
-            process::exit(1);
+    let (target_w, target_h) = if size_str == "auto" {
+        (None, None)
+    } else {
+        match pixl_core::types::parse_size(size_str) {
+            Ok((w, h)) => (Some(w), Some(h)),
+            Err(e) => {
+                eprintln!("error: {}", e);
+                process::exit(1);
+            }
         }
     };
 
@@ -2034,9 +2038,13 @@ fn cmd_generate_sprite(
         }
     };
 
+    let size_display = match (target_w, target_h) {
+        (Some(w), Some(h)) => format!("{}x{}", w, h),
+        _ => "auto".to_string(),
+    };
     println!(
-        "generating sprite '{}' via {} ({}x{}, auto_palette={})...",
-        name, config.model, w, h, auto_palette
+        "generating sprite '{}' via {} ({}, auto_palette={})...",
+        name, config.model, size_display, auto_palette
     );
     println!("prompt: \"{}\"", prompt);
 
@@ -2044,10 +2052,12 @@ fn cmd_generate_sprite(
     let result = rt.block_on(async {
         if auto_palette {
             pixl_mcp::diffusion::generate_with_auto_palette(
-                &config, prompt, w, h, max_colors, dither,
+                &config, prompt, target_w, target_h, max_colors, dither,
             )
             .await
         } else {
+            let w = target_w.unwrap_or(16);
+            let h = target_h.unwrap_or(16);
             pixl_mcp::diffusion::generate_and_quantize(
                 &config, prompt, w, h, session_palette, dither,
             )
@@ -2106,7 +2116,7 @@ fn cmd_generate_sprite(
     }
 
     // Print the grid for copy-paste into .pax
-    println!("PAX grid ({}x{}):", w, h);
+    println!("PAX grid ({}x{}):", result.width, result.height);
     println!("'''");
     println!("{}", result.grid_string);
     println!("'''");

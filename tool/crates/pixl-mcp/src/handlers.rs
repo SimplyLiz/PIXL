@@ -2863,7 +2863,7 @@ fn handle_refine_tile(state: &Mutex<McpState>, args: &Value) -> Value {
 pub async fn handle_generate_sprite(state: &Mutex<McpState>, args: &Value) -> Value {
     let prompt = args.get("prompt").and_then(|v| v.as_str()).unwrap_or("");
     let name = args.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let size_str = args.get("size").and_then(|v| v.as_str()).unwrap_or("16x16");
+    let size_str = args.get("size").and_then(|v| v.as_str());
     let dither = args.get("dither").and_then(|v| v.as_bool()).unwrap_or(false);
     let auto_palette = args.get("auto_palette").and_then(|v| v.as_bool()).unwrap_or(true);
     let max_colors = args.get("max_colors").and_then(|v| v.as_u64()).unwrap_or(16) as u32;
@@ -2881,9 +2881,18 @@ pub async fn handle_generate_sprite(state: &Mutex<McpState>, args: &Value) -> Va
         }
     };
 
-    let (w, h) = match parse_size(size_str) {
-        Ok(s) => s,
-        Err(e) => return json!({"error": e}),
+    // Parse target size — None means "auto-detect from generated image"
+    let (target_w, target_h) = if let Some(s) = size_str {
+        if s == "auto" {
+            (None, None)
+        } else {
+            match parse_size(s) {
+                Ok((w, h)) => (Some(w), Some(h)),
+                Err(e) => return json!({"error": e}),
+            }
+        }
+    } else {
+        (None, None) // No size specified → auto-detect
     };
 
     // Get the active palette from session
@@ -2904,7 +2913,7 @@ pub async fn handle_generate_sprite(state: &Mutex<McpState>, args: &Value) -> Va
     // Call the diffusion bridge (async — this makes the API call)
     let result = if auto_palette {
         match crate::diffusion::generate_with_auto_palette(
-            &config, prompt, w, h, max_colors, dither,
+            &config, prompt, target_w, target_h, max_colors, dither,
         )
         .await
         {
@@ -2912,6 +2921,8 @@ pub async fn handle_generate_sprite(state: &Mutex<McpState>, args: &Value) -> Va
             Err(e) => return json!({"error": format!("diffusion bridge failed: {}", e)}),
         }
     } else {
+        let w = target_w.unwrap_or(16);
+        let h = target_h.unwrap_or(16);
         match crate::diffusion::generate_and_quantize(
             &config, prompt, w, h, &palette.1, dither,
         )
@@ -2951,9 +2962,10 @@ pub async fn handle_generate_sprite(state: &Mutex<McpState>, args: &Value) -> Va
     // Store tile in session
     {
         let mut st = state.lock().unwrap();
+        let actual_size = format!("{}x{}", result.width, result.height);
         let tile_raw = pixl_core::types::TileRaw {
             palette: tile_palette_name.clone(),
-            size: Some(size_str.to_string()),
+            size: Some(actual_size.clone()),
             encoding: None,
             symmetry: None,
             auto_rotate: None,
@@ -2979,7 +2991,7 @@ pub async fn handle_generate_sprite(state: &Mutex<McpState>, args: &Value) -> Va
     json!({
         "ok": true,
         "name": name,
-        "size": size_str,
+        "size": format!("{}x{}", result.width, result.height),
         "prompt": prompt,
         "model": config.model,
         "generated_size": format!("{}x{}", result.generated_size.0, result.generated_size.1),
