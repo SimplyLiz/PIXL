@@ -66,6 +66,10 @@ enum Commands {
         /// Check seam continuity across composite tile boundaries
         #[arg(long)]
         check_seams: bool,
+
+        /// Run per-tile quality analysis and cross-tile style consistency checks
+        #[arg(long)]
+        quality: bool,
     },
 
     /// Validate and auto-fix edge classes from grid content
@@ -194,7 +198,7 @@ enum Commands {
         auto_palette: bool,
 
         /// Max colors for auto-palette extraction
-        #[arg(long, default_value = "16")]
+        #[arg(long, default_value = "32")]
         max_colors: u32,
 
         /// Output PNG path (quantized preview)
@@ -609,8 +613,9 @@ fn main() {
             check_edges,
             completeness,
             check_seams,
+            quality,
         } => {
-            cmd_validate(&file, check_edges, check_seams);
+            cmd_validate(&file, check_edges, check_seams, quality);
             if completeness {
                 cmd_completeness(&file);
             }
@@ -619,7 +624,7 @@ fn main() {
             if fix {
                 cmd_check_fix(&file);
             } else {
-                cmd_validate(&file, true, false);
+                cmd_validate(&file, true, false, false);
             }
         }
         Commands::Render {
@@ -892,7 +897,7 @@ fn cmd_serve(
     });
 }
 
-fn cmd_validate(file: &PathBuf, check_edges: bool, check_seams: bool) {
+fn cmd_validate(file: &PathBuf, check_edges: bool, check_seams: bool, quality: bool) {
     let source = match std::fs::read_to_string(file) {
         Ok(s) => s,
         Err(e) => {
@@ -909,7 +914,18 @@ fn cmd_validate(file: &PathBuf, check_edges: bool, check_seams: bool) {
         }
     };
 
-    let result = pixl_core::validate::validate(&pax_file, check_edges);
+    let result = if quality {
+        // Load knowledge base (best-effort — missing file is fine)
+        let kb_path = std::path::Path::new("knowledge/pixelart-knowledge-base.json");
+        let kb = if kb_path.exists() {
+            pixl_core::knowledge::KnowledgeBase::load(kb_path)
+        } else {
+            None
+        };
+        pixl_core::validate::validate_quality(&pax_file, check_edges, kb.as_ref())
+    } else {
+        pixl_core::validate::validate(&pax_file, check_edges)
+    };
 
     // Print stats
     println!(
@@ -949,6 +965,75 @@ fn cmd_validate(file: &PathBuf, check_edges: bool, check_seams: bool) {
         }
     }
 
+    // Quality report
+    if let Some(ref qr) = result.quality {
+        let issues_count: usize = qr
+            .tile_reports
+            .iter()
+            .filter(|r| !r.structural.issues.is_empty())
+            .count();
+        println!();
+        println!(
+            "quality: {} tiles analyzed, {} with issues",
+            qr.tiles_analyzed, issues_count,
+        );
+
+        for tr in &qr.tile_reports {
+            if tr.structural.issues.is_empty() {
+                continue;
+            }
+
+            let verdict = if pixl_core::structural::has_errors(&tr.structural) {
+                "\x1b[31mREJECT\x1b[0m"
+            } else if pixl_core::structural::has_warnings(&tr.structural) {
+                "\x1b[33mREFINE\x1b[0m"
+            } else {
+                "\x1b[32mACCEPT\x1b[0m"
+            };
+
+            println!();
+            println!("  {}: {}", tr.tile_name, verdict);
+
+            for issue in &tr.structural.issues {
+                let (icon, color) = match issue.severity {
+                    pixl_core::structural::Severity::Error => ("✗", "\x1b[31m"),
+                    pixl_core::structural::Severity::Warning => ("!", "\x1b[33m"),
+                    pixl_core::structural::Severity::Info => ("·", "\x1b[36m"),
+                };
+                println!("    {}{} {}\x1b[0m", color, icon, issue.message);
+
+                // Show KB advice for this issue
+                for advice in tr.kb_advice.iter().filter(|a| a.issue_code == issue.code) {
+                    println!(
+                        "      \x1b[2m→ \"{}\"\x1b[0m",
+                        truncate_advice(&advice.summary, 120),
+                    );
+                    println!("        \x1b[2m({})\x1b[0m", advice.source_title);
+                }
+            }
+        }
+
+        // Style consistency
+        if let Some(ref sc) = qr.consistency {
+            let consistency_pct =
+                (1.0 - sc.light_direction_stddev.min(1.0)) * 100.0;
+            println!();
+            println!(
+                "  style consistency: {:.0}% (light direction mean={:.2}, stddev={:.2})",
+                consistency_pct, sc.mean_light_direction, sc.light_direction_stddev,
+            );
+            for outlier in &sc.outliers {
+                println!(
+                    "    \x1b[33m! {} light_direction={:.2} deviates from mean {:.2} (Δ{:.2})\x1b[0m",
+                    outlier.tile_name,
+                    outlier.light_direction,
+                    sc.mean_light_direction,
+                    outlier.deviation,
+                );
+            }
+        }
+    }
+
     if result.errors.is_empty() {
         println!("ok: no errors found.");
     } else {
@@ -958,6 +1043,15 @@ fn cmd_validate(file: &PathBuf, check_edges: bool, check_seams: bool) {
             result.warnings.len()
         );
         process::exit(1);
+    }
+}
+
+/// Truncate advice text to a maximum length, adding ellipsis if needed.
+fn truncate_advice(s: &str, max: usize) -> String {
+    if s.len() <= max {
+        s.to_string()
+    } else {
+        format!("{}…", &s[..max])
     }
 }
 
