@@ -1,10 +1,15 @@
 use crate::composite::{self, CompositeError};
 use crate::grid::{GridError, parse_grid};
+use crate::knowledge::KnowledgeBase;
 use crate::parser::{ParseError, resolve_all_palettes};
+use crate::resolve;
 use crate::rle::{RleError, parse_rle};
+use crate::structural::{self, StructuralReport};
+use crate::style::StyleLatent;
 use crate::template::{TemplateError, validate_templates};
 use crate::theme::{ThemeError, resolve_theme};
 use crate::types::{PaxFile, parse_size};
+use std::collections::HashMap;
 use thiserror::Error;
 
 #[derive(Debug)]
@@ -12,6 +17,49 @@ pub struct ValidationResult {
     pub errors: Vec<ValidationError>,
     pub warnings: Vec<String>,
     pub stats: ValidationStats,
+    pub quality: Option<QualityReport>,
+}
+
+// ── Quality report types ────────────────────────────────────────────
+
+/// Aggregate quality analysis across all tiles in a PAX file.
+#[derive(Debug)]
+pub struct QualityReport {
+    pub tile_reports: Vec<TileQualityReport>,
+    pub consistency: Option<StyleConsistencyReport>,
+    pub tiles_analyzed: usize,
+}
+
+/// Per-tile structural analysis with optional knowledge base advice.
+#[derive(Debug)]
+pub struct TileQualityReport {
+    pub tile_name: String,
+    pub structural: StructuralReport,
+    pub kb_advice: Vec<KnowledgeAdvice>,
+}
+
+/// A knowledge base passage relevant to a detected issue.
+#[derive(Debug)]
+pub struct KnowledgeAdvice {
+    pub issue_code: String,
+    pub summary: String,
+    pub source_title: String,
+}
+
+/// Cross-tile style consistency analysis.
+#[derive(Debug)]
+pub struct StyleConsistencyReport {
+    pub mean_light_direction: f64,
+    pub light_direction_stddev: f64,
+    pub outliers: Vec<StyleOutlier>,
+}
+
+/// A tile whose light direction deviates significantly from the file mean.
+#[derive(Debug)]
+pub struct StyleOutlier {
+    pub tile_name: String,
+    pub light_direction: f64,
+    pub deviation: f64,
 }
 
 #[derive(Debug, Default)]
@@ -136,6 +184,7 @@ pub fn validate(file: &PaxFile, _check_edges: bool) -> ValidationResult {
                 errors,
                 warnings,
                 stats: ValidationStats::default(),
+                quality: None,
             };
         }
     };
@@ -475,7 +524,242 @@ pub fn validate(file: &PaxFile, _check_edges: bool) -> ValidationResult {
         errors,
         warnings,
         stats,
+        quality: None,
     }
+}
+
+// ── Quality validation ───────────────────────────────────────────────
+
+/// Map a structural issue code to a knowledge base search query.
+fn issue_query(code: &str) -> &str {
+    match code {
+        "no_outline" => "outline technique selective dark border silhouette readable contour",
+        "weak_outline" => "outline gap incomplete border coverage silhouette rim light",
+        "low_contrast" => "value contrast color ramp brightness luminance pillow shading banding",
+        "too_small" | "undersize" => "canvas utilization bounding box composition proportion fill tile size",
+        "off_center" => "centering composition balance position alignment",
+        "fragmented" => "orphan floating isolated pixel connected stray cleanup",
+        "empty_tile" => "empty tile void transparent",
+        _ => "pixel art tile quality technique",
+    }
+}
+
+/// Extract the most relevant sentence from a KB passage for a given issue code.
+/// Scores each sentence by how many issue-relevant keywords it contains.
+fn extract_best_sentence(content: &str, issue_code: &str) -> String {
+    let keywords: &[&str] = match issue_code {
+        "no_outline" | "weak_outline" => &[
+            "outline", "border", "silhouette", "sel-out", "edge", "dark",
+            "contour", "boundary", "readable",
+        ],
+        "low_contrast" => &[
+            "contrast", "value", "brightness", "luminance", "ramp", "distinct",
+            "muddy", "similar", "difference", "readability",
+        ],
+        "too_small" | "undersize" => &[
+            "size", "canvas", "fill", "bounding", "proportion", "scale",
+            "larger", "space", "utilization",
+        ],
+        "off_center" => &[
+            "center", "position", "balance", "composition", "offset", "align",
+        ],
+        "fragmented" => &[
+            "fragment", "floating", "orphan", "isolated", "stray", "connected",
+            "disconnect", "cluster",
+        ],
+        _ => &["pixel", "art", "quality", "technique"],
+    };
+
+    // Split into chunks: prefer line-based splitting (for markdown bullet points),
+    // fall back to sentence splitting. KB passages are often bullet lists.
+    let mut chunks: Vec<&str> = content
+        .split('\n')
+        .map(|s| s.trim())
+        .filter(|s| s.len() >= 15 && s.len() <= 300)
+        .collect();
+
+    // If no good line-based chunks, try sentence splitting
+    if chunks.is_empty() {
+        chunks = content
+            .split(|c: char| c == '.' || c == '!' || c == '?')
+            .map(|s| s.trim())
+            .filter(|s| s.len() >= 15 && s.len() <= 300)
+            .collect();
+    }
+
+    if chunks.is_empty() {
+        return content.chars().take(150).collect::<String>() + "…";
+    }
+
+    // Score each chunk by keyword hits, with a small bonus for chunks that
+    // start with actionable patterns (bullet points, bold terms)
+    let best = chunks
+        .iter()
+        .max_by_key(|chunk| {
+            let c_lower = chunk.to_lowercase();
+            let keyword_score = keywords.iter().filter(|kw| c_lower.contains(*kw)).count();
+            // Bonus for actionable content (bold terms, bullet lists)
+            let action_bonus = if chunk.starts_with("- **") || chunk.starts_with("**") {
+                1
+            } else {
+                0
+            };
+            keyword_score * 2 + action_bonus
+        })
+        .unwrap_or(&chunks[0]);
+
+    let result = best.to_string();
+    if result.len() > 200 {
+        result.chars().take(200).collect::<String>() + "…"
+    } else {
+        result
+    }
+}
+
+/// Run full format validation plus per-tile quality analysis and cross-tile
+/// style consistency checks. Returns the same result as `validate()` but with
+/// `quality` populated.
+pub fn validate_quality(
+    file: &PaxFile,
+    check_edges: bool,
+    kb: Option<&KnowledgeBase>,
+) -> ValidationResult {
+    let mut result = validate(file, check_edges);
+
+    // Resolve palettes (validate already did this internally, but we need the map)
+    let palettes = match resolve_all_palettes(file) {
+        Ok(p) => p,
+        Err(_) => {
+            // Palette resolution failed — format errors already captured, skip quality
+            return result;
+        }
+    };
+
+    let empty_stamps = HashMap::new();
+    let mut tile_reports = Vec::new();
+    let mut per_tile_latents: Vec<(String, StyleLatent)> = Vec::new();
+    let mut all_grids: Vec<Vec<Vec<char>>> = Vec::new();
+
+    for (name, tile_raw) in &file.tile {
+        // Skip templates — they have no pixel data of their own
+        if tile_raw.template.is_some() {
+            continue;
+        }
+
+        // Skip rotation variants (they're derived from the base tile)
+        if name.ends_with("_90") || name.ends_with("_180") || name.ends_with("_270") {
+            continue;
+        }
+
+        // Skip tiles without pixel data
+        if tile_raw.grid.is_none() && tile_raw.rle.is_none() && tile_raw.layout.is_none() {
+            continue;
+        }
+
+        // Resolve the tile grid
+        let (grid, _w, _h) = match resolve::resolve_tile_grid(
+            name,
+            &file.tile,
+            &palettes,
+            &empty_stamps,
+        ) {
+            Ok(r) => r,
+            Err(_) => continue, // Resolution errors already caught by format validation
+        };
+
+        let Some(palette) = palettes.get(&tile_raw.palette) else {
+            continue;
+        };
+
+        // Structural analysis
+        let mut report = structural::analyze(&grid, palette, '.');
+
+        // Full-bleed tiles (tileable surfaces) have no void boundary, so outline
+        // checks are irrelevant — filter them out to avoid false positives.
+        if report.pixel_density >= 0.95 {
+            report.issues.retain(|i| i.code != "no_outline" && i.code != "weak_outline");
+        }
+
+        // Knowledge base advice for each issue
+        let kb_advice = if let Some(kb) = kb {
+            report
+                .issues
+                .iter()
+                .filter_map(|issue| {
+                    let query = issue_query(issue.code);
+                    let results = kb.search(query, 3);
+                    // Prefer technique docs over hardware reference docs —
+                    // "Retro Hardware Comprehensive" dominates BM25 due to
+                    // sheer term frequency but gives hardware specs not advice.
+                    let best = results
+                        .iter()
+                        .find(|r| !r.source_title.contains("Retro Hardware"))
+                        .or(results.first())?;
+                    let snippet = extract_best_sentence(&best.content, issue.code);
+                    Some(KnowledgeAdvice {
+                        issue_code: issue.code.to_string(),
+                        summary: snippet,
+                        source_title: best.source_title.clone(),
+                    })
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        // Per-tile style latent
+        let latent = StyleLatent::extract(&[&grid], palette, '.');
+        per_tile_latents.push((name.clone(), latent));
+        all_grids.push(grid);
+
+        tile_reports.push(TileQualityReport {
+            tile_name: name.clone(),
+            structural: report,
+            kb_advice,
+        });
+    }
+
+    // Cross-tile style consistency
+    let consistency = if per_tile_latents.len() >= 2 {
+        let directions: Vec<f64> = per_tile_latents.iter().map(|(_, l)| l.light_direction).collect();
+        let mean = directions.iter().sum::<f64>() / directions.len() as f64;
+        let variance = directions.iter().map(|d| (d - mean).powi(2)).sum::<f64>()
+            / directions.len() as f64;
+        let stddev = variance.sqrt();
+
+        let outliers: Vec<StyleOutlier> = per_tile_latents
+            .iter()
+            .filter_map(|(name, latent)| {
+                let dev = (latent.light_direction - mean).abs();
+                if dev > 0.2 {
+                    Some(StyleOutlier {
+                        tile_name: name.clone(),
+                        light_direction: latent.light_direction,
+                        deviation: dev,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        Some(StyleConsistencyReport {
+            mean_light_direction: mean,
+            light_direction_stddev: stddev,
+            outliers,
+        })
+    } else {
+        None
+    };
+
+    let tiles_analyzed = tile_reports.len();
+    result.quality = Some(QualityReport {
+        tile_reports,
+        consistency,
+        tiles_analyzed,
+    });
+
+    result
 }
 
 /// Seam discontinuity found between two adjacent slots.
