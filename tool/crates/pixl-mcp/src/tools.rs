@@ -113,6 +113,28 @@ pub fn tool_definitions() -> Vec<Tool> {
             "pixl_delete_tile",
             "Delete a tile from the session. Args: {name}.",
         ),
+        // ── Backdrop ──
+        tool(
+            "pixl_backdrop_import",
+            "Import a pixelized image as a PAX backdrop (tile-decomposed animated background). \
+             Args: {input: path}. Optional: name (default 'scene'), colors (default 32), \
+             tile_size (default 16), out (output .pax path). Slices the image into tiles, \
+             deduplicates, builds extended palette, writes PAX file with tilemap.",
+        ),
+        tool(
+            "pixl_backdrop_render",
+            "Render a backdrop from a .pax file. Args: {file: path, name: string}. \
+             Optional: frames (0=static PNG, >0=animated GIF), scale (default 1), \
+             duration (frame ms, default 120). Returns base64 PNG or GIF.",
+        ),
+        // ── Sprite Conversion ──
+        tool(
+            "pixl_convert_sprite",
+            "Convert AI-generated images to true 1:1 pixel art. Args: {input: path}. \
+             Optional: out_dir (default: pixl_convert/), width (single-res mode), \
+             colors (default 32). Without width, produces 3 presets: small (128px, 16 colors), \
+             medium (160px, 32 colors), large (256px, 48 colors). Copies original to originals/.",
+        ),
         // ── Local AI Generation ──
         tool(
             "pixl_generate_tile",

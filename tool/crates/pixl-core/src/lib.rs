@@ -1,3 +1,4 @@
+pub mod animate;
 pub mod blueprint;
 pub mod completeness;
 pub mod oklab;
@@ -14,6 +15,7 @@ pub mod rotate;
 pub mod symmetry;
 pub mod template;
 pub mod theme;
+pub mod tilemap;
 pub mod types;
 pub mod project;
 pub mod resolve;

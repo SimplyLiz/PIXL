@@ -77,6 +77,10 @@ Click the edit icon next to the foreground color hex value to open the **HSV Col
 
 Click the person icon in the top bar to toggle the **blueprint overlay** — semi-transparent cyan guides showing anatomical landmarks (head, torso, limbs, eyes) for character sprite creation. The blueprint adapts to the current canvas size.
 
+## Sprite Animation Viewer
+
+For spriteset tiles, click the **Play Animation** button in the Tiles tab to preview the animation as an animated GIF in a popup dialog. This renders all frames at the declared FPS so you can verify timing and transitions without exporting.
+
 ## Reference Image
 
 Load a reference image as a semi-transparent underlay on the canvas for tracing. The image is scaled to fit the canvas dimensions and rendered below your pixel layers.

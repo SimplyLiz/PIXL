@@ -47,6 +47,7 @@ pub struct WfcConfig {
 }
 
 /// A pre-collapsed cell (pin).
+#[derive(Debug, Clone)]
 pub struct Pin {
     pub x: usize,
     pub y: usize,
@@ -519,22 +520,8 @@ mod tests {
 
     fn simple_tileset() -> (Vec<TileEdges>, Vec<f64>, Vec<TileAffordance>) {
         let tiles = vec![
-            TileEdges {
-                name: "wall".to_string(),
-                n: "solid".to_string(),
-                e: "solid".to_string(),
-                s: "solid".to_string(),
-                w: "solid".to_string(),
-                weight: 1.0,
-            },
-            TileEdges {
-                name: "floor".to_string(),
-                n: "floor".to_string(),
-                e: "floor".to_string(),
-                s: "floor".to_string(),
-                w: "floor".to_string(),
-                weight: 2.0,
-            },
+            TileEdges::new("wall", "solid", "solid", "solid", "solid", 1.0),
+            TileEdges::new("floor", "floor", "floor", "floor", "floor", 2.0),
         ];
         let weights = vec![1.0, 2.0];
         let affordances = vec![

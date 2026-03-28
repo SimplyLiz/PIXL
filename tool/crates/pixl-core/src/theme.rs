@@ -206,6 +206,26 @@ pub fn evaluate_constraints(
                     }
                 }
             }
+            "palette_granularity" => {
+                // NES attribute table constraint: palette can only change at NxN tile boundaries.
+                // Value is the block size in tiles (NES = 2 for 2x2 tile blocks).
+                // This is a generation/validation hint — stored for external tools to check.
+                // No runtime evaluation needed here; the warning is informational.
+                if let Some(val) = theme.constraints.get(constraint_name) {
+                    if let Some(n) = val.as_integer() {
+                        if n < 1 || n > 8 {
+                            warnings.push(ThemeError::ConstraintViolation {
+                                name: resolved.name.clone(),
+                                constraint: constraint_name.clone(),
+                                reason: format!(
+                                    "palette_granularity must be 1-8, got {}",
+                                    n
+                                ),
+                            });
+                        }
+                    }
+                }
+            }
             _ => {} // Unknown constraints are silently ignored in V1
         }
     }

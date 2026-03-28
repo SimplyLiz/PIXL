@@ -1,6 +1,41 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 use std::process;
+
+/// Output format for narrate command.
+#[derive(Debug, Clone, ValueEnum, Default)]
+enum OutputFormat {
+    #[default]
+    Text,
+    Json,
+}
+
+/// Parse a weight override: "tile_name:value"
+fn parse_weight_override(s: &str) -> Result<(String, f64), String> {
+    let (name, val) = s
+        .rsplit_once(':')
+        .ok_or_else(|| format!("expected NAME:VALUE, got '{s}'"))?;
+    let v: f64 = val
+        .parse()
+        .map_err(|e| format!("bad weight value '{val}': {e}"))?;
+    if v < 0.0 {
+        return Err(format!("weight must be non-negative, got {v}"));
+    }
+    Ok((name.to_string(), v))
+}
+
+/// Parse a pin: "x,y:tile_name"
+fn parse_pin(s: &str) -> Result<(usize, usize, String), String> {
+    let (coords, name) = s
+        .split_once(':')
+        .ok_or_else(|| format!("expected X,Y:TILE_NAME, got '{s}'"))?;
+    let (xs, ys) = coords
+        .split_once(',')
+        .ok_or_else(|| format!("expected X,Y in coords, got '{coords}'"))?;
+    let x: usize = xs.parse().map_err(|e| format!("bad x '{xs}': {e}"))?;
+    let y: usize = ys.parse().map_err(|e| format!("bad y '{ys}': {e}"))?;
+    Ok((x, y, name.to_string()))
+}
 
 #[derive(Parser)]
 #[command(
@@ -135,6 +170,18 @@ enum Commands {
         /// Output PNG path
         #[arg(long, short, alias = "output")]
         out: PathBuf,
+
+        /// Override tile weights (repeatable). Format: "tile_name:value"
+        #[arg(long, short = 'w', value_parser = parse_weight_override)]
+        weight: Vec<(String, f64)>,
+
+        /// Pin specific cells (repeatable). Format: "x,y:tile_name"
+        #[arg(long, value_parser = parse_pin)]
+        pin: Vec<(usize, usize, String)>,
+
+        /// Output format: text (default) or json
+        #[arg(long, value_enum, default_value = "text")]
+        format: OutputFormat,
     },
 
     /// Generate tile variants from a base tile
@@ -247,6 +294,98 @@ enum Commands {
         /// Output directory
         #[arg(long, short, alias = "output")]
         out: PathBuf,
+    },
+
+    /// Render a sprite animation as GIF or PNG spritesheet
+    RenderSprite {
+        /// Path to the .pax file
+        file: PathBuf,
+
+        /// Spriteset name
+        #[arg(long)]
+        spriteset: String,
+
+        /// Sprite name within the spriteset
+        #[arg(long)]
+        sprite: String,
+
+        /// Scale factor
+        #[arg(long, default_value = "4")]
+        scale: u32,
+
+        /// Output path (.gif or .png for spritesheet)
+        #[arg(long, short, alias = "output")]
+        out: PathBuf,
+    },
+
+    /// Convert AI-generated images to true 1:1 pixel art
+    Convert {
+        /// Input image(s) — file or directory of images
+        input: PathBuf,
+
+        /// Output directory (default: ./pixl_convert)
+        #[arg(long, short, alias = "output", default_value = "pixl_convert")]
+        out: PathBuf,
+
+        /// Single-resolution mode: target width (skips presets)
+        #[arg(long)]
+        width: Option<u32>,
+
+        /// Single-resolution mode: max palette colors
+        #[arg(long, default_value = "32")]
+        colors: u32,
+
+        /// Preview upscale factor (e.g., 4 for 4x nearest-neighbor)
+        #[arg(long)]
+        preview: Option<u32>,
+    },
+
+    /// Import an image as a PAX backdrop (tile-decomposed animated background)
+    BackdropImport {
+        /// Input image (pixelized or raw — will be quantized)
+        image: PathBuf,
+
+        /// Scene name
+        #[arg(long, default_value = "scene")]
+        name: String,
+
+        /// Max palette colors
+        #[arg(long, default_value = "32")]
+        colors: u32,
+
+        /// Tile size for decomposition
+        #[arg(long, default_value = "16")]
+        tile_size: u32,
+
+        /// Output .pax file
+        #[arg(long, short, alias = "output")]
+        out: PathBuf,
+    },
+
+    /// Render a backdrop from a .pax file (static or animated GIF)
+    BackdropRender {
+        /// Path to .pax file
+        file: PathBuf,
+
+        /// Backdrop name
+        #[arg(long)]
+        name: String,
+
+        /// Output path (PNG for static, GIF for animated)
+        #[arg(long, short, alias = "output")]
+        out: PathBuf,
+
+        /// Number of animation frames (0 = static)
+        #[arg(long, default_value = "0")]
+        frames: u32,
+
+        /// Frame duration in ms (for animated)
+        #[arg(long, default_value = "120")]
+        duration: u32,
+
+        /// Scale factor
+        #[arg(long, default_value = "1")]
+        scale: u32,
     },
 
     /// Import a directory of PNG tiles into PAX corpus format
@@ -418,8 +557,11 @@ fn main() {
             seed,
             rule,
             out,
+            weight,
+            pin,
+            format,
         } => {
-            cmd_narrate(&file, width, height, seed, &rule, &out);
+            cmd_narrate(&file, width, height, seed, &rule, &out, &weight, &pin, &format);
         }
         Commands::Vary {
             file,
@@ -460,6 +602,43 @@ fn main() {
         }
         Commands::Export { file, format, out } => {
             cmd_export(&file, &format, &out);
+        }
+        Commands::RenderSprite {
+            file,
+            spriteset,
+            sprite,
+            scale,
+            out,
+        } => {
+            cmd_render_sprite(&file, &spriteset, &sprite, scale, &out);
+        }
+        Commands::Convert {
+            input,
+            out,
+            width,
+            colors,
+            preview,
+        } => {
+            cmd_convert(&input, &out, width, colors, preview);
+        }
+        Commands::BackdropImport {
+            image,
+            name,
+            colors,
+            tile_size,
+            out,
+        } => {
+            cmd_backdrop_import(&image, &name, colors, tile_size, &out);
+        }
+        Commands::BackdropRender {
+            file,
+            name,
+            out,
+            frames,
+            duration,
+            scale,
+        } => {
+            cmd_backdrop_render(&file, &name, &out, frames, duration, scale);
         }
         Commands::Corpus {
             dir,
@@ -1630,6 +1809,9 @@ fn cmd_narrate(
     seed: u64,
     rules: &[String],
     out: &PathBuf,
+    weight_overrides: &[(String, f64)],
+    pin_args: &[(usize, usize, String)],
+    format: &OutputFormat,
 ) {
     let (pax_file, palettes) = load_pax(file);
 
@@ -1659,14 +1841,22 @@ fn cmd_narrate(
             continue;
         }
         let ec = tile_raw.edge_class.as_ref();
-        tile_edges.push(pixl_wfc::adjacency::TileEdges {
-            name: name.clone(),
-            n: ec.map(|e| e.n.clone()).unwrap_or_default(),
-            e: ec.map(|e| e.e.clone()).unwrap_or_default(),
-            s: ec.map(|e| e.s.clone()).unwrap_or_default(),
-            w: ec.map(|e| e.w.clone()).unwrap_or_default(),
-            weight: tile_raw.weight,
-        });
+        let cc = tile_raw.corner_class.as_ref();
+        let mut te = pixl_wfc::adjacency::TileEdges::new(
+            name,
+            &ec.map(|e| e.n.clone()).unwrap_or_default(),
+            &ec.map(|e| e.e.clone()).unwrap_or_default(),
+            &ec.map(|e| e.s.clone()).unwrap_or_default(),
+            &ec.map(|e| e.w.clone()).unwrap_or_default(),
+            tile_raw.weight,
+        );
+        if let Some(cc) = cc {
+            te.ne = cc.ne.clone();
+            te.se = cc.se.clone();
+            te.sw = cc.sw.clone();
+            te.nw = cc.nw.clone();
+        }
+        tile_edges.push(te);
         tile_affordances.push(pixl_wfc::semantic::TileAffordance {
             affordance: tile_raw
                 .semantic
@@ -1701,6 +1891,13 @@ fn cmd_narrate(
         tile_edges = sorted_edges;
         tile_affordances = sorted_affordances;
         tile_grids = sorted_grids;
+    }
+
+    // Apply weight overrides from --weight flags
+    for (wname, wval) in weight_overrides {
+        if let Some(idx) = tile_names_ordered.iter().position(|n| n == wname) {
+            tile_edges[idx].weight = *wval;
+        }
     }
 
     // Expand auto-rotated tiles into the pool
@@ -1759,14 +1956,14 @@ fn cmd_narrate(
         {
             let variant_name = format!("{}{}", name, suffix);
             rotation_additions.push((
-                pixl_wfc::adjacency::TileEdges {
-                    name: variant_name.clone(),
-                    n: rotated_ec.n,
-                    e: rotated_ec.e,
-                    s: rotated_ec.s,
-                    w: rotated_ec.w,
-                    weight: variant_weight,
-                },
+                pixl_wfc::adjacency::TileEdges::new(
+                    &variant_name,
+                    &rotated_ec.n,
+                    &rotated_ec.e,
+                    &rotated_ec.s,
+                    &rotated_ec.w,
+                    variant_weight,
+                ),
                 tile_affordances[idx].clone(),
                 variant_name,
                 rotated_grid,
@@ -1834,15 +2031,35 @@ fn cmd_narrate(
         eprintln!("hint: no rules provided. Use -r 'border:wall' -r 'region:room:walkable:4x4:center'");
     }
 
+    // Convert --pin args to Pin structs
+    let extra_pins: Vec<pixl_wfc::wfc::Pin> = pin_args
+        .iter()
+        .filter_map(|(x, y, name)| {
+            tile_names_ordered
+                .iter()
+                .position(|n| n == name)
+                .map(|tile_idx| pixl_wfc::wfc::Pin {
+                    x: *x,
+                    y: *y,
+                    tile_idx,
+                })
+        })
+        .collect();
+
     let narrate_config = pixl_wfc::narrate::NarrateConfig {
         width,
         height,
         seed,
         max_retries: 5,
         predicates,
+        extra_pins,
     };
 
-    println!("narrate: {}x{} map, seed={}, {} rules", width, height, seed, rules.len());
+    let is_json = matches!(format, OutputFormat::Json);
+
+    if !is_json {
+        println!("narrate: {}x{} map, seed={}, {} rules", width, height, seed, rules.len());
+    }
 
     match pixl_wfc::narrate::narrate_map(
         &tile_edges,
@@ -1854,66 +2071,88 @@ fn cmd_narrate(
         &narrate_config,
     ) {
         Ok(result) => {
-            println!(
-                "ok: generated in {} retries, {} pins applied",
-                result.retries, result.pins_applied
-            );
+            // Build the tile-name grid (used by both formats)
+            let name_grid: Vec<Vec<&str>> = result
+                .grid
+                .iter()
+                .map(|row| {
+                    row.iter()
+                        .map(|&idx| {
+                            tile_names_ordered
+                                .get(idx)
+                                .map(|s| s.as_str())
+                                .unwrap_or("?")
+                        })
+                        .collect()
+                })
+                .collect();
 
-            // Render the map
-            let tile_size = pax_file
-                .tile
-                .values()
-                .next()
-                .and_then(|t| t.size.as_deref())
-                .and_then(|s| pixl_core::types::parse_size(s).ok())
-                .unwrap_or((16, 16));
+            if is_json {
+                // JSON output — machine-readable, no PNG rendering
+                let grid_json: Vec<Vec<&str>> = name_grid;
+                let json = serde_json::json!({
+                    "grid": grid_json,
+                    "width": width,
+                    "height": height,
+                    "seed": result.seed,
+                    "retries": result.retries,
+                    "pins_applied": result.pins_applied,
+                    "tiles": tile_names_ordered,
+                });
+                println!("{}", serde_json::to_string(&json).unwrap());
+            } else {
+                println!(
+                    "ok: generated in {} retries, {} pins applied",
+                    result.retries, result.pins_applied
+                );
 
-            let scale = 2u32;
-            let img_w = width as u32 * tile_size.0 * scale;
-            let img_h = height as u32 * tile_size.1 * scale;
+                // Render the map to PNG
+                let tile_size = pax_file
+                    .tile
+                    .values()
+                    .next()
+                    .and_then(|t| t.size.as_deref())
+                    .and_then(|s| pixl_core::types::parse_size(s).ok())
+                    .unwrap_or((16, 16));
 
-            let mut img = image::ImageBuffer::new(img_w, img_h);
+                let scale = 2u32;
+                let img_w = width as u32 * tile_size.0 * scale;
+                let img_h = height as u32 * tile_size.1 * scale;
 
-            for (ty, row) in result.grid.iter().enumerate() {
-                for (tx, &tile_idx) in row.iter().enumerate() {
-                    if tile_idx < tile_grids.len() {
-                        let tile_img =
-                            pixl_render::renderer::render_grid(&tile_grids[tile_idx], palette, scale);
-                        let ox = tx as u32 * tile_size.0 * scale;
-                        let oy = ty as u32 * tile_size.1 * scale;
-                        for py in 0..tile_img.height() {
-                            for px in 0..tile_img.width() {
-                                let ax = ox + px;
-                                let ay = oy + py;
-                                if ax < img_w && ay < img_h {
-                                    img.put_pixel(ax, ay, *tile_img.get_pixel(px, py));
+                let mut img = image::ImageBuffer::new(img_w, img_h);
+
+                for (ty, row) in result.grid.iter().enumerate() {
+                    for (tx, &tile_idx) in row.iter().enumerate() {
+                        if tile_idx < tile_grids.len() {
+                            let tile_img =
+                                pixl_render::renderer::render_grid(&tile_grids[tile_idx], palette, scale);
+                            let ox = tx as u32 * tile_size.0 * scale;
+                            let oy = ty as u32 * tile_size.1 * scale;
+                            for py in 0..tile_img.height() {
+                                for px in 0..tile_img.width() {
+                                    let ax = ox + px;
+                                    let ay = oy + py;
+                                    if ax < img_w && ay < img_h {
+                                        img.put_pixel(ax, ay, *tile_img.get_pixel(px, py));
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
 
-            ensure_parent_dir(out);
-            if let Err(e) = img.save(out) {
-                eprintln!("error: {}", e);
-                process::exit(1);
-            }
-            println!("map -> {}", out.display());
+                ensure_parent_dir(out);
+                if let Err(e) = img.save(out) {
+                    eprintln!("error: {}", e);
+                    process::exit(1);
+                }
+                println!("map -> {}", out.display());
 
-            // Print tile name grid
-            println!();
-            for row in &result.grid {
-                let names: Vec<&str> = row
-                    .iter()
-                    .map(|&idx| {
-                        tile_names_ordered
-                            .get(idx)
-                            .map(|s| s.as_str())
-                            .unwrap_or("?")
-                    })
-                    .collect();
-                println!("  {}", names.join(" "));
+                // Print tile name grid
+                println!();
+                for row in &name_grid {
+                    println!("  {}", row.join(" "));
+                }
             }
         }
         Err(e) => {
@@ -2141,6 +2380,396 @@ fn cmd_import(
         println!();
         println!("preview -> {}", out_path.display());
     }
+}
+
+fn cmd_render_sprite(file_path: &PathBuf, spriteset_name: &str, sprite_name: &str, scale: u32, out: &PathBuf) {
+    let source = match std::fs::read_to_string(file_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: cannot read {}: {}", file_path.display(), e);
+            process::exit(1);
+        }
+    };
+
+    let pax = match pixl_core::parser::parse_pax(&source) {
+        Ok(f) => f,
+        Err(e) => { eprintln!("error: {}", e); process::exit(1); }
+    };
+
+    let palettes = match pixl_core::parser::resolve_all_palettes(&pax) {
+        Ok(p) => p,
+        Err(e) => { eprintln!("error: {}", e); process::exit(1); }
+    };
+
+    let spriteset = match pax.spriteset.get(spriteset_name) {
+        Some(ss) => ss,
+        None => {
+            eprintln!("error: spriteset '{}' not found", spriteset_name);
+            let names: Vec<_> = pax.spriteset.keys().collect();
+            if !names.is_empty() { eprintln!("  available: {:?}", names); }
+            process::exit(1);
+        }
+    };
+
+    let palette = match palettes.get(&spriteset.palette) {
+        Some(p) => p,
+        None => { eprintln!("error: palette '{}' not found", spriteset.palette); process::exit(1); }
+    };
+
+    let (sw, sh) = match pixl_core::types::parse_size(&spriteset.size) {
+        Ok(s) => s,
+        Err(e) => { eprintln!("error: {}", e); process::exit(1); }
+    };
+
+    let sprite = match spriteset.sprite.iter().find(|s| s.name == sprite_name) {
+        Some(s) => s,
+        None => {
+            let names: Vec<_> = spriteset.sprite.iter().map(|s| &s.name).collect();
+            eprintln!("error: sprite '{}' not found in '{}'", sprite_name, spriteset_name);
+            if !names.is_empty() { eprintln!("  available: {:?}", names); }
+            process::exit(1);
+        }
+    };
+
+    // Resolve frames using the new animate module
+    let resolved = match pixl_core::animate::resolve_sprite_frames(sprite, sw, sh, palette, sprite.fps) {
+        Ok(f) => f,
+        Err(e) => { eprintln!("error: {}", e); process::exit(1); }
+    };
+
+    // Apply color cycles if the spriteset references any
+    let cycle_refs: Vec<&pixl_core::types::Cycle> = spriteset.cycles.iter()
+        .filter_map(|name| pax.cycle.get(name))
+        .collect();
+
+    let out_str = out.to_str().unwrap_or("");
+
+    if out_str.ends_with(".gif") {
+        // Render as animated GIF
+        let gif_frames: Vec<(image::RgbaImage, u32)> = resolved
+            .iter()
+            .enumerate()
+            .map(|(i, frame)| {
+                // Apply cycles at this frame's tick
+                let tick = i as u64;
+                let effective = if !cycle_refs.is_empty() {
+                    let cycled = pixl_core::animate::resolve_frames_with_cycles(
+                        &[frame.clone()], &cycle_refs, palette, tick,
+                    );
+                    cycled.into_iter().next().unwrap()
+                } else {
+                    frame.clone()
+                };
+                let img = pixl_render::renderer::render_grid(&effective.grid, palette, scale);
+                (img, effective.duration_ms)
+            })
+            .collect();
+
+        match pixl_render::gif::encode_gif(&gif_frames, sprite.r#loop) {
+            Ok(bytes) => {
+                if let Err(e) = std::fs::write(out, &bytes) {
+                    eprintln!("error: {}", e);
+                    process::exit(1);
+                }
+                println!("{} frames -> {} ({} fps)", resolved.len(), out.display(), sprite.fps);
+            }
+            Err(e) => { eprintln!("error: {}", e); process::exit(1); }
+        }
+    } else {
+        // Render as horizontal spritesheet PNG
+        let frame_w = sw * scale;
+        let frame_h = sh * scale;
+        let sheet_w = frame_w * resolved.len() as u32;
+        let mut sheet = image::RgbaImage::new(sheet_w, frame_h);
+
+        for (i, frame) in resolved.iter().enumerate() {
+            let img = pixl_render::renderer::render_grid(&frame.grid, palette, scale);
+            image::imageops::overlay(&mut sheet, &img, (i as u32 * frame_w) as i64, 0);
+        }
+
+        if let Err(e) = sheet.save(out) {
+            eprintln!("error: {}", e);
+            process::exit(1);
+        }
+        println!("{} frames -> {} ({}x{} spritesheet)", resolved.len(), out.display(), sheet_w, frame_h);
+    }
+}
+
+fn cmd_backdrop_import(image_path: &PathBuf, name: &str, max_colors: u32, tile_size: u32, out: &PathBuf) {
+    use image::GenericImageView;
+
+    let img = match image::open(image_path) {
+        Ok(i) => i,
+        Err(e) => {
+            eprintln!("error: cannot open image {}: {}", image_path.display(), e);
+            process::exit(1);
+        }
+    };
+
+    let (w, h) = img.dimensions();
+    println!("Importing {}x{} image as backdrop '{}'...", w, h, name);
+
+    match pixl_render::pixelize::import_backdrop(&img, name, max_colors, tile_size) {
+        Ok(result) => {
+            if let Err(e) = std::fs::write(out, &result.pax_source) {
+                eprintln!("error: cannot write {}: {}", out.display(), e);
+                process::exit(1);
+            }
+            println!(
+                "  {} tile slots ({} cols x {} rows)",
+                result.tile_count, result.cols, result.rows
+            );
+            println!(
+                "  {} unique tiles (dedup ratio: {:.0}%)",
+                result.unique_tiles,
+                (1.0 - result.unique_tiles as f64 / result.tile_count as f64) * 100.0
+            );
+            println!(
+                "  PAX size: {:.1} KB",
+                result.pax_source.len() as f64 / 1024.0
+            );
+            println!("Saved: {}", out.display());
+        }
+        Err(e) => {
+            eprintln!("error: {}", e);
+            process::exit(1);
+        }
+    }
+}
+
+fn cmd_backdrop_render(
+    file_path: &PathBuf,
+    name: &str,
+    out: &PathBuf,
+    frames: u32,
+    duration: u32,
+    scale: u32,
+) {
+    use image::GenericImageView;
+
+    let source = match std::fs::read_to_string(file_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: cannot read {}: {}", file_path.display(), e);
+            process::exit(1);
+        }
+    };
+
+    let pax = match pixl_core::parser::parse_pax(&source) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("error: {}", e);
+            process::exit(1);
+        }
+    };
+
+    let backdrop = match pixl_core::parser::resolve_backdrop(name, &pax) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("error: {}", e);
+            process::exit(1);
+        }
+    };
+
+    // Resolve palettes
+    let palettes = match pixl_core::parser::resolve_all_palettes(&pax) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("error: {}", e);
+            process::exit(1);
+        }
+    };
+
+    // Resolve extended palette
+    let backdrop_raw = &pax.backdrop[name];
+    let palette_ext = if let Some(ext_name) = &backdrop_raw.palette_ext {
+        if let Some(ext_raw) = pax.palette_ext.get(ext_name) {
+            match pixl_core::parser::resolve_palette_ext(ext_name, ext_raw, &palettes) {
+                Ok(pe) => pe,
+                Err(e) => {
+                    eprintln!("error resolving palette_ext: {}", e);
+                    process::exit(1);
+                }
+            }
+        } else {
+            // No extended palette — build from base only
+            let base = palettes.get(&backdrop_raw.palette).cloned()
+                .unwrap_or_else(|| pixl_core::types::Palette { symbols: std::collections::HashMap::new() });
+            pixl_core::types::PaletteExt {
+                base: base.symbols,
+                extended: std::collections::HashMap::new(),
+            }
+        }
+    } else {
+        let base = palettes.get(&backdrop_raw.palette).cloned()
+            .unwrap_or_else(|| pixl_core::types::Palette { symbols: std::collections::HashMap::new() });
+        pixl_core::types::PaletteExt {
+            base: base.symbols,
+            extended: std::collections::HashMap::new(),
+        }
+    };
+
+    // Resolve tile grids — parse RLE with ext support for each backdrop_tile
+    let mut tile_grids: std::collections::HashMap<String, Vec<Vec<String>>> = std::collections::HashMap::new();
+    for (tile_name, tile_raw) in &pax.backdrop_tile {
+        let (tw, th) = tile_raw.size.as_deref()
+            .and_then(|s| pixl_core::types::parse_size(s).ok())
+            .unwrap_or((backdrop.tile_width, backdrop.tile_height));
+
+        if let Some(rle) = &tile_raw.rle {
+            match pixl_core::rle::parse_rle_ext(rle, tw, th, &palette_ext) {
+                Ok(grid) => { tile_grids.insert(tile_name.clone(), grid); }
+                Err(e) => {
+                    eprintln!("warning: tile '{}' RLE error: {}", tile_name, e);
+                }
+            }
+        } else if let Some(grid_str) = &tile_raw.grid {
+            // Plain grid (single-char symbols)
+            let grid: Vec<Vec<String>> = grid_str
+                .lines()
+                .map(|l| l.trim())
+                .filter(|l| !l.is_empty())
+                .map(|line| line.chars().map(|c| c.to_string()).collect())
+                .collect();
+            tile_grids.insert(tile_name.clone(), grid);
+        }
+    }
+
+    println!(
+        "Backdrop '{}': {}x{} ({} tiles resolved)",
+        name, backdrop.width, backdrop.height, tile_grids.len()
+    );
+
+    if frames == 0 {
+        // Static render
+        let img = pixl_render::backdrop::render_backdrop(&backdrop, &tile_grids, &palette_ext);
+        let final_img = if scale > 1 {
+            image::imageops::resize(&img, img.width() * scale, img.height() * scale, image::imageops::Nearest)
+        } else {
+            img
+        };
+        if let Err(e) = final_img.save(out) {
+            eprintln!("error: {}", e);
+            process::exit(1);
+        }
+        println!("Saved static backdrop: {}", out.display());
+    } else {
+        // Animated GIF
+        let gif_bytes = match pixl_render::backdrop::export_backdrop_gif(
+            &backdrop,
+            &tile_grids,
+            &palette_ext,
+            &pax.cycle,
+            &palettes,
+            Some(&pax),
+            frames,
+            duration,
+            scale,
+        ) {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("error: {}", e);
+                process::exit(1);
+            }
+        };
+        if let Err(e) = std::fs::write(out, &gif_bytes) {
+            eprintln!("error: {}", e);
+            process::exit(1);
+        }
+        println!("Saved {}-frame animated backdrop: {}", frames, out.display());
+    }
+}
+
+fn cmd_convert(input: &PathBuf, out: &PathBuf, width: Option<u32>, colors: u32, preview: Option<u32>) {
+    let image_extensions = ["png", "jpg", "jpeg", "bmp", "gif", "webp", "tiff", "tga"];
+
+    let inputs: Vec<PathBuf> = if input.is_dir() {
+        // Collect all image files in directory
+        match std::fs::read_dir(input) {
+            Ok(entries) => entries
+                .filter_map(|e| e.ok())
+                .map(|e| e.path())
+                .filter(|p| {
+                    p.extension()
+                        .and_then(|e| e.to_str())
+                        .map(|e| image_extensions.contains(&e.to_lowercase().as_str()))
+                        .unwrap_or(false)
+                })
+                .collect(),
+            Err(e) => {
+                eprintln!("error: cannot read directory {}: {}", input.display(), e);
+                process::exit(1);
+            }
+        }
+    } else {
+        vec![input.clone()]
+    };
+
+    if inputs.is_empty() {
+        eprintln!("error: no image files found in {}", input.display());
+        process::exit(1);
+    }
+
+    println!("Converting {} image(s) to pixel art...", inputs.len());
+
+    if let Some(w) = width {
+        // Single-resolution mode
+        std::fs::create_dir_all(out).unwrap_or_else(|e| {
+            eprintln!("error: cannot create output dir: {e}");
+            process::exit(1);
+        });
+
+        for path in &inputs {
+            let img = match image::open(path) {
+                Ok(i) => i,
+                Err(e) => {
+                    eprintln!("  skip {}: {}", path.display(), e);
+                    continue;
+                }
+            };
+
+            let result = pixl_render::pixelize::pixelize(&img, w, colors);
+            let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("image");
+
+            let final_img = if let Some(scale) = preview {
+                image::DynamicImage::ImageRgba8(result.image)
+                    .resize_exact(
+                        result.width * scale,
+                        result.height * scale,
+                        image::imageops::Nearest,
+                    )
+                    .to_rgba8()
+            } else {
+                result.image
+            };
+
+            let out_path = out.join(format!("{stem}.png"));
+            if let Err(e) = final_img.save(&out_path) {
+                eprintln!("  error saving {}: {}", out_path.display(), e);
+            } else {
+                println!("  {} -> {} ({}x{}, {} colors)",
+                    path.display(), out_path.display(), result.width, result.height, colors);
+            }
+        }
+    } else {
+        // Batch mode — 3 presets
+        for path in &inputs {
+            match pixl_render::pixelize::convert_batch(path, out) {
+                Ok(batch) => {
+                    println!("  {} ({}x{})", path.display(), batch.original_size.0, batch.original_size.1);
+                    for r in &batch.results {
+                        println!("    {} -> {}x{}, {} colors",
+                            r.preset_name, r.width, r.height, r.num_colors);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("  error: {}: {}", path.display(), e);
+                }
+            }
+        }
+    }
+
+    println!("Done. Output in {}", out.display());
 }
 
 fn cmd_blueprint(size: &str, model: &str) {

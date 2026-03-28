@@ -170,6 +170,7 @@ mod tests {
             auto_rotate_weight: None,
             template: None,
             edge_class: None,
+            corner_class: None,
             tags: vec![],
             target_layer: None,
             weight: 1.0,

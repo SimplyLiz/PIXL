@@ -1,5 +1,6 @@
 use crate::inference::InferenceServer;
 use crate::state::McpState;
+use image::GenericImageView;
 use pixl_core::feedback::{FeedbackAction, FeedbackEvent, RejectReason};
 use pixl_core::{blueprint, edges, grid, style::StyleLatent, types::parse_size, validate};
 use pixl_wfc::{adjacency::TileEdges, narrate, semantic};
@@ -39,6 +40,9 @@ pub fn handle_tool(state: &Mutex<McpState>, tool_name: &str, args: &Value) -> Va
         "pixl_export" => handle_export(state, args),
         "pixl_check_completeness" => handle_check_completeness(state),
         "pixl_generate_transition_context" => handle_generate_transition_context(state, args),
+        "pixl_convert_sprite" => handle_convert_sprite(args),
+        "pixl_backdrop_import" => handle_backdrop_import(args),
+        "pixl_backdrop_render" => handle_backdrop_render(state, args),
         _ => json!({"error": format!("unknown tool: {}", tool_name)}),
     }
 }
@@ -208,6 +212,7 @@ fn handle_create_tile(state: &Mutex<McpState>, args: &Value) -> Value {
             auto_rotate_weight: None,
             template: None,
             edge_class,
+            corner_class: None,
             tags,
             target_layer,
             weight: 1.0,
@@ -447,70 +452,21 @@ fn handle_render_sprite_gif(state: &Mutex<McpState>, args: &Value) -> Value {
         None => return json!({"error": format!("sprite '{}' not found in '{}'", sprite_name, spriteset_name)}),
     };
 
-    if sprite.frames.is_empty() {
-        return json!({"error": "sprite has no frames"});
-    }
+    // Use the animate module for frame resolution
+    let resolved = match pixl_core::animate::resolve_sprite_frames(sprite, sw, sh, palette, sprite.fps) {
+        Ok(f) => f,
+        Err(e) => return json!({"error": format!("{}", e)}),
+    };
 
-    // Resolve frames
-    let mut resolved_grids: Vec<Vec<Vec<char>>> = Vec::new();
-    let mut base_grids: std::collections::HashMap<u32, Vec<Vec<char>>> = std::collections::HashMap::new();
-
-    for frame in &sprite.frames {
-        let encoding = frame.encoding.as_deref().unwrap_or("grid");
-        match encoding {
-            "grid" => {
-                if let Some(ref grid_str) = frame.grid {
-                    match grid::parse_grid(grid_str, sw, sh, palette) {
-                        Ok(g) => {
-                            base_grids.insert(frame.index, g.clone());
-                            resolved_grids.push(g);
-                        }
-                        Err(e) => return json!({"error": format!("frame {}: {}", frame.index, e)}),
-                    }
-                }
-            }
-            "delta" => {
-                let base_idx = frame.base.unwrap_or(1);
-                if let Some(base_grid) = base_grids.get(&base_idx) {
-                    let mut new_grid = base_grid.clone();
-                    for change in &frame.changes {
-                        let ch = change.sym.chars().next().unwrap_or('.');
-                        if (change.y as usize) < new_grid.len()
-                            && (change.x as usize) < new_grid[0].len()
-                        {
-                            new_grid[change.y as usize][change.x as usize] = ch;
-                        }
-                    }
-                    resolved_grids.push(new_grid);
-                }
-            }
-            "linked" => {
-                let link_idx = frame.link_to.unwrap_or(1);
-                if let Some(linked_grid) = base_grids.get(&link_idx) {
-                    resolved_grids.push(linked_grid.clone());
-                }
-            }
-            _ => {}
-        }
-    }
-
-    if resolved_grids.is_empty() {
+    if resolved.is_empty() {
         return json!({"error": "could not resolve any frames"});
     }
 
-    // Render each frame
-    let fps = sprite.fps.max(1);
-    let frame_duration_ms = 1000 / fps;
-
-    let gif_frames: Vec<(image::RgbaImage, u32)> = resolved_grids
+    let gif_frames: Vec<(image::RgbaImage, u32)> = resolved
         .iter()
-        .enumerate()
-        .map(|(i, grid)| {
-            let dur = sprite.frames.get(i)
-                .and_then(|f| f.duration_ms)
-                .unwrap_or(frame_duration_ms);
-            let img = renderer::render_grid(grid, palette, scale);
-            (img, dur)
+        .map(|frame| {
+            let img = renderer::render_grid(&frame.grid, palette, scale);
+            (img, frame.duration_ms)
         })
         .collect();
 
@@ -522,8 +478,8 @@ fn handle_render_sprite_gif(state: &Mutex<McpState>, args: &Value) -> Value {
                 "ok": true,
                 "spriteset": spriteset_name,
                 "sprite": sprite_name,
-                "frames": resolved_grids.len(),
-                "fps": fps,
+                "frames": resolved.len(),
+                "fps": sprite.fps,
                 "gif_b64": gif_b64,
             })
         }
@@ -575,14 +531,22 @@ fn handle_narrate_map(state: &Mutex<McpState>, args: &Value) -> Value {
             continue;
         }
         let ec = tile_raw.edge_class.as_ref();
-        tile_edges.push(TileEdges {
-            name: name.clone(),
-            n: ec.map(|e| e.n.clone()).unwrap_or_default(),
-            e: ec.map(|e| e.e.clone()).unwrap_or_default(),
-            s: ec.map(|e| e.s.clone()).unwrap_or_default(),
-            w: ec.map(|e| e.w.clone()).unwrap_or_default(),
-            weight: tile_raw.weight,
-        });
+        let cc = tile_raw.corner_class.as_ref();
+        let mut te = TileEdges::new(
+            name,
+            &ec.map(|e| e.n.clone()).unwrap_or_default(),
+            &ec.map(|e| e.e.clone()).unwrap_or_default(),
+            &ec.map(|e| e.s.clone()).unwrap_or_default(),
+            &ec.map(|e| e.w.clone()).unwrap_or_default(),
+            tile_raw.weight,
+        );
+        if let Some(cc) = cc {
+            te.ne = cc.ne.clone();
+            te.se = cc.se.clone();
+            te.sw = cc.sw.clone();
+            te.nw = cc.nw.clone();
+        }
+        tile_edges.push(te);
         tile_affordances.push(semantic::TileAffordance {
             affordance: tile_raw.semantic.as_ref().and_then(|s| s.affordance.clone()),
         });
@@ -631,6 +595,7 @@ fn handle_narrate_map(state: &Mutex<McpState>, args: &Value) -> Value {
         seed,
         max_retries: 5,
         predicates,
+        extra_pins: vec![],
     };
 
     match narrate::narrate_map(&tile_edges, &tile_affordances, &adj_rules, &forbids, &requires, require_boost, &config) {
@@ -908,6 +873,7 @@ fn handle_vary_tile(state: &Mutex<McpState>, args: &Value) -> Value {
                     s: auto_edges.s.clone(),
                     w: auto_edges.w.clone(),
                 }),
+                corner_class: None,
                 tags: vec!["variant".to_string(), format!("base:{}", name)],
                 target_layer: None,
                 weight: 1.0,
@@ -2043,4 +2009,217 @@ fn handle_generate_transition_context(state: &Mutex<McpState>, args: &Value) -> 
         "palette": palette_name,
         "auto_rotate": "4way",
     })
+}
+
+fn handle_convert_sprite(args: &Value) -> Value {
+    let input = match args.get("input").and_then(|v| v.as_str()) {
+        Some(p) => std::path::PathBuf::from(p),
+        None => return json!({"error": "missing 'input' path"}),
+    };
+
+    let out_dir = args
+        .get("out_dir")
+        .and_then(|v| v.as_str())
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            input
+                .parent()
+                .unwrap_or(std::path::Path::new("."))
+                .join("pixl_convert")
+        });
+
+    // Check if single-resolution mode
+    if let Some(width) = args.get("width").and_then(|v| v.as_u64()) {
+        let colors = args
+            .get("colors")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(32) as u32;
+
+        let img = match image::open(&input) {
+            Ok(i) => i,
+            Err(e) => return json!({"error": format!("cannot open image: {e}")}),
+        };
+
+        let (src_w, src_h) = img.dimensions();
+
+        match pixl_render::pixelize::pixelize_to_png_bytes(&img, width as u32, colors) {
+            Ok(bytes) => {
+                let b64 = renderer::png_to_base64(&bytes);
+                let result = pixl_render::pixelize::pixelize(&img, width as u32, colors);
+                return json!({
+                    "ok": true,
+                    "png_base64": b64,
+                    "original_size": format!("{}x{}", src_w, src_h),
+                    "output_size": format!("{}x{}", result.width, result.height),
+                    "colors": colors,
+                });
+            }
+            Err(e) => return json!({"error": e}),
+        }
+    }
+
+    // Batch mode — all 3 presets, write to disk
+    match pixl_render::pixelize::convert_batch(&input, &out_dir) {
+        Ok(batch) => {
+            let presets: Vec<Value> = batch
+                .results
+                .iter()
+                .map(|r| {
+                    json!({
+                        "preset": r.preset_name,
+                        "size": format!("{}x{}", r.width, r.height),
+                        "colors": r.num_colors,
+                    })
+                })
+                .collect();
+
+            json!({
+                "ok": true,
+                "original": input.display().to_string(),
+                "original_size": format!("{}x{}", batch.original_size.0, batch.original_size.1),
+                "out_dir": out_dir.display().to_string(),
+                "presets": presets,
+            })
+        }
+        Err(e) => json!({"error": e}),
+    }
+}
+
+fn handle_backdrop_import(args: &Value) -> Value {
+    let input = match args.get("input").and_then(|v| v.as_str()) {
+        Some(p) => std::path::PathBuf::from(p),
+        None => return json!({"error": "missing 'input' path"}),
+    };
+    let name = args.get("name").and_then(|v| v.as_str()).unwrap_or("scene");
+    let colors = args.get("colors").and_then(|v| v.as_u64()).unwrap_or(32) as u32;
+    let tile_size = args.get("tile_size").and_then(|v| v.as_u64()).unwrap_or(16) as u32;
+    let out = args.get("out").and_then(|v| v.as_str())
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            input.parent().unwrap_or(std::path::Path::new(".")).join(format!("{name}.pax"))
+        });
+
+    let img = match image::open(&input) {
+        Ok(i) => i,
+        Err(e) => return json!({"error": format!("cannot open image: {e}")}),
+    };
+
+    match pixl_render::pixelize::import_backdrop(&img, name, colors, tile_size) {
+        Ok(result) => {
+            if let Err(e) = std::fs::write(&out, &result.pax_source) {
+                return json!({"error": format!("cannot write file: {e}")});
+            }
+            json!({
+                "ok": true,
+                "path": out.display().to_string(),
+                "tile_count": result.tile_count,
+                "unique_tiles": result.unique_tiles,
+                "cols": result.cols,
+                "rows": result.rows,
+                "pax_size_bytes": result.pax_source.len(),
+            })
+        }
+        Err(e) => json!({"error": e}),
+    }
+}
+
+fn handle_backdrop_render(_state: &Mutex<McpState>, args: &Value) -> Value {
+    let file_path = match args.get("file").and_then(|v| v.as_str()) {
+        Some(p) => p,
+        None => return json!({"error": "missing 'file' path"}),
+    };
+    let name = match args.get("name").and_then(|v| v.as_str()) {
+        Some(n) => n,
+        None => return json!({"error": "missing 'name'"}),
+    };
+    let frames = args.get("frames").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+    let scale = args.get("scale").and_then(|v| v.as_u64()).unwrap_or(1) as u32;
+    let duration = args.get("duration").and_then(|v| v.as_u64()).unwrap_or(120) as u32;
+
+    let source = match std::fs::read_to_string(file_path) {
+        Ok(s) => s,
+        Err(e) => return json!({"error": format!("cannot read file: {e}")}),
+    };
+    let pax = match pixl_core::parser::parse_pax(&source) {
+        Ok(f) => f,
+        Err(e) => return json!({"error": format!("parse error: {e}")}),
+    };
+    let backdrop = match pixl_core::parser::resolve_backdrop(name, &pax) {
+        Ok(b) => b,
+        Err(e) => return json!({"error": format!("resolve error: {e}")}),
+    };
+    let palettes = match pixl_core::parser::resolve_all_palettes(&pax) {
+        Ok(p) => p,
+        Err(e) => return json!({"error": format!("palette error: {e}")}),
+    };
+
+    let backdrop_raw = &pax.backdrop[name];
+    let palette_ext = build_palette_ext(backdrop_raw, &pax, &palettes);
+    let tile_grids = resolve_backdrop_tile_grids(&pax, &backdrop, &palette_ext);
+
+    if frames == 0 {
+        let img = pixl_render::backdrop::render_backdrop(&backdrop, &tile_grids, &palette_ext);
+        let final_img = if scale > 1 {
+            image::imageops::resize(&img, img.width() * scale, img.height() * scale, image::imageops::Nearest)
+        } else {
+            img
+        };
+        let png_bytes = renderer::encode_png(&final_img);
+        let b64 = renderer::png_to_base64(&png_bytes);
+        json!({ "ok": true, "png_base64": b64, "size": format!("{}x{}", final_img.width(), final_img.height()) })
+    } else {
+        match pixl_render::backdrop::export_backdrop_gif(
+            &backdrop, &tile_grids, &palette_ext, &pax.cycle, &palettes,
+            Some(&pax), frames, duration, scale,
+        ) {
+            Ok(gif_bytes) => {
+                use base64::Engine;
+                let b64 = base64::engine::general_purpose::STANDARD.encode(&gif_bytes);
+                json!({ "ok": true, "gif_base64": b64, "frames": frames })
+            }
+            Err(e) => json!({"error": e}),
+        }
+    }
+}
+
+fn build_palette_ext(
+    raw: &pixl_core::types::BackdropRaw,
+    pax: &pixl_core::types::PaxFile,
+    palettes: &std::collections::HashMap<String, pixl_core::types::Palette>,
+) -> pixl_core::types::PaletteExt {
+    if let Some(ext_name) = &raw.palette_ext {
+        if let Some(ext_raw) = pax.palette_ext.get(ext_name) {
+            if let Ok(pe) = pixl_core::parser::resolve_palette_ext(ext_name, ext_raw, palettes) {
+                return pe;
+            }
+        }
+    }
+    let base = palettes.get(&raw.palette).cloned()
+        .unwrap_or_else(|| pixl_core::types::Palette { symbols: std::collections::HashMap::new() });
+    pixl_core::types::PaletteExt { base: base.symbols, extended: std::collections::HashMap::new() }
+}
+
+fn resolve_backdrop_tile_grids(
+    pax: &pixl_core::types::PaxFile,
+    backdrop: &pixl_core::types::Backdrop,
+    palette_ext: &pixl_core::types::PaletteExt,
+) -> std::collections::HashMap<String, Vec<Vec<String>>> {
+    let mut grids = std::collections::HashMap::new();
+    for (name, tile) in &pax.backdrop_tile {
+        let (tw, th) = tile.size.as_deref()
+            .and_then(|s| pixl_core::types::parse_size(s).ok())
+            .unwrap_or((backdrop.tile_width, backdrop.tile_height));
+        if let Some(rle) = &tile.rle {
+            if let Ok(g) = pixl_core::rle::parse_rle_ext(rle, tw, th, palette_ext) {
+                grids.insert(name.clone(), g);
+            }
+        } else if let Some(grid_str) = &tile.grid {
+            let g: Vec<Vec<String>> = grid_str.lines()
+                .map(|l| l.trim()).filter(|l| !l.is_empty())
+                .map(|line| line.chars().map(|c| c.to_string()).collect())
+                .collect();
+            grids.insert(name.clone(), g);
+        }
+    }
+    grids
 }

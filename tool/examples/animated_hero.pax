@@ -1,0 +1,179 @@
+# Example: Animated sprite with grid, delta, linked, and mirror frames.
+# Demonstrates the full PAX animation pipeline.
+
+[pax]
+version = "2.0"
+name    = "animated_hero"
+author  = "pixl"
+theme   = "dark_fantasy"
+color_profile = "srgb"
+
+[theme.dark_fantasy]
+palette          = "hero"
+scale            = 2
+max_palette_size = 10
+light_source     = "top-left"
+
+[palette.hero]
+"." = "#00000000"
+"#" = "#2a1f3d"
+"+" = "#4a3a6d"
+"s" = "#1a0f2e"
+"h" = "#6a5a9d"
+"w" = "#e8e0d4"
+"o" = "#c8a035"
+"r" = "#8b1a1a"
+"g" = "#2d5a27"
+
+# ── Color cycle for torch glow ──
+[cycle.torch_flicker]
+palette   = "hero"
+symbols   = ["o", "r"]
+direction = "ping-pong"
+fps       = 10
+
+# ── Animated sprite ──
+[spriteset.hero]
+palette = "hero"
+size    = "8x8"
+cycles  = ["torch_flicker"]
+
+# Walk animation: 4 frames with grid + delta + linked + mirror
+[[spriteset.hero.sprite]]
+name = "walk_right"
+fps  = 6
+loop = true
+
+[[spriteset.hero.sprite.frames]]
+index    = 1
+encoding = "grid"
+grid = '''
+..ww....
+..#+....
+.#++#...
+.#+o+...
+..##....
+.#..#...
+.#..#...
+.s..s...
+'''
+
+[[spriteset.hero.sprite.frames]]
+index    = 2
+encoding = "delta"
+base     = 1
+changes  = [
+  { x = 3, y = 4, sym = "#" },
+  { x = 1, y = 5, sym = "." },
+  { x = 4, y = 5, sym = "#" },
+  { x = 1, y = 6, sym = "s" },
+  { x = 4, y = 6, sym = "." },
+  { x = 1, y = 7, sym = "." },
+  { x = 4, y = 7, sym = "s" },
+]
+
+[[spriteset.hero.sprite.frames]]
+index    = 3
+encoding = "grid"
+grid = '''
+..ww....
+..#+....
+.#++#...
+.#+o+...
+..##....
+..##....
+.#..#...
+.s..s...
+'''
+
+[[spriteset.hero.sprite.frames]]
+index       = 4
+encoding    = "delta"
+base        = 1
+changes     = [
+  { x = 1, y = 5, sym = "#" },
+  { x = 4, y = 5, sym = "." },
+  { x = 1, y = 6, sym = "." },
+  { x = 4, y = 6, sym = "#" },
+  { x = 1, y = 7, sym = "s" },
+  { x = 4, y = 7, sym = "." },
+]
+
+# Walk left: mirror the right walk animation
+[[spriteset.hero.sprite]]
+name = "walk_left"
+fps  = 6
+loop = true
+
+[[spriteset.hero.sprite.frames]]
+index    = 1
+encoding = "grid"
+mirror   = "h"
+grid = '''
+..ww....
+..#+....
+.#++#...
+.#+o+...
+..##....
+.#..#...
+.#..#...
+.s..s...
+'''
+
+# Idle: single frame, linked to walk frame 1
+[[spriteset.hero.sprite]]
+name = "idle"
+fps  = 1
+loop = false
+
+[[spriteset.hero.sprite.frames]]
+index    = 1
+encoding = "grid"
+grid = '''
+..ww....
+..#+....
+.#++#...
+.#+o+...
+..##....
+.#..#...
+.#..#...
+.s..s...
+'''
+
+# ── Static tiles for reference ──
+[tile.floor_stone]
+palette    = "dungeon"
+size       = "8x8"
+edge_class = { n = "floor", e = "floor", s = "floor", w = "floor" }
+grid = '''
+++s+s+++
+++++s+++
+s+++++++
++++++s++
++s++++++
+++++s+s+
++++s++++
+s+++++++
+'''
+
+[tile.wall_solid]
+palette    = "dungeon"
+size       = "8x8"
+edge_class = { n = "solid", e = "solid", s = "solid", w = "solid" }
+corner_class = { ne = "solid", se = "solid", sw = "solid", nw = "solid" }
+grid = '''
+########
+##++##++
+#+++++++
+##++####
+########
+##++##++
+#+++++++
+########
+'''
+
+[palette.dungeon]
+"." = "#00000000"
+"#" = "#2a1f3d"
+"+" = "#4a3a6d"
+"s" = "#1a0f2e"

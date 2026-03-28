@@ -86,6 +86,8 @@ pub struct NarrateConfig {
     pub seed: u64,
     pub max_retries: u32,
     pub predicates: Vec<Predicate>,
+    /// Extra pins from explicit --pin CLI args (merged with predicate-generated pins).
+    pub extra_pins: Vec<Pin>,
 }
 
 /// Result of a narrate_map run.
@@ -136,13 +138,22 @@ pub fn narrate_map(
     let mut last_contradiction = (0usize, 0usize);
     for retry in 0..=config.max_retries {
         let seed = config.seed + retry as u64;
-        let pins = build_pins_from_predicates(
+        let mut pins = build_pins_from_predicates(
             &config.predicates,
             &name_to_idx,
             &affordance_to_tiles,
             config.width,
             config.height,
         );
+        // Merge in explicit extra pins (CLI --pin args)
+        for ep in &config.extra_pins {
+            // Only add if within bounds and not already pinned at this position
+            if ep.x < config.width && ep.y < config.height {
+                if !pins.iter().any(|p| p.x == ep.x && p.y == ep.y) {
+                    pins.push(ep.clone());
+                }
+            }
+        }
         let pins_count = pins.len();
 
         // Run WFC
@@ -390,18 +401,8 @@ mod tests {
 
     fn simple_tiles() -> (Vec<TileEdges>, Vec<TileAffordance>) {
         let tiles = vec![
-            TileEdges {
-                name: "wall".to_string(),
-                n: "solid".to_string(), e: "solid".to_string(),
-                s: "solid".to_string(), w: "solid".to_string(),
-                weight: 1.0,
-            },
-            TileEdges {
-                name: "floor".to_string(),
-                n: "floor".to_string(), e: "floor".to_string(),
-                s: "floor".to_string(), w: "floor".to_string(),
-                weight: 2.0,
-            },
+            TileEdges::new("wall", "solid", "solid", "solid", "solid", 1.0),
+            TileEdges::new("floor", "floor", "floor", "floor", "floor", 2.0),
         ];
         let affordances = vec![
             TileAffordance { affordance: Some("obstacle".to_string()) },
@@ -459,6 +460,7 @@ mod tests {
                     tile_type: "wall".to_string(),
                 },
             ],
+            extra_pins: vec![],
         };
 
         let result = narrate_map(
@@ -496,6 +498,7 @@ mod tests {
                     position: Position::Southeast,
                 },
             ],
+            extra_pins: vec![],
         };
 
         let result = narrate_map(

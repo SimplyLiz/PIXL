@@ -48,9 +48,27 @@ pub struct TileEdges {
     pub s: String,
     pub w: String,
     pub weight: f64,
+    /// Optional 8-neighbor corner classes (Godot terrain-style).
+    pub ne: Option<String>,
+    pub se: Option<String>,
+    pub sw: Option<String>,
+    pub nw: Option<String>,
 }
 
 impl TileEdges {
+    /// Create a TileEdges with just the 4 cardinal edges (no corners).
+    pub fn new(name: &str, n: &str, e: &str, s: &str, w: &str, weight: f64) -> Self {
+        TileEdges {
+            name: name.to_string(),
+            n: n.to_string(),
+            e: e.to_string(),
+            s: s.to_string(),
+            w: w.to_string(),
+            weight,
+            ne: None, se: None, sw: None, nw: None,
+        }
+    }
+
     pub fn edge_in(&self, dir: Direction) -> &str {
         match dir {
             Direction::North => &self.n,
@@ -58,6 +76,39 @@ impl TileEdges {
             Direction::South => &self.s,
             Direction::West => &self.w,
         }
+    }
+
+    /// Get the corner class for a diagonal direction.
+    /// Returns None if corner classes aren't defined on this tile.
+    pub fn corner_in(&self, dir: Direction, clockwise: bool) -> Option<&str> {
+        // For Direction::North + clockwise=true → NE corner
+        // For Direction::North + clockwise=false → NW corner
+        match (dir, clockwise) {
+            (Direction::North, true) => self.ne.as_deref(),
+            (Direction::East, true) => self.se.as_deref(),
+            (Direction::South, true) => self.sw.as_deref(),
+            (Direction::West, true) => self.nw.as_deref(),
+            (Direction::North, false) => self.nw.as_deref(),
+            (Direction::East, false) => self.ne.as_deref(),
+            (Direction::South, false) => self.se.as_deref(),
+            (Direction::West, false) => self.sw.as_deref(),
+        }
+    }
+}
+
+/// Check whether two tiles have compatible corner classes for a given adjacency.
+/// If either tile has no corner classes defined, corners are compatible (permissive).
+fn corners_compatible(a: &TileEdges, b: &TileEdges, dir: Direction) -> bool {
+    // When A is placed in `dir` relative to B:
+    // - A's clockwise corner in `dir` must match B's counter-clockwise corner in `dir`
+    // Example: A is East of B → A.NW must match B.NE, and A.SW must match B.SE
+    let a_ccw = a.corner_in(dir, false);  // counter-clockwise corner of A facing dir
+    let b_cw = b.corner_in(dir, true);    // clockwise corner of B facing dir
+
+    // Only check if BOTH tiles define the relevant corners
+    match (a_ccw, b_cw) {
+        (Some(ac), Some(bc)) => ac == bc,
+        _ => true, // permissive if either is undefined
     }
 }
 
@@ -114,8 +165,8 @@ impl AdjacencyRules {
 
             for (a_idx, a) in tiles.iter().enumerate() {
                 for (b_idx, b) in tiles.iter().enumerate() {
-                    if a.edge_in(dir) == b.edge_in(opp) {
-                        // Direct compatibility
+                    if a.edge_in(dir) == b.edge_in(opp) && corners_compatible(a, b, dir) {
+                        // Direct compatibility (edges match + corners match if defined)
                         rules[a_idx * 4 + dir_idx].insert(b_idx);
 
                         // Expand variant groups: if b is in a group, all members compatible
@@ -164,30 +215,9 @@ mod tests {
 
     fn make_tiles() -> Vec<TileEdges> {
         vec![
-            TileEdges {
-                name: "wall".to_string(),
-                n: "solid".to_string(),
-                e: "solid".to_string(),
-                s: "solid".to_string(),
-                w: "solid".to_string(),
-                weight: 1.0,
-            },
-            TileEdges {
-                name: "floor".to_string(),
-                n: "floor".to_string(),
-                e: "floor".to_string(),
-                s: "floor".to_string(),
-                w: "floor".to_string(),
-                weight: 2.0,
-            },
-            TileEdges {
-                name: "transition".to_string(),
-                n: "solid".to_string(),
-                e: "solid".to_string(),
-                s: "floor".to_string(),
-                w: "solid".to_string(),
-                weight: 1.0,
-            },
+            TileEdges::new("wall", "solid", "solid", "solid", "solid", 1.0),
+            TileEdges::new("floor", "floor", "floor", "floor", "floor", 2.0),
+            TileEdges::new("transition", "solid", "solid", "floor", "solid", 1.0),
         ]
     }
 
@@ -223,30 +253,9 @@ mod tests {
     #[test]
     fn variant_groups_expand_compatibility() {
         let tiles = vec![
-            TileEdges {
-                name: "grass_a".to_string(),
-                n: "grass".to_string(),
-                e: "grass".to_string(),
-                s: "grass".to_string(),
-                w: "grass".to_string(),
-                weight: 2.0,
-            },
-            TileEdges {
-                name: "grass_b".to_string(),
-                n: "grass".to_string(),
-                e: "grass".to_string(),
-                s: "grass".to_string(),
-                w: "grass".to_string(),
-                weight: 1.0,
-            },
-            TileEdges {
-                name: "wall".to_string(),
-                n: "solid".to_string(),
-                e: "solid".to_string(),
-                s: "solid".to_string(),
-                w: "solid".to_string(),
-                weight: 1.0,
-            },
+            TileEdges::new("grass_a", "grass", "grass", "grass", "grass", 2.0),
+            TileEdges::new("grass_b", "grass", "grass", "grass", "grass", 1.0),
+            TileEdges::new("wall", "solid", "solid", "solid", "solid", 1.0),
         ];
         let mut groups = HashMap::new();
         groups.insert(

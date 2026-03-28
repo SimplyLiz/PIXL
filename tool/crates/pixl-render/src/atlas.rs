@@ -4,7 +4,13 @@ use pixl_core::types::Palette;
 use serde::Serialize;
 use std::collections::HashMap;
 
-/// Atlas metadata in TexturePacker JSON Hash format.
+// ── TexturePacker JSON Hash types (canonical source) ────────────────
+//
+// These are the authoritative types for the TexturePacker JSON format.
+// `pixl-export/src/texturepacker.rs` re-exports these — do NOT duplicate.
+
+/// TexturePacker JSON Hash — de facto sprite atlas standard.
+/// Understood by 48+ game engines: Unity, Godot, Phaser, libGDX, Bevy, etc.
 #[derive(Debug, Serialize)]
 pub struct AtlasJson {
     pub frames: HashMap<String, FrameEntry>,
@@ -21,6 +27,9 @@ pub struct FrameEntry {
     #[serde(rename = "sourceSize")]
     pub source_size: Size,
     pub pivot: Pivot,
+    /// 9-slice border (only serialized when present).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub border: Option<Border>,
 }
 
 #[derive(Debug, Serialize)]
@@ -44,14 +53,36 @@ pub struct Pivot {
 }
 
 #[derive(Debug, Serialize)]
+pub struct Border {
+    pub left: u32,
+    pub right: u32,
+    pub top: u32,
+    pub bottom: u32,
+}
+
+#[derive(Debug, Serialize)]
 pub struct AtlasMeta {
     pub app: String,
     pub version: String,
     pub image: String,
     pub format: String,
+    /// Aseprite-compatible animation frame tags.
+    #[serde(rename = "frameTags", skip_serializing_if = "Vec::is_empty")]
+    pub frame_tags: Vec<FrameTag>,
     pub size: Size,
     pub scale: String,
 }
+
+/// Aseprite-compatible animation tag.
+#[derive(Debug, Serialize)]
+pub struct FrameTag {
+    pub name: String,
+    pub from: u32,
+    pub to: u32,
+    pub direction: String,
+}
+
+// ── Atlas packing ───────────────────────────────────────────────────
 
 /// A tile to be packed into an atlas.
 pub struct AtlasTile {
@@ -137,6 +168,7 @@ pub fn pack_atlas(
                     h: th * scale,
                 },
                 pivot: Pivot { x: 0.5, y: 0.5 },
+                border: None,
             },
         );
     }
@@ -151,9 +183,54 @@ pub fn pack_atlas(
             h: atlas_h,
         },
         scale: scale.to_string(),
+        frame_tags: vec![],
     };
 
     Ok((atlas, AtlasJson { frames, meta }))
+}
+
+/// Build FrameTags from PAX spriteset animation data.
+pub fn frame_tags_from_spritesets(
+    spritesets: &HashMap<String, pixl_core::types::SpritesetRaw>,
+) -> Vec<FrameTag> {
+    let mut tags = Vec::new();
+    for (_ss_name, ss) in spritesets {
+        for sprite in &ss.sprite {
+            for tag in &sprite.tags {
+                tags.push(FrameTag {
+                    name: format!("{}_{}", sprite.name, tag.name),
+                    from: tag.from_frame,
+                    to: tag.to_frame,
+                    direction: "forward".to_string(),
+                });
+            }
+            if sprite.tags.is_empty() && !sprite.frames.is_empty() {
+                let last = sprite.frames.iter().map(|f| f.index).max().unwrap_or(1);
+                tags.push(FrameTag {
+                    name: sprite.name.clone(),
+                    from: 1,
+                    to: last,
+                    direction: "forward".to_string(),
+                });
+            }
+        }
+    }
+    tags
+}
+
+/// Pack atlas with animation frame tags populated from spritesets.
+pub fn pack_atlas_with_tags(
+    tiles: &[AtlasTile],
+    palette: &Palette,
+    columns: u32,
+    padding: u32,
+    scale: u32,
+    output_name: &str,
+    spritesets: &HashMap<String, pixl_core::types::SpritesetRaw>,
+) -> Result<(RgbaImage, AtlasJson), String> {
+    let (img, mut json) = pack_atlas(tiles, palette, columns, padding, scale, output_name)?;
+    json.meta.frame_tags = frame_tags_from_spritesets(spritesets);
+    Ok((img, json))
 }
 
 #[cfg(test)]
@@ -165,21 +242,11 @@ mod tests {
         let mut symbols = HashMap::new();
         symbols.insert(
             '#',
-            PaxRgba {
-                r: 42,
-                g: 31,
-                b: 61,
-                a: 255,
-            },
+            PaxRgba { r: 42, g: 31, b: 61, a: 255 },
         );
         symbols.insert(
             '+',
-            PaxRgba {
-                r: 74,
-                g: 58,
-                b: 109,
-                a: 255,
-            },
+            PaxRgba { r: 74, g: 58, b: 109, a: 255 },
         );
         Palette { symbols }
     }
@@ -248,5 +315,7 @@ mod tests {
         assert!(serialized.contains("spriteSourceSize"));
         assert!(serialized.contains("sourceSize"));
         assert!(serialized.contains("RGBA8888"));
+        // border should NOT appear when None
+        assert!(!serialized.contains("border"));
     }
 }

@@ -39,25 +39,40 @@ A `.pax` file is UTF-8 text with TOML syntax. Multi-line literal strings
 [pax]                         Header + version
 [theme.<name>]                Semantic style layer
 [palette.<name>]              Named indexed color tables
+[palette_ext.<name>]          Extended palettes (17-48 colors, multi-char symbols)
 [palette_swap.<name>]         Palette substitution sets
 [cycle.<name>]                Color cycling animation rules
 [stamp.<name>]                Reusable pixel macro-blocks (2x2 to 8x8)
 [tile.<name>]                 Tile definitions (8x8 to 64x64)
 [[spriteset.<name>.sprite]]   Ordered sprite sequences
+[anim_clock.<name>]           Global animation clocks (Neo Geo auto-animation)
+[tilemap.<name>]              Game tilemaps with layers and WFC constraints
+[backdrop_tile.<name>]        Lightweight tiles for backdrop composition
+[backdrop.<name>]             Large animated background scenes
 [wfc_rules]                   Semantic WFC constraints
 [atlas]                       Export configuration
 ```
+
+> **Note:** Extended palettes, backdrop tiles, and backdrops are specified in
+> the companion document [docs/specs/backdrop.md](backdrop.md).
 
 ### 2.1 Header
 
 ```toml
 [pax]
-version = "2.0"
-name    = "dungeon_hero"
-author  = "claude"
-created = "2026-03-22T12:00:00Z"
-theme   = "dark_fantasy"
+version       = "2.0"
+name          = "dungeon_hero"
+author        = "claude"
+created       = "2026-03-22T12:00:00Z"
+theme         = "dark_fantasy"
+color_profile = "srgb"           # "srgb" (default) | "linear" | "display-p3"
 ```
+
+**`color_profile`** selects the working color space for rendering and color
+distance calculations. `srgb` is the default and matches standard displays.
+`linear` uses linear-light RGB (useful for correct alpha blending). `display-p3`
+enables the wider P3 gamut for modern Apple displays. Omitting the field
+defaults to `srgb`.
 
 ---
 
@@ -103,9 +118,15 @@ language). Each named constraint maps to a known formula:
 | `highlight_brighter_than_fg`     | `lum(hi) > lum(fg)`              |
 | `accent_hue_distinct_from_bg`    | `hue_distance(accent, bg) > 40`  |
 | `max_colors_per_tile`            | `tile.unique_symbols <= value`    |
+| `palette_granularity`            | Palette can only change at NxN tile block boundaries (NES attribute table: N=2) |
 
 Constraint violations are **warnings** in V1, not errors. They inform the
 artist but don't block rendering.
+
+**`palette_granularity`** is a generation constraint for NES-authentic aesthetics.
+When set to `2`, palette assignment must align to 2x2 tile blocks (matching the
+NES PPU attribute table hardware limitation of 4 palettes per 32x32 pixel
+region). This doesn't affect rendering — it's enforced during validation only.
 
 **`max_palette_size`** is a hard validation **error** — the parser rejects any
 tile using more distinct symbols than this limit.
@@ -316,13 +337,16 @@ template      = "wall_base"      # inherit grid from named tile (Section 8.7)
 auto_rotate   = "none"           # "none" | "4way" | "flip" | "8way" (Section 8.8)
 
 edge_class    = { n = "solid", e = "solid", s = "solid", w = "solid" }
+corner_class  = { ne = "wall", se = "wall", sw = "wall", nw = "wall" }
 tags          = ["wall", "interior"]
+target_layer  = "walls"          # AI placement hint: "background" | "terrain" | "walls" | "platform" | "foreground" | "effects"
 weight        = 1.0
 
 [tile.wall_solid.semantic]
-affordance = "obstacle"
-collision  = "full"              # "full" | "none" | "half_top" | "slope_ne/nw/se/sw"
-tags       = { light_blocks = true, biome = "dungeon" }
+affordance       = "obstacle"
+collision        = "full"        # "full" | "none" | "half_top" | "slope_ne/nw/se/sw" | "polygon" | "custom"
+collision_points = [[0,0], [16,0], [16,16], [0,16]]   # polygon vertices (only for collision = "polygon")
+tags             = { light_blocks = true, biome = "dungeon" }
 
 grid = '''
 ################
@@ -441,6 +465,43 @@ crypto dependency). Note: `std::hash::DefaultHasher` uses SipHash, not FNV-1a.
 **`pixl check --fix`** auto-generates edge classes from grid content, so the
 LLM can omit them entirely.
 
+#### Corner Classes (8-Neighbor WFC)
+
+For terrain matching that needs diagonal adjacency (Godot-style autotiling),
+tiles can declare optional corner classes in addition to edge classes:
+
+```toml
+corner_class = { ne = "grass", se = "dirt", sw = "dirt", nw = "grass" }
+```
+
+Corner classes enable 8-neighbor WFC constraint solving. Each corner (`ne`,
+`se`, `sw`, `nw`) names a terrain type. Two tiles can share a corner if their
+corner classes match at that position. All four corners are optional — omitted
+corners are unconstrained and match anything.
+
+Edge classes handle the 4-neighbor horizontal/vertical adjacency; corner classes
+handle the additional 4 diagonal positions for full 8-neighbor tiling.
+
+#### Collision Shapes
+
+The `collision` field in `[tile.X.semantic]` supports these shapes:
+
+| Shape       | Description                                           |
+|-------------|-------------------------------------------------------|
+| `full`      | Entire tile is solid                                  |
+| `none`      | No collision (decorative, background)                 |
+| `half_top`  | Top half solid (one-way platform)                     |
+| `slope_ne`  | Northeast slope (triangle: bottom-left to top-right)  |
+| `slope_nw`  | Northwest slope (triangle: bottom-right to top-left)  |
+| `slope_se`  | Southeast slope (triangle: top-left to bottom-right)  |
+| `slope_sw`  | Southwest slope (triangle: top-right to bottom-left)  |
+| `polygon`   | Custom polygon defined by `collision_points`          |
+| `custom`    | Engine-specific collision (exported as-is)             |
+
+When `collision = "polygon"`, the `collision_points` field provides the polygon
+vertices as `[[x1,y1], [x2,y2], ...]` in tile-local pixel coordinates. Points
+are in clockwise winding order.
+
 ### 8.7 Tile Templates
 
 Inherit pixel data from another tile, override only palette. For biome
@@ -531,9 +592,10 @@ palette_swaps = ["hero_red", "hero_blue"]
 
 ```toml
 [[spriteset.hero.sprite]]
-name = "idle"
-fps  = 4
-loop = true
+name  = "idle"
+fps   = 4
+loop  = true
+scale = 1.0    # optional: Neo Geo/Super Scaler-style scale factor (0.5 = half size)
 frames = [
   { index = 1, encoding = "grid", grid = '''
 ....wwwwwwww....
@@ -595,6 +657,18 @@ Delta chains forbidden — all deltas must reference a `grid` frame.
 ```
 If `duration_ms` absent, frame duration = `1000 / fps`. Per-frame duration
 overrides sprite-level fps for that frame.
+
+**`mirror`** — flip the frame without storing duplicate data:
+```toml
+{ index = 5, encoding = "grid", mirror = "h", grid = '''...''' }
+```
+Values: `"h"` (horizontal), `"v"` (vertical), `"hv"` (both).
+
+**`scale`** — per-sprite scale factor (Neo Geo shrink / Super Scaler):
+```toml
+scale = 0.5   # render at half size (nearest-neighbor)
+```
+Applied during rendering. Values < 1.0 shrink, > 1.0 enlarge. Default 1.0.
 
 ### 9.4 Frame Resolution
 

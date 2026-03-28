@@ -61,6 +61,18 @@ AI analyzes all tiles in the session and suggests semantic tags (wall, floor, co
 
 Use the **Generate Tilegroup** button in the top bar to batch-generate a complete autotile set (up to 16 variants: solid, corners, edges, transitions). Enter a base name and description, and the AI generates each variant with edge compatibility.
 
+## Tileset Completeness Analyzer
+
+After generating tiles, use the **Validate** button in the Tiles tab (or `pixl validate --completeness` from the CLI) to analyze edge class connectivity. The analyzer reports:
+
+- **Disconnected tile pairs** — edges that can't connect to anything
+- **Missing transition tiles** — specific tile types needed to bridge incompatible edges (e.g., "need a tile with N=wall, S=floor")
+- **Coverage score** — percentage of possible edge combinations that have valid tile placements
+
+## Transition Tile Generator
+
+When the completeness analyzer identifies gaps, use the **Generate Transition** button (or the `pixl_generate_transition_context` MCP tool) to create knowledge-enriched prompts for the missing transition tiles. The system pre-fills edge constraints and palette context so the AI generates tiles that fit the gap.
+
 ## Full PAX Source Generation
 
 If the AI returns a complete PAX TOML document (with `[theme]`, `[[tiles]]` sections), Studio detects this and loads the entire tileset into the session — not just a single tile.
@@ -71,6 +83,8 @@ When "PIXL LoRA (On-Device)" is selected as the LLM provider:
 - Generation runs entirely on your machine via `mlx_lm.server`
 - Uses the fine-tuned LoRA adapter trained on your accepted tiles
 - No API key needed, no cloud calls
+- The engine auto-detects `mlx-lm` in `training/.venv`, `.venv`, or system Python
+- If `mlx-lm` isn't found, the Settings dialog shows an **Install mlx-lm** button
 - See [Local Inference Guide](../guides/local-inference.md) for setup
 
 ## Auto-Learn
@@ -80,3 +94,18 @@ When enabled (Settings or Training dialog), every accepted tile is automatically
 ## Knowledge Base
 
 The engine includes a built-in pixel art knowledge base (indexed with BM25 search). When generating tiles, relevant knowledge passages are automatically injected into the prompt for better results. Toggle this in the Generate tab.
+
+## OKLab Color Space
+
+Image import and style matching use **OKLab** perceptual color distance instead of raw RGB. This means:
+- **Sprite conversion** (`pixl convert`) quantizes images to the nearest palette color using perceptual similarity, not Euclidean RGB distance
+- **Style latent extraction** (`pixl learn-style`) measures lightness and hue in OKLab space, producing more accurate style fingerprints
+- The result is better palette matching that aligns with how humans perceive color differences
+
+## CLI: `pixl new --generate`
+
+The `--generate` flag on `pixl new` loads the knowledge base and generates enriched system/user prompts for each tile type in the template. You can pipe these directly to any LLM for automated tileset generation:
+
+```bash
+pixl new --theme dark_fantasy --generate | your-llm-cli
+```

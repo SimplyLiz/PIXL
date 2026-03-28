@@ -399,6 +399,70 @@ class PixlBackend {
     });
   }
 
+  // ── Backdrop ───────────────────────────────────────────
+
+  /// Import an image as a PAX backdrop (tile-decomposed scene).
+  Future<Map<String, dynamic>> backdropImport({
+    required String inputPath,
+    required String name,
+    int colors = 32,
+    int tileSize = 16,
+    String? outPath,
+  }) async {
+    return _post('/api/backdrop/import', {
+      'input': inputPath,
+      'name': name,
+      'colors': colors,
+      'tile_size': tileSize,
+      if (outPath != null) 'out': outPath,
+    });
+  }
+
+  /// Render a backdrop (static PNG or animated GIF as base64).
+  Future<Map<String, dynamic>> backdropRender({
+    required String filePath,
+    required String name,
+    int frames = 0,
+    int scale = 1,
+    int duration = 120,
+  }) async {
+    return _post('/api/backdrop/render', {
+      'file': filePath,
+      'name': name,
+      'frames': frames,
+      'scale': scale,
+      'duration': duration,
+    });
+  }
+
+  // ── Sprite Conversion ──────────────────────────────────
+
+  /// Convert an image to true 1:1 pixel art using all 3 presets.
+  /// Returns output paths for small/medium/large.
+  Future<Map<String, dynamic>> convertSprite({
+    required String inputPath,
+    String? outDir,
+  }) async {
+    return _post('/api/convert', {
+      'input': inputPath,
+      if (outDir != null) 'out_dir': outDir,
+    });
+  }
+
+  /// Convert an image to pixel art at a specific resolution.
+  /// Returns base64 PNG.
+  Future<Map<String, dynamic>> convertSpriteCustom({
+    required String inputPath,
+    required int width,
+    int colors = 32,
+  }) async {
+    return _post('/api/convert', {
+      'input': inputPath,
+      'width': width,
+      'colors': colors,
+    });
+  }
+
   // ── Generic ────────────────────────────────────────────
 
   /// Call any tool by name.

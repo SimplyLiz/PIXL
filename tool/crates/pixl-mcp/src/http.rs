@@ -57,6 +57,9 @@ pub fn create_router(state: McpState, inference_config: Option<InferenceConfig>)
         .route("/api/export", post(export_engine))
         .route("/api/check/completeness", get(check_completeness))
         .route("/api/tile/generate-transition", post(generate_transition))
+        .route("/api/convert", post(convert_sprite))
+        .route("/api/backdrop/import", post(backdrop_import))
+        .route("/api/backdrop/render", post(backdrop_render))
         .route("/api/tool", post(generic_tool_call))
         .with_state(shared)
 }
@@ -184,6 +187,26 @@ async fn feedback_constraints(State(state): State<SharedState>) -> Json<Value> {
 
 async fn generate_transition(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
     Json(handlers::handle_tool(&state.mcp, "pixl_generate_transition_context", &args))
+}
+
+async fn convert_sprite(Json(args): Json<Value>) -> Json<Value> {
+    Json(handlers::handle_tool(
+        &Mutex::new(McpState::new()),
+        "pixl_convert_sprite",
+        &args,
+    ))
+}
+
+async fn backdrop_import(Json(args): Json<Value>) -> Json<Value> {
+    Json(handlers::handle_tool(
+        &Mutex::new(McpState::new()),
+        "pixl_backdrop_import",
+        &args,
+    ))
+}
+
+async fn backdrop_render(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
+    Json(handlers::handle_tool(&state.mcp, "pixl_backdrop_render", &args))
 }
 
 async fn check_completeness(State(state): State<SharedState>) -> Json<Value> {

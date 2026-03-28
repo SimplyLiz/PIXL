@@ -15,6 +15,8 @@ import '../theme/studio_theme.dart';
 import 'settings_dialog.dart';
 import 'shortcuts_dialog.dart';
 import 'tilegroup_dialog.dart';
+import 'backdrop_dialog.dart';
+import 'convert_dialog.dart';
 import 'training_dialog.dart';
 import 'wfc_dialog.dart';
 
@@ -247,6 +249,16 @@ class TopBar extends ConsumerWidget {
             label: 'WFC Map',
             icon: Icons.auto_awesome_mosaic,
             onTap: () => WfcDialog.show(context),
+          ),
+          _BarButton(
+            label: 'Convert to Pixel Art',
+            icon: Icons.auto_fix_high,
+            onTap: () => ConvertDialog.show(context),
+          ),
+          _BarButton(
+            label: 'Backdrop',
+            icon: Icons.landscape,
+            onTap: () => BackdropDialog.show(context),
           ),
           _BarButton(
             label: 'Training',

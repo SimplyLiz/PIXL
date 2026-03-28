@@ -26,7 +26,7 @@ Select "PIXL LoRA (On-Device)" for fully local AI generation using your trained 
 - **Base Model**: `mlx-community/Qwen2.5-3B-Instruct-4bit` (default)
 - **LoRA Adapter Path**: path to the adapter directory (e.g. `training/adapters/pixl-lora-v2`)
 
-The engine spawns `mlx_lm.server` automatically on first generation. Requires `pip install mlx-lm`.
+The engine spawns `mlx_lm.server` automatically on first generation. The engine searches for Python with `mlx-lm` in `training/.venv`, `.venv`, and system Python (in that order). If found, the Settings dialog shows a green checkmark. If not found, an **Install mlx-lm** button appears to set it up automatically.
 
 See [Local Inference Guide](../guides/local-inference.md) for full setup.
 
@@ -53,7 +53,7 @@ The right panel has 4 icon tabs:
 - Tile list with inline thumbnails
 - Tile preview (click to expand) with 3x3 tiling view
 - Edge class display (N/E/S/W)
-- Stamps listing + procedural stamp generator (8 patterns: brick, checkerboard, diagonal, etc.)
+- Stamps listing + procedural stamp generator (8 patterns: `brick_bond`, `checkerboard`, `diagonal`, `dither_bayer`, `horizontal_stripe`, `dots`, `cross`, `noise`)
 - Play Animation button for spriteset tiles (renders animated GIF)
 - Edge compatibility checker (select two tiles + direction)
 - Validation runner

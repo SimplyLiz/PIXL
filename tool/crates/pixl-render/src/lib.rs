@@ -1,9 +1,11 @@
 pub mod animation;
 pub mod atlas;
+pub mod backdrop;
 pub mod composite;
 pub mod gif;
 pub mod import;
 pub mod palette_lut;
+pub mod pixelize;
 pub mod preview;
 pub mod renderer;
 pub mod spritesheet;

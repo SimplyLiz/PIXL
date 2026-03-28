@@ -28,6 +28,16 @@ pub struct PaxFile {
     pub wfc_rules: Option<WfcRules>,
     #[serde(default)]
     pub atlas: Option<AtlasConfig>,
+    #[serde(default)]
+    pub anim_clock: HashMap<String, AnimClock>,
+    #[serde(default)]
+    pub tilemap: HashMap<String, crate::tilemap::TilemapRaw>,
+    #[serde(default)]
+    pub palette_ext: HashMap<String, PaletteExtRaw>,
+    #[serde(default)]
+    pub backdrop_tile: HashMap<String, BackdropTileRaw>,
+    #[serde(default)]
+    pub backdrop: HashMap<String, BackdropRaw>,
 }
 
 // ── Header ──────────────────────────────────────────────────────────
@@ -42,6 +52,9 @@ pub struct Header {
     pub created: Option<String>,
     #[serde(default)]
     pub theme: Option<String>,
+    /// Color profile: "srgb" (default) | "linear" | "display-p3"
+    #[serde(default)]
+    pub color_profile: Option<String>,
 }
 
 // ── Theme ───────────────────────────────────────────────────────────
@@ -123,6 +136,26 @@ fn default_fps() -> u32 {
     8
 }
 
+// ── Animation Clock (Neo Geo auto-animation) ───────────────────────
+
+/// Global animation clock that tiles can opt into.
+/// All tiles sharing a clock stay perfectly synchronized.
+/// Tiles cycle through `{name}_0`..`{name}_{frames-1}` companion tiles.
+#[derive(Debug, Deserialize, serde::Serialize)]
+pub struct AnimClock {
+    #[serde(default = "default_anim_fps")]
+    pub fps: u32,
+    #[serde(default = "default_anim_frames")]
+    pub frames: u32,
+    /// "loop" | "ping-pong"
+    #[serde(default = "default_anim_mode")]
+    pub mode: String,
+}
+
+fn default_anim_fps() -> u32 { 6 }
+fn default_anim_frames() -> u32 { 4 }
+fn default_anim_mode() -> String { "loop".to_string() }
+
 // ── Stamp ───────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize, serde::Serialize)]
@@ -159,6 +192,8 @@ pub struct TileRaw {
     pub template: Option<String>,
     #[serde(default)]
     pub edge_class: Option<EdgeClassRaw>,
+    #[serde(default)]
+    pub corner_class: Option<CornerClassRaw>,
     #[serde(default)]
     pub tags: Vec<String>,
     /// Target tilemap layer for AI-driven placement (e.g. "terrain", "walls", "effects").
@@ -197,6 +232,19 @@ pub struct EdgeClassRaw {
     pub w: String,
 }
 
+/// Optional corner classes for 8-neighbor WFC terrain matching (Godot-style).
+#[derive(Debug, Deserialize, Clone, serde::Serialize)]
+pub struct CornerClassRaw {
+    #[serde(default)]
+    pub ne: Option<String>,
+    #[serde(default)]
+    pub se: Option<String>,
+    #[serde(default)]
+    pub sw: Option<String>,
+    #[serde(default)]
+    pub nw: Option<String>,
+}
+
 #[derive(Debug, Deserialize, Clone, serde::Serialize)]
 pub struct NineSlice {
     pub left: u32,
@@ -211,6 +259,9 @@ pub struct SemanticRaw {
     pub affordance: Option<String>,
     #[serde(default)]
     pub collision: Option<String>,
+    /// Polygon collision points for "polygon" collision type: [[x1,y1], [x2,y2], ...]
+    #[serde(default)]
+    pub collision_points: Option<Vec<Vec<u32>>>,
     #[serde(default)]
     pub tags: HashMap<String, toml::Value>, // mixed types: bool, string, int
 }
@@ -271,14 +322,24 @@ pub struct EdgeClass {
     pub w: String,
 }
 
+/// Resolved corner classes for 8-neighbor WFC terrain matching.
+#[derive(Debug, Clone, Default)]
+pub struct CornerClass {
+    pub ne: Option<String>,
+    pub se: Option<String>,
+    pub sw: Option<String>,
+    pub nw: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 pub struct Semantic {
     pub affordance: String,
     pub collision: CollisionShape,
-    pub tags: HashMap<String, toml::Value>, // mixed types: bool, string, int
+    pub collision_points: Option<Vec<(u32, u32)>>,
+    pub tags: HashMap<String, toml::Value>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CollisionShape {
     Full,
     None,
@@ -287,6 +348,7 @@ pub enum CollisionShape {
     SlopeNw,
     SlopeSe,
     SlopeSw,
+    Polygon,
     Custom,
 }
 
@@ -315,6 +377,9 @@ pub struct SpriteRaw {
     pub tags: Vec<AnimTagRaw>,
     #[serde(default)]
     pub frames: Vec<FrameRaw>,
+    /// Neo Geo/Super Scaler-style scale factor (0.0-1.0 = shrink, >1.0 = enlarge).
+    #[serde(default)]
+    pub scale: Option<f64>,
 }
 
 fn default_loop() -> bool {
@@ -471,6 +536,361 @@ fn default_atlas_scale() -> u32 {
 }
 fn default_columns() -> u32 {
     8
+}
+
+// ── Extended Palette ────────────────────────────────────────────────
+
+/// Extended palette for 17-48 colors. Multi-char symbols (e.g. "2a", "3f")
+/// used only in RLE encoding where tokens are whitespace-separated.
+#[derive(Debug, Deserialize, serde::Serialize)]
+pub struct PaletteExtRaw {
+    pub base: String,
+    #[serde(flatten)]
+    pub symbols: HashMap<String, String>, // "2a" => "#rrggbbaa"
+}
+
+/// Resolved extended palette: merges base single-char palette + multi-char extensions.
+#[derive(Debug, Clone)]
+pub struct PaletteExt {
+    pub base: HashMap<char, Rgba>,
+    pub extended: HashMap<String, Rgba>,
+}
+
+// ── Backdrop Tile ──────────────────────────────────────────────────
+
+/// Lightweight tile for backdrop composition — no edge/WFC metadata.
+#[derive(Debug, Deserialize, serde::Serialize)]
+pub struct BackdropTileRaw {
+    pub palette: String,
+    #[serde(default)]
+    pub palette_ext: Option<String>,
+    #[serde(default)]
+    pub size: Option<String>,
+    #[serde(default)]
+    pub template: Option<String>,
+    #[serde(default)]
+    pub grid: Option<String>,
+    #[serde(default)]
+    pub rle: Option<String>,
+    /// Frame-based animation: list of (tile_name, duration_ms) pairs.
+    #[serde(default)]
+    pub animation: Vec<BackdropTileFrameRaw>,
+    /// Neo Geo-style global animation clock reference.
+    /// Tile cycles through `{name}_0`..`{name}_{frames-1}` companions.
+    #[serde(default)]
+    pub anim_clock: Option<String>,
+}
+
+/// A single frame in an animated backdrop tile.
+#[derive(Debug, Deserialize, serde::Serialize)]
+pub struct BackdropTileFrameRaw {
+    pub tile: String,
+    #[serde(default = "default_frame_duration")]
+    pub duration_ms: u32,
+}
+
+fn default_frame_duration() -> u32 {
+    120
+}
+
+// ── Backdrop Scene ─────────────────────────────────────────────────
+
+/// Large composed background scene with procedural animation zones.
+/// Supports either a single `tilemap` (backward compatible) or multiple `layer`s.
+#[derive(Debug, Deserialize, serde::Serialize)]
+pub struct BackdropRaw {
+    pub palette: String,
+    #[serde(default)]
+    pub palette_ext: Option<String>,
+    pub size: String,
+    #[serde(default = "default_tile_size")]
+    pub tile_size: String,
+    /// Single-layer tilemap (backward compatible). Ignored if `layer` is present.
+    #[serde(default)]
+    pub tilemap: Option<String>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub zone: Vec<BackdropZoneRaw>,
+    /// Multi-layer support: each layer has its own tilemap, scroll factor, blend mode.
+    #[serde(default)]
+    pub layer: Vec<BackdropLayerRaw>,
+}
+
+fn default_tile_size() -> String {
+    "16x16".to_string()
+}
+
+/// A single parallax layer in a backdrop.
+#[derive(Debug, Deserialize, serde::Serialize)]
+pub struct BackdropLayerRaw {
+    pub name: String,
+    pub tilemap: String,
+    /// Parallax scroll factor: 0.0 = fixed (far), 1.0 = moves with camera (near).
+    #[serde(default = "default_scroll_factor")]
+    pub scroll_factor: f64,
+    /// Layer opacity (0.0 = transparent, 1.0 = opaque).
+    #[serde(default = "default_opacity")]
+    pub opacity: f64,
+    /// Blend mode: "normal", "additive", "multiply", "screen".
+    #[serde(default = "default_blend_mode")]
+    pub blend: String,
+    /// Pixel offset.
+    #[serde(default)]
+    pub offset_x: i32,
+    #[serde(default)]
+    pub offset_y: i32,
+    /// GBA BLDY-style fade: { target = "black"|"white", amount = 0.0-1.0 }
+    #[serde(default)]
+    pub fade: Option<BackdropFade>,
+    /// Genesis Window Plane: rectangular region that doesn't scroll with parallax.
+    #[serde(default)]
+    pub scroll_lock: Option<ZoneRect>,
+}
+
+/// Fade-to-black or fade-to-white on a layer (GBA BLDY register equivalent).
+#[derive(Debug, Clone, Deserialize, serde::Serialize)]
+pub struct BackdropFade {
+    /// "black" or "white"
+    pub target: String,
+    /// 0.0 = no fade, 1.0 = fully faded
+    #[serde(default)]
+    pub amount: f64,
+}
+
+fn default_scroll_factor() -> f64 {
+    1.0
+}
+fn default_opacity() -> f64 {
+    1.0
+}
+fn default_blend_mode() -> String {
+    "normal".to_string()
+}
+
+#[derive(Debug, Deserialize, serde::Serialize)]
+pub struct BackdropZoneRaw {
+    pub name: String,
+    pub rect: ZoneRect,
+    pub behavior: String, // "cycle", "wave", "flicker", "scroll_down", "hscroll_sine", "color_gradient", "mosaic", "window"
+    #[serde(default)]
+    pub cycle: Option<String>,
+    #[serde(default)]
+    pub speed: Option<f64>,
+    #[serde(default)]
+    pub wrap: Option<bool>,
+    #[serde(default)]
+    pub density: Option<f64>,
+    #[serde(default)]
+    pub seed: Option<u64>,
+    #[serde(default)]
+    pub phase_rows: Option<u32>,
+    #[serde(default)]
+    pub wave_dx: Option<i32>,
+    /// Which layer this zone applies to (default: all layers).
+    #[serde(default)]
+    pub layer: Option<String>,
+    // ── Scanline effect params (SNES HDMA-style) ──
+    /// Horizontal sine wave amplitude in pixels.
+    #[serde(default)]
+    pub amplitude: Option<u32>,
+    /// Sine wave period in scanlines.
+    #[serde(default)]
+    pub period: Option<u32>,
+    // ── Color gradient params ──
+    /// Gradient start color (hex).
+    #[serde(default)]
+    pub from: Option<String>,
+    /// Gradient end color (hex).
+    #[serde(default)]
+    pub to: Option<String>,
+    /// Gradient direction: "vertical" or "horizontal".
+    #[serde(default)]
+    pub direction: Option<String>,
+    // ── Mosaic params (GBA-style, independent X/Y) ──
+    /// Mosaic block width in pixels.
+    #[serde(default)]
+    pub size_x: Option<u32>,
+    /// Mosaic block height in pixels.
+    #[serde(default)]
+    pub size_y: Option<u32>,
+    // ── Window params (GBA WIN0/WIN1-style) ──
+    /// Which layers are visible inside this window.
+    #[serde(default)]
+    pub layers_visible: Option<Vec<String>>,
+    /// Override blend mode inside window.
+    #[serde(default)]
+    pub blend_override: Option<String>,
+    /// Override opacity inside window.
+    #[serde(default)]
+    pub opacity_override: Option<f64>,
+    // ── Palette ramp params (Konami raster) ──
+    /// Which palette symbol to ramp across the zone.
+    #[serde(default)]
+    pub symbol: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, serde::Serialize)]
+pub struct ZoneRect {
+    pub x: u32,
+    pub y: u32,
+    pub w: u32,
+    pub h: u32,
+}
+
+/// Resolved backdrop ready for rendering.
+#[derive(Debug, Clone)]
+pub struct Backdrop {
+    pub name: String,
+    pub width: u32,
+    pub height: u32,
+    pub tile_width: u32,
+    pub tile_height: u32,
+    pub cols: u32,
+    pub rows: u32,
+    pub layers: Vec<BackdropLayer>,
+    pub zones: Vec<BackdropZone>,
+}
+
+/// Resolved layer with parsed tilemap entries.
+#[derive(Debug, Clone)]
+pub struct BackdropLayer {
+    pub name: String,
+    pub tilemap: Vec<Vec<TileRef>>,
+    pub scroll_factor: f64,
+    pub opacity: f64,
+    pub blend: BlendMode,
+    pub offset_x: i32,
+    pub offset_y: i32,
+    /// GBA BLDY-style fade.
+    pub fade: Option<(FadeTarget, f64)>,
+    /// Genesis Window Plane: viewport-pinned region that ignores scroll.
+    pub scroll_lock: Option<ZoneRect>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FadeTarget {
+    Black,
+    White,
+}
+
+/// A reference to a tile in the tilemap, with optional flip flags and brightness modifier.
+///
+/// Format: `tile_name[!flags][:modifier]`
+/// - Flip flags: `!h` (horizontal), `!v` (vertical), `!d` (diagonal/transpose)
+/// - Modifiers: `:shadow` (halve RGB), `:highlight` (halve + midpoint)
+///
+/// Examples: `wall`, `wall!h`, `wall!hv:shadow`, `floor:highlight`
+#[derive(Debug, Clone)]
+pub struct TileRef {
+    pub name: String,
+    pub flip_h: bool,
+    pub flip_v: bool,
+    pub flip_d: bool,
+    pub modifier: TileModifier,
+}
+
+/// Genesis VDP-inspired per-tile brightness modifier.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TileModifier {
+    None,
+    /// RGB_out = RGB / 2 (darken)
+    Shadow,
+    /// RGB_out = RGB / 2 + 128 (brighten)
+    Highlight,
+}
+
+impl TileRef {
+    pub fn parse(s: &str) -> Self {
+        // Split off modifier first (after last ':')
+        let (rest, modifier) = if let Some(colon) = s.rfind(':') {
+            let mod_str = &s[colon + 1..];
+            let m = match mod_str {
+                "shadow" | "s" => TileModifier::Shadow,
+                "highlight" | "hi" => TileModifier::Highlight,
+                _ => TileModifier::None,
+            };
+            if m != TileModifier::None {
+                (&s[..colon], m)
+            } else {
+                (s, TileModifier::None)
+            }
+        } else {
+            (s, TileModifier::None)
+        };
+
+        // Split off flip flags
+        if let Some(bang) = rest.find('!') {
+            let name = rest[..bang].to_string();
+            let flags = &rest[bang + 1..];
+            TileRef {
+                name,
+                flip_h: flags.contains('h'),
+                flip_v: flags.contains('v'),
+                flip_d: flags.contains('d'),
+                modifier,
+            }
+        } else {
+            TileRef {
+                name: rest.to_string(),
+                flip_h: false,
+                flip_v: false,
+                flip_d: false,
+                modifier,
+            }
+        }
+    }
+
+    pub fn has_flip(&self) -> bool {
+        self.flip_h || self.flip_v || self.flip_d
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlendMode {
+    Normal,
+    Additive,
+    Multiply,
+    Screen,
+}
+
+impl BlendMode {
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "additive" | "add" => BlendMode::Additive,
+            "multiply" | "mul" => BlendMode::Multiply,
+            "screen" => BlendMode::Screen,
+            _ => BlendMode::Normal,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct BackdropZone {
+    pub name: String,
+    pub rect: ZoneRect,
+    pub behavior: ZoneBehavior,
+    pub layer: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub enum ZoneBehavior {
+    Cycle { cycle: String },
+    Wave { cycle: String, phase_rows: u32, wave_dx: i32 },
+    Flicker { cycle: String, density: f64, seed: u64 },
+    ScrollDown { speed: f64, wrap: bool },
+    /// SNES HDMA-style sinusoidal horizontal scroll per scanline.
+    HScrollSine { amplitude: u32, period: u32, speed: f64 },
+    /// Per-pixel color tint gradient across the zone rect.
+    ColorGradient { from: Rgba, to: Rgba, vertical: bool },
+    /// GBA-style pixelation with independent X/Y block sizes.
+    Mosaic { size_x: u32, size_y: u32 },
+    /// GBA WIN0/WIN1-style rendering window: control layer visibility + effects.
+    Window { layers_visible: Vec<String>, blend_override: Option<BlendMode>, opacity_override: Option<f64> },
+    /// Genesis VSRAM-style per-column vertical scroll with sine offset.
+    VScrollSine { amplitude: u32, period: u32, speed: f64 },
+    /// Konami raster-style per-scanline palette entry interpolation.
+    PaletteRamp { symbol: String, from: Rgba, to: Rgba },
 }
 
 // ── Size parsing helper ─────────────────────────────────────────────
