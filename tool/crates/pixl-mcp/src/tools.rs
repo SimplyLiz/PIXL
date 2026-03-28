@@ -132,6 +132,52 @@ pub fn tool_definitions() -> Vec<Tool> {
              colors (default 32). Without width, produces 3 presets: small (128px, 16 colors), \
              medium (160px, 32 colors), large (256px, 48 colors). Copies original to originals/.",
         ),
+        // ── Feedback & Training ──
+        tool(
+            "pixl_record_feedback",
+            "Record accept/reject/edit feedback for a tile. Args: {name, action ('accept'|'reject'|'edit')}. \
+             Optional: reject_reason. Builds training signal for LoRA fine-tuning.",
+        ),
+        tool(
+            "pixl_feedback_stats",
+            "Get feedback statistics: total accepts, rejects, acceptance rate, avg style scores.",
+        ),
+        tool(
+            "pixl_feedback_constraints",
+            "Get learned constraints from feedback history. Returns avoid-patterns derived from \
+             repeated rejections.",
+        ),
+        tool(
+            "pixl_export_training",
+            "Export accepted tiles as JSONL training data for LoRA fine-tuning. \
+             Args: {path?: string}. Returns exported pair count.",
+        ),
+        tool(
+            "pixl_training_stats",
+            "Get training data statistics: pair count, adapter info, model path.",
+        ),
+        // ── Templates & Export ──
+        tool(
+            "pixl_new_from_template",
+            "Create a new PAX file from a built-in theme template. Args: {theme: string}. \
+             Themes: dark_fantasy, light_fantasy, sci_fi, nature, gameboy, nes. \
+             Returns the PAX source string.",
+        ),
+        tool(
+            "pixl_export",
+            "Export the session to a game engine format. Args: {format ('tiled'|'godot'|'texturepacker'|\
+             'gbstudio'|'unity'), out_dir: path}. Writes export files to the directory.",
+        ),
+        tool(
+            "pixl_check_completeness",
+            "Analyze tileset completeness for WFC. Identifies missing transition tiles \
+             needed for seamless map generation. Returns gaps with suggested edge classes.",
+        ),
+        tool(
+            "pixl_generate_transition_context",
+            "Build enriched AI prompts for creating a missing transition tile between two tiles. \
+             Args: {tile_a, tile_b}. Returns system_prompt + user_prompt with edge context.",
+        ),
         // ── Local AI Generation ──
         tool(
             "pixl_generate_tile",

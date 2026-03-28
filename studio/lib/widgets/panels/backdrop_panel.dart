@@ -193,6 +193,28 @@ class _LayerRow extends ConsumerWidget {
                   style: theme.textTheme.bodySmall!.copyWith(fontSize: 9)),
             ],
           ),
+          // Blend mode dropdown
+          Row(
+            children: [
+              Text('Blend', style: theme.textTheme.bodySmall!.copyWith(fontSize: 9)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: DropdownButton<String>(
+                  value: layer.blend,
+                  isDense: true,
+                  isExpanded: true,
+                  style: theme.textTheme.bodySmall!.copyWith(fontSize: 9),
+                  items: ['normal', 'additive', 'multiply', 'screen'].map((b) =>
+                    DropdownMenuItem(value: b, child: Text(b))).toList(),
+                  onChanged: (v) {
+                    if (v != null) ref.read(backdropEditorProvider.notifier).updateLayer(
+                      index, layer.copyWith(blend: v),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -378,7 +400,9 @@ class _ZoneProperties extends ConsumerWidget {
         ),
         const SizedBox(height: 8),
 
-        // Behavior-specific params
+        // ── Behavior-specific params (all 10 behaviors) ──
+
+        // cycle, wave, flicker: cycle name
         if (['cycle', 'wave', 'flicker'].contains(zone.behavior))
           TextField(
             controller: TextEditingController(text: zone.params['cycle']?.toString() ?? ''),
@@ -389,6 +413,72 @@ class _ZoneProperties extends ConsumerWidget {
             )),
           ),
 
+        // wave: phase_rows
+        if (zone.behavior == 'wave') ...[
+          const SizedBox(height: 4),
+          TextField(
+            controller: TextEditingController(text: zone.params['phase_rows']?.toString() ?? '4'),
+            style: inputStyle,
+            decoration: inputDecor.copyWith(labelText: 'Phase rows'),
+            keyboardType: TextInputType.number,
+            onSubmitted: (v) => notifier.updateZone(index, zone.copyWith(
+              params: {...zone.params, 'phase_rows': int.tryParse(v)},
+            )),
+          ),
+        ],
+
+        // flicker: density + seed
+        if (zone.behavior == 'flicker') ...[
+          const SizedBox(height: 4),
+          Row(children: [
+            Expanded(child: TextField(
+              controller: TextEditingController(text: zone.params['density']?.toString() ?? '0.3'),
+              style: inputStyle, decoration: inputDecor.copyWith(labelText: 'Density'),
+              keyboardType: TextInputType.number,
+              onSubmitted: (v) => notifier.updateZone(index, zone.copyWith(
+                params: {...zone.params, 'density': double.tryParse(v)},
+              )),
+            )),
+            const SizedBox(width: 4),
+            Expanded(child: TextField(
+              controller: TextEditingController(text: zone.params['seed']?.toString() ?? '42'),
+              style: inputStyle, decoration: inputDecor.copyWith(labelText: 'Seed'),
+              keyboardType: TextInputType.number,
+              onSubmitted: (v) => notifier.updateZone(index, zone.copyWith(
+                params: {...zone.params, 'seed': int.tryParse(v)},
+              )),
+            )),
+          ]),
+        ],
+
+        // scroll_down: speed + wrap
+        if (zone.behavior == 'scroll_down') ...[
+          const SizedBox(height: 4),
+          Row(children: [
+            Expanded(child: TextField(
+              controller: TextEditingController(text: zone.params['speed']?.toString() ?? '1.0'),
+              style: inputStyle, decoration: inputDecor.copyWith(labelText: 'Speed'),
+              keyboardType: TextInputType.number,
+              onSubmitted: (v) => notifier.updateZone(index, zone.copyWith(
+                params: {...zone.params, 'speed': double.tryParse(v)},
+              )),
+            )),
+            const SizedBox(width: 4),
+            Expanded(child: Row(children: [
+              Text('Wrap', style: inputStyle),
+              const SizedBox(width: 4),
+              Switch(
+                value: zone.params['wrap'] as bool? ?? true,
+                onChanged: (v) => notifier.updateZone(index, zone.copyWith(
+                  params: {...zone.params, 'wrap': v},
+                )),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ])),
+          ]),
+        ],
+
+        // hscroll_sine, vscroll_sine: amplitude + period + speed
         if (['hscroll_sine', 'vscroll_sine'].contains(zone.behavior)) ...[
           const SizedBox(height: 4),
           Row(children: [
@@ -410,8 +500,83 @@ class _ZoneProperties extends ConsumerWidget {
               )),
             )),
           ]),
+          const SizedBox(height: 4),
+          TextField(
+            controller: TextEditingController(text: zone.params['speed']?.toString() ?? '1.5'),
+            style: inputStyle,
+            decoration: inputDecor.copyWith(labelText: 'Speed'),
+            keyboardType: TextInputType.number,
+            onSubmitted: (v) => notifier.updateZone(index, zone.copyWith(
+              params: {...zone.params, 'speed': double.tryParse(v)},
+            )),
+          ),
         ],
 
+        // color_gradient: from + to + direction
+        if (zone.behavior == 'color_gradient') ...[
+          const SizedBox(height: 4),
+          Row(children: [
+            Expanded(child: TextField(
+              controller: TextEditingController(text: zone.params['from']?.toString() ?? '#000000'),
+              style: inputStyle, decoration: inputDecor.copyWith(labelText: 'From color'),
+              onSubmitted: (v) => notifier.updateZone(index, zone.copyWith(
+                params: {...zone.params, 'from': v},
+              )),
+            )),
+            const SizedBox(width: 4),
+            Expanded(child: TextField(
+              controller: TextEditingController(text: zone.params['to']?.toString() ?? '#ffffff'),
+              style: inputStyle, decoration: inputDecor.copyWith(labelText: 'To color'),
+              onSubmitted: (v) => notifier.updateZone(index, zone.copyWith(
+                params: {...zone.params, 'to': v},
+              )),
+            )),
+          ]),
+          const SizedBox(height: 4),
+          DropdownButtonFormField<String>(
+            value: zone.params['direction']?.toString() ?? 'vertical',
+            items: ['vertical', 'horizontal'].map((d) =>
+              DropdownMenuItem(value: d, child: Text(d, style: inputStyle))).toList(),
+            onChanged: (v) => notifier.updateZone(index, zone.copyWith(
+              params: {...zone.params, 'direction': v},
+            )),
+            decoration: inputDecor.copyWith(labelText: 'Direction'),
+            style: inputStyle, isDense: true,
+          ),
+        ],
+
+        // palette_ramp: symbol + from + to
+        if (zone.behavior == 'palette_ramp') ...[
+          const SizedBox(height: 4),
+          TextField(
+            controller: TextEditingController(text: zone.params['symbol']?.toString() ?? ''),
+            style: inputStyle,
+            decoration: inputDecor.copyWith(labelText: 'Symbol'),
+            onSubmitted: (v) => notifier.updateZone(index, zone.copyWith(
+              params: {...zone.params, 'symbol': v},
+            )),
+          ),
+          const SizedBox(height: 4),
+          Row(children: [
+            Expanded(child: TextField(
+              controller: TextEditingController(text: zone.params['from']?.toString() ?? '#000000'),
+              style: inputStyle, decoration: inputDecor.copyWith(labelText: 'From'),
+              onSubmitted: (v) => notifier.updateZone(index, zone.copyWith(
+                params: {...zone.params, 'from': v},
+              )),
+            )),
+            const SizedBox(width: 4),
+            Expanded(child: TextField(
+              controller: TextEditingController(text: zone.params['to']?.toString() ?? '#ffffff'),
+              style: inputStyle, decoration: inputDecor.copyWith(labelText: 'To'),
+              onSubmitted: (v) => notifier.updateZone(index, zone.copyWith(
+                params: {...zone.params, 'to': v},
+              )),
+            )),
+          ]),
+        ],
+
+        // mosaic: size_x + size_y
         if (zone.behavior == 'mosaic') ...[
           const SizedBox(height: 4),
           Row(children: [
@@ -435,17 +600,39 @@ class _ZoneProperties extends ConsumerWidget {
           ]),
         ],
 
-        if (zone.behavior == 'wave') ...[
+        // window: layers_visible + blend_override + opacity_override
+        if (zone.behavior == 'window') ...[
           const SizedBox(height: 4),
           TextField(
-            controller: TextEditingController(text: zone.params['phase_rows']?.toString() ?? '4'),
+            controller: TextEditingController(text: (zone.params['layers_visible'] as List?)?.join(', ') ?? ''),
             style: inputStyle,
-            decoration: inputDecor.copyWith(labelText: 'Phase rows'),
-            keyboardType: TextInputType.number,
+            decoration: inputDecor.copyWith(labelText: 'Visible layers (comma-sep)'),
             onSubmitted: (v) => notifier.updateZone(index, zone.copyWith(
-              params: {...zone.params, 'phase_rows': int.tryParse(v)},
+              params: {...zone.params, 'layers_visible': v.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList()},
             )),
           ),
+          const SizedBox(height: 4),
+          Row(children: [
+            Expanded(child: DropdownButtonFormField<String>(
+              value: zone.params['blend_override']?.toString() ?? 'normal',
+              items: ['normal', 'additive', 'multiply', 'screen'].map((b) =>
+                DropdownMenuItem(value: b, child: Text(b, style: inputStyle))).toList(),
+              onChanged: (v) => notifier.updateZone(index, zone.copyWith(
+                params: {...zone.params, 'blend_override': v},
+              )),
+              decoration: inputDecor.copyWith(labelText: 'Blend'),
+              style: inputStyle, isDense: true,
+            )),
+            const SizedBox(width: 4),
+            Expanded(child: TextField(
+              controller: TextEditingController(text: zone.params['opacity_override']?.toString() ?? '1.0'),
+              style: inputStyle, decoration: inputDecor.copyWith(labelText: 'Opacity'),
+              keyboardType: TextInputType.number,
+              onSubmitted: (v) => notifier.updateZone(index, zone.copyWith(
+                params: {...zone.params, 'opacity_override': double.tryParse(v)},
+              )),
+            )),
+          ]),
         ],
       ],
     );
