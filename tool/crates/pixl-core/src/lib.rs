@@ -10,8 +10,8 @@
 //!
 //! ```rust,no_run
 //! let source = std::fs::read_to_string("tileset.pax").unwrap();
-//! let pax = pixl_core::parser::parse(&source).unwrap();
-//! let errors = pixl_core::validate::validate(&pax);
+//! let pax = pixl_core::parser::parse_pax(&source).unwrap();
+//! let result = pixl_core::validate::validate(&pax, false);
 //! ```
 //!
 //! ## Modules

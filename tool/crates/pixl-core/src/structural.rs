@@ -135,9 +135,11 @@ pub fn analyze(
     let centering_score = (1.0 - dist / max_dist).clamp(0.0, 1.0);
 
     // Outline coverage: for each boundary pixel (non-void adjacent to void),
-    // check if it's a "dark" pixel (low lightness).
+    // check if it has an "outline" — either a globally dark pixel (traditional
+    // outline) or a self-outline (sel-out) where the boundary pixel is notably
+    // darker than its inward non-void neighbors.
     let mut boundary_count = 0u32;
-    let mut dark_boundary_count = 0u32;
+    let mut outlined_boundary_count = 0u32;
     let darkest_lightness = find_darkest_lightness(palette, void_sym);
 
     for y in 0..h {
@@ -153,15 +155,35 @@ pub fn analyze(
             if borders_void {
                 boundary_count += 1;
                 let lightness = pixel_lightness(grid[y][x], palette);
-                // "Dark" = within 0.15 OKLab lightness of the darkest non-void color
+
+                // Method 1: Traditional dark outline — pixel is globally dark
                 if lightness < darkest_lightness + 0.15 {
-                    dark_boundary_count += 1;
+                    outlined_boundary_count += 1;
+                    continue;
+                }
+
+                // Method 2: Self-outline (sel-out) — boundary pixel is darker
+                // than its inward (non-void) neighbors by at least 0.08 OKLab.
+                // This catches colored outlines like dark green around a green tree.
+                let inward_neighbors: Vec<f64> = neighbors(x, y, w, h)
+                    .iter()
+                    .filter(|&&(nx, ny)| grid[ny][nx] != void_sym)
+                    .map(|&(nx, ny)| pixel_lightness(grid[ny][nx], palette))
+                    .collect();
+
+                if !inward_neighbors.is_empty() {
+                    let avg_inward = inward_neighbors.iter().sum::<f64>()
+                        / inward_neighbors.len() as f64;
+                    // Boundary pixel is at least 0.08 darker than its inward neighbors
+                    if avg_inward - lightness > 0.08 {
+                        outlined_boundary_count += 1;
+                    }
                 }
             }
         }
     }
     let outline_coverage = if boundary_count > 0 {
-        dark_boundary_count as f64 / boundary_count as f64
+        outlined_boundary_count as f64 / boundary_count as f64
     } else {
         0.0
     };
@@ -211,8 +233,9 @@ pub fn analyze(
             severity: Severity::Error,
             code: "no_outline",
             message: format!(
-                "Only {:.0}% of boundary pixels are dark — subject has no readable outline. \
-                 Add 1px dark border around the entire subject silhouette.",
+                "Only {:.0}% of boundary pixels have an outline (dark or self-outline) — \
+                 subject has no readable edge. Add a dark border or use darker variants \
+                 of the fill color at the silhouette boundary.",
                 outline_coverage * 100.0,
             ),
             location: None,
@@ -222,8 +245,8 @@ pub fn analyze(
             severity: Severity::Warning,
             code: "weak_outline",
             message: format!(
-                "Only {:.0}% of boundary pixels are dark — outline is incomplete. \
-                 Fill gaps in the silhouette border.",
+                "Only {:.0}% of boundary pixels have an outline — edge is incomplete. \
+                 Fill gaps with a dark border or self-outline (darker shade of adjacent fill).",
                 outline_coverage * 100.0,
             ),
             location: None,
