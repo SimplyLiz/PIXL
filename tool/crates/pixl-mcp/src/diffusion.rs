@@ -149,6 +149,53 @@ pub async fn generate_and_quantize(
         clipped_colors: import_result.clipped_colors,
         generated_size: (gen_w, gen_h),
         reference_png: png_bytes,
+        extracted_palette: None,
+        palette_toml: None,
+    })
+}
+
+/// Full pipeline with auto-palette: generate image → extract colors → quantize → PAX grid.
+/// Produces a palette matched to the generated image for maximum color fidelity.
+pub async fn generate_with_auto_palette(
+    config: &DiffusionConfig,
+    prompt: &str,
+    target_width: u32,
+    target_height: u32,
+    max_colors: u32,
+    dither: bool,
+) -> Result<GenerateResult, String> {
+    let dalle_size = "1024x1024";
+    let png_bytes = generate_image(config, prompt, dalle_size).await?;
+
+    let img = image::load_from_memory(&png_bytes)
+        .map_err(|e| format!("failed to decode generated image: {}", e))?;
+
+    let (gen_w, gen_h) = img.dimensions();
+
+    // Extract palette from the generated image
+    let colors = pixl_render::pixelize::extract_palette(&img, max_colors);
+    if colors.is_empty() {
+        return Err("no colors extracted from generated image (fully transparent?)".to_string());
+    }
+
+    let palette = pixl_render::pixelize::build_pax_palette(&colors, [0, 0, 0, 0]);
+    let palette_toml = pixl_render::pixelize::palette_to_toml("auto", &colors);
+
+    // Quantize using the extracted palette
+    let import_result =
+        pixl_render::import::import_reference(&img, target_width, target_height, &palette, dither);
+
+    Ok(GenerateResult {
+        grid: import_result.grid,
+        grid_string: import_result.grid_string,
+        width: target_width,
+        height: target_height,
+        color_accuracy: import_result.color_accuracy,
+        clipped_colors: import_result.clipped_colors,
+        generated_size: (gen_w, gen_h),
+        reference_png: png_bytes,
+        extracted_palette: Some(palette),
+        palette_toml: Some(palette_toml),
     })
 }
 
@@ -161,4 +208,6 @@ pub struct GenerateResult {
     pub clipped_colors: u32,
     pub generated_size: (u32, u32),
     pub reference_png: Vec<u8>,
+    pub extracted_palette: Option<pixl_core::types::Palette>,
+    pub palette_toml: Option<String>,
 }

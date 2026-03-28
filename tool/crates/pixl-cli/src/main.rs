@@ -189,6 +189,14 @@ enum Commands {
         #[arg(long)]
         dither: bool,
 
+        /// Extract palette from generated image (default: true)
+        #[arg(long, default_value = "true")]
+        auto_palette: bool,
+
+        /// Max colors for auto-palette extraction
+        #[arg(long, default_value = "16")]
+        max_colors: u32,
+
         /// Output PNG path (quantized preview)
         #[arg(long, short, alias = "output")]
         out: PathBuf,
@@ -657,9 +665,11 @@ fn main() {
             name,
             size,
             dither,
+            auto_palette,
+            max_colors,
             out,
         } => {
-            cmd_generate_sprite(&file, &prompt, &name, &size, dither, &out);
+            cmd_generate_sprite(&file, &prompt, &name, &size, dither, auto_palette, max_colors, &out);
         }
         Commands::Blueprint { size, model } => {
             cmd_blueprint(&size, &model);
@@ -1996,6 +2006,8 @@ fn cmd_generate_sprite(
     name: &str,
     size_str: &str,
     dither: bool,
+    auto_palette: bool,
+    max_colors: u32,
     out: &PathBuf,
 ) {
     let (_pax_file, palettes) = load_pax(file);
@@ -2004,7 +2016,7 @@ fn cmd_generate_sprite(
         eprintln!("error: no palettes found in {}", file.display());
         process::exit(1);
     });
-    let palette = &palettes[palette_name];
+    let session_palette = &palettes[palette_name];
 
     let (w, h) = match pixl_core::types::parse_size(size_str) {
         Ok(s) => s,
@@ -2023,14 +2035,24 @@ fn cmd_generate_sprite(
     };
 
     println!(
-        "generating sprite '{}' via {} ({}x{})...",
-        name, config.model, w, h
+        "generating sprite '{}' via {} ({}x{}, auto_palette={})...",
+        name, config.model, w, h, auto_palette
     );
     println!("prompt: \"{}\"", prompt);
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     let result = rt.block_on(async {
-        pixl_mcp::diffusion::generate_and_quantize(&config, prompt, w, h, palette, dither).await
+        if auto_palette {
+            pixl_mcp::diffusion::generate_with_auto_palette(
+                &config, prompt, w, h, max_colors, dither,
+            )
+            .await
+        } else {
+            pixl_mcp::diffusion::generate_and_quantize(
+                &config, prompt, w, h, session_palette, dither,
+            )
+            .await
+        }
     });
 
     let result = match result {
@@ -2040,6 +2062,8 @@ fn cmd_generate_sprite(
             process::exit(1);
         }
     };
+
+    let render_palette = result.extracted_palette.as_ref().unwrap_or(session_palette);
 
     println!(
         "generated {}x{} reference → quantized to {}x{} ({:.1}% color accuracy, {} clipped)",
@@ -2064,7 +2088,7 @@ fn cmd_generate_sprite(
     }
 
     // Render quantized preview
-    let img = pixl_render::renderer::render_grid(&result.grid, palette, 8);
+    let img = pixl_render::renderer::render_grid(&result.grid, render_palette, 8);
     ensure_parent_dir(out);
     if let Err(e) = img.save(out) {
         eprintln!("error: cannot write {}: {}", out.display(), e);
@@ -2072,14 +2096,20 @@ fn cmd_generate_sprite(
     }
     println!("quantized -> {}", out.display());
 
+    // Print extracted palette TOML if auto_palette
+    if let Some(ref toml) = result.palette_toml {
+        println!("\nExtracted palette:");
+        println!("{}", toml);
+    }
+
     // Print the grid for copy-paste into .pax
-    println!("\nPAX grid ({}x{}):", w, h);
+    println!("PAX grid ({}x{}):", w, h);
     println!("'''");
     println!("{}", result.grid_string);
     println!("'''");
 
     // Structural critique
-    let report = pixl_core::structural::analyze(&result.grid, palette, '.');
+    let report = pixl_core::structural::analyze(&result.grid, render_palette, '.');
     let critique = pixl_core::structural::critique_text(&report, name);
     println!("\n{}", critique);
 }

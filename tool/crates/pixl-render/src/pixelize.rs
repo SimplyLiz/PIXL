@@ -513,6 +513,160 @@ pub fn import_backdrop(
     })
 }
 
+// ── Palette Extraction ──────────────────────────────────────────────
+
+/// Extract dominant colors from an image as RGB triples.
+/// Uses median-cut quantization on all non-transparent pixels.
+pub fn extract_palette(img: &DynamicImage, max_colors: u32) -> Vec<[u8; 3]> {
+    let rgba = img.to_rgba8();
+    let mut pixels: Vec<[u8; 3]> = rgba
+        .pixels()
+        .filter(|p| p.0[3] > 128) // skip transparent
+        .map(|p| [p.0[0], p.0[1], p.0[2]])
+        .collect();
+
+    if pixels.is_empty() {
+        return vec![];
+    }
+
+    median_cut(&mut pixels, max_colors as usize)
+}
+
+/// Build a PAX Palette from extracted RGB colors.
+/// Assigns single-char symbols in a fixed order, always including '.' as void.
+pub fn build_pax_palette(
+    colors: &[[u8; 3]],
+    void_color: [u8; 4],
+) -> pixl_core::types::Palette {
+    use pixl_core::types::{Palette, Rgba as PaxRgba};
+    use std::collections::HashMap;
+
+    // Symbol pool: skip '.' (void), use a broad ASCII range
+    const SYMBOLS: &str = "#abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+~!@$%^&*";
+
+    let mut symbols = HashMap::new();
+
+    // Void symbol always first
+    symbols.insert(
+        '.',
+        PaxRgba {
+            r: void_color[0],
+            g: void_color[1],
+            b: void_color[2],
+            a: void_color[3],
+        },
+    );
+
+    // Sort colors by lightness (dark → light) for consistent symbol ordering
+    let mut sorted_colors: Vec<[u8; 3]> = colors.to_vec();
+    sorted_colors.sort_by(|a, b| {
+        let la = pixl_core::oklab::lightness(a[0], a[1], a[2]);
+        let lb = pixl_core::oklab::lightness(b[0], b[1], b[2]);
+        la.partial_cmp(&lb).unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    for (i, &color) in sorted_colors.iter().enumerate() {
+        if i >= SYMBOLS.len() {
+            break;
+        }
+        let sym = SYMBOLS.as_bytes()[i] as char;
+        symbols.insert(
+            sym,
+            PaxRgba {
+                r: color[0],
+                g: color[1],
+                b: color[2],
+                a: 255,
+            },
+        );
+    }
+
+    Palette { symbols }
+}
+
+/// Generate a PAX palette TOML block from extracted colors.
+pub fn palette_to_toml(name: &str, colors: &[[u8; 3]]) -> String {
+    const SYMBOLS: &str = "#abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+~!@$%^&*";
+
+    let mut sorted_colors: Vec<[u8; 3]> = colors.to_vec();
+    sorted_colors.sort_by(|a, b| {
+        let la = pixl_core::oklab::lightness(a[0], a[1], a[2]);
+        let lb = pixl_core::oklab::lightness(b[0], b[1], b[2]);
+        la.partial_cmp(&lb).unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let mut toml = format!("[palette.{}]\n", name);
+    toml.push_str("\".\u{0020}\" = \"#00000000\"\n".replace("\u{0020}", "").as_str());
+    // Fix: write void properly
+    toml.clear();
+    toml.push_str(&format!("[palette.{}]\n", name));
+    toml.push_str(&format!("\".\" = \"#00000000\"\n"));
+
+    for (i, &color) in sorted_colors.iter().enumerate() {
+        if i >= SYMBOLS.len() {
+            break;
+        }
+        let sym = SYMBOLS.as_bytes()[i] as char;
+        toml.push_str(&format!(
+            "\"{}\" = \"#{:02x}{:02x}{:02x}ff\"\n",
+            sym, color[0], color[1], color[2]
+        ));
+    }
+
+    toml
+}
+
+/// Remap a grid from one palette to another using OKLab nearest-color matching.
+/// Each symbol in the source grid is mapped to the perceptually closest symbol
+/// in the target palette.
+pub fn remap_grid(
+    grid: &[Vec<char>],
+    source_palette: &pixl_core::types::Palette,
+    target_palette: &pixl_core::types::Palette,
+    void_sym: char,
+) -> Vec<Vec<char>> {
+    use pixl_core::oklab;
+
+    // Build mapping: source_sym → target_sym
+    let mut sym_map: std::collections::HashMap<char, char> = std::collections::HashMap::new();
+    sym_map.insert(void_sym, void_sym);
+
+    let target_entries: Vec<(char, oklab::OkLab)> = target_palette
+        .symbols
+        .iter()
+        .filter(|&(c, _)| *c != void_sym)
+        .map(|(&c, rgba)| (c, oklab::rgb_to_oklab(rgba.r, rgba.g, rgba.b)))
+        .collect();
+
+    for (&src_sym, src_rgba) in &source_palette.symbols {
+        if src_sym == void_sym {
+            continue;
+        }
+        let src_lab = oklab::rgb_to_oklab(src_rgba.r, src_rgba.g, src_rgba.b);
+
+        let nearest = target_entries
+            .iter()
+            .min_by(|(_, a_lab), (_, b_lab)| {
+                let da = oklab::delta_e(&src_lab, a_lab);
+                let db = oklab::delta_e(&src_lab, b_lab);
+                da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|&(c, _)| c)
+            .unwrap_or(void_sym);
+
+        sym_map.insert(src_sym, nearest);
+    }
+
+    // Apply mapping
+    grid.iter()
+        .map(|row| {
+            row.iter()
+                .map(|&c| sym_map.get(&c).copied().unwrap_or(c))
+                .collect()
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -541,6 +695,20 @@ mod tests {
         let result = pixelize(&img, 100, 16);
         assert_eq!(result.width, 100);
         assert_eq!(result.height, 150); // 600/400 * 100
+    }
+
+    #[test]
+    fn extract_palette_from_image() {
+        let img = DynamicImage::ImageRgba8(ImageBuffer::from_fn(4, 4, |x, _y| {
+            if x < 2 {
+                Rgba([255, 0, 0, 255])
+            } else {
+                Rgba([0, 0, 255, 255])
+            }
+        }));
+        let palette = super::extract_palette(&img, 4);
+        assert!(!palette.is_empty());
+        assert!(palette.len() <= 4);
     }
 
     #[test]
