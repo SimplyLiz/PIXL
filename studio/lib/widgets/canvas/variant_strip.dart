@@ -34,13 +34,14 @@ class _VariantStripState extends ConsumerState<VariantStrip> {
   }
 
   Future<void> _loadMissingPreviews(List<TileInfo> tiles) async {
+    var didChange = false;
     for (final tile in tiles) {
       if (_previewCache.containsKey(tile.name)) continue;
       if (_loadingTiles.contains(tile.name)) continue;
 
       if (tile.previewBytes != null) {
         _previewCache[tile.name] = tile.previewBytes!;
-        if (mounted) setState(() {});
+        didChange = true;
         continue;
       }
 
@@ -51,11 +52,11 @@ class _VariantStripState extends ConsumerState<VariantStrip> {
       );
       _loadingTiles.remove(tile.name);
       if (b64 != null && mounted) {
-        setState(() {
-          _previewCache[tile.name] = base64Decode(b64);
-        });
+        _previewCache[tile.name] = base64Decode(b64);
+        didChange = true;
       }
     }
+    if (didChange && mounted) setState(() {});
   }
 
   @override

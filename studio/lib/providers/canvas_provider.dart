@@ -104,7 +104,9 @@ class CanvasNotifier extends StateNotifier<CanvasState> {
     if (!_inStroke) return;
     if (x < 0 || x >= state.width || y < 0 || y >= state.height) return;
     _setPixelWithSymmetry(x, y, color);
-    state = state.copyWith(layers: List.from(state.layers));
+    // Reuse the same list reference — the pixel data was mutated in-place.
+    // Force state notification by creating a new CanvasState wrapper only.
+    state = state.copyWith();
   }
 
   void endStroke() {

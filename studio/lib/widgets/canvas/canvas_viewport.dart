@@ -98,9 +98,10 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
     final pixel = _pixelFromLocal(event.localPosition, cs);
     final notifier = ref.read(canvasProvider.notifier);
 
-    setState(() {
-      _hoverPixel = pixel != null ? Offset(pixel.$1.toDouble(), pixel.$2.toDouble()) : null;
-    });
+    final newHover = pixel != null ? Offset(pixel.$1.toDouble(), pixel.$2.toDouble()) : null;
+    if (_hoverPixel != newHover) {
+      setState(() => _hoverPixel = newHover);
+    }
 
     if (pixel == null) return;
     final (x, y) = pixel;
@@ -168,9 +169,9 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
 
   void _handlePointerHover(PointerHoverEvent event, CanvasState cs) {
     final pixel = _pixelFromLocal(event.localPosition, cs);
-    setState(() {
-      _hoverPixel = pixel != null ? Offset(pixel.$1.toDouble(), pixel.$2.toDouble()) : null;
-    });
+    final newHover = pixel != null ? Offset(pixel.$1.toDouble(), pixel.$2.toDouble()) : null;
+    if (_hoverPixel == newHover) return;
+    setState(() => _hoverPixel = newHover);
     // Update hover provider for status bar display
     final hover = ref.read(hoverProvider.notifier);
     if (pixel != null) {

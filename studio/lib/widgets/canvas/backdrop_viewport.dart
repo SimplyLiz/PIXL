@@ -38,15 +38,18 @@ class _BackdropViewportState extends ConsumerState<BackdropViewport> {
 
   void _startAnimation() {
     _animTimer?.cancel();
-    _animTimer = Timer.periodic(const Duration(milliseconds: 120), (_) {
-      final notifier = ref.read(backdropEditorProvider.notifier);
-      final state = ref.read(backdropEditorProvider);
-      if (state.isPlaying) {
-        notifier.setTick((state.currentTick + 1) % state.totalFrames.clamp(1, 999));
-        _refreshAnimatedFrame();
-      }
-    });
     ref.read(backdropEditorProvider.notifier).setPlaying(true);
+    _animTimer = Timer.periodic(const Duration(milliseconds: 120), (_) {
+      final state = ref.read(backdropEditorProvider);
+      if (!state.isPlaying) {
+        _animTimer?.cancel();
+        _animTimer = null;
+        return;
+      }
+      final notifier = ref.read(backdropEditorProvider.notifier);
+      notifier.setTick((state.currentTick + 1) % state.totalFrames.clamp(1, 999));
+      _refreshAnimatedFrame();
+    });
   }
 
   void _stopAnimation() {

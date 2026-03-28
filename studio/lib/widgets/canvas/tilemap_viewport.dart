@@ -29,6 +29,17 @@ class _TilemapViewportState extends ConsumerState<TilemapViewport> {
   Offset _panStart = Offset.zero;
 
   @override
+  void initState() {
+    super.initState();
+    // Load tile images when the tile list changes, not on every build.
+    ref.listenManual(
+      backendProvider.select((s) => s.tiles),
+      (_, tiles) => _ensureTileImages(tiles),
+      fireImmediately: true,
+    );
+  }
+
+  @override
   void dispose() {
     for (final img in _tileImages.values) {
       img.dispose();
@@ -121,7 +132,7 @@ class _TilemapViewportState extends ConsumerState<TilemapViewport> {
 
     final ts = ref.read(tilemapProvider);
     final tile = _tileFromLocal(event.localPosition, ts);
-    setState(() => _hoverTile = tile);
+    if (tile != _hoverTile) setState(() => _hoverTile = tile);
 
     if (event.buttons != 0 && tile != null) {
       final (col, row) = tile;
@@ -157,10 +168,6 @@ class _TilemapViewportState extends ConsumerState<TilemapViewport> {
   @override
   Widget build(BuildContext context) {
     final ts = ref.watch(tilemapProvider);
-    final tiles = ref.watch(backendProvider.select((s) => s.tiles));
-
-    // Load tile images as they become available
-    _ensureTileImages(tiles);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -221,7 +228,7 @@ class _TilemapViewportState extends ConsumerState<TilemapViewport> {
                 cursor: _cursorForTool(ts.activeTool),
                 onHover: (event) {
                   final tile = _tileFromLocal(event.localPosition, ts);
-                  setState(() => _hoverTile = tile);
+                  if (tile != _hoverTile) setState(() => _hoverTile = tile);
                 },
                 child: Listener(
                   onPointerDown: _handlePointerDown,
