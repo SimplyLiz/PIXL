@@ -521,7 +521,7 @@ pub fn extract_palette(img: &DynamicImage, max_colors: u32) -> Vec<[u8; 3]> {
     let rgba = img.to_rgba8();
     let mut pixels: Vec<[u8; 3]> = rgba
         .pixels()
-        .filter(|p| p.0[3] > 128) // skip transparent
+        .filter(|p| p.0[3] > 200) // skip transparent + semi-transparent halo pixels
         .map(|p| [p.0[0], p.0[1], p.0[2]])
         .collect();
 

@@ -25,10 +25,29 @@ pub fn import_reference(
         .map(|(&c, &rgba)| (c, rgba))
         .collect();
 
+    // Find the void symbol (transparent) — convention: '.' with alpha < 128
+    let void_sym = palette_entries
+        .iter()
+        .find(|(_, rgba)| rgba.a < 128)
+        .map(|&(c, _)| c)
+        .unwrap_or('.');
+
+    // Alpha threshold: pixels below this are treated as transparent → void.
+    // 128 is standard, but semi-transparent glow/halo pixels (alpha 30-127)
+    // from AI generators should also be void to avoid dark artifacts.
+    const ALPHA_THRESHOLD: u8 = 128;
+
     for y in 0..target_height {
         let mut row = Vec::with_capacity(target_width as usize);
         for x in 0..target_width {
             let pixel = small.get_pixel(x, y);
+
+            // Treat transparent/semi-transparent pixels as void
+            if pixel.0[3] < ALPHA_THRESHOLD {
+                row.push(void_sym);
+                continue;
+            }
+
             let (sym, dist) = nearest_palette_symbol(&pixel, &palette_entries);
             row.push(sym);
             total_distance += dist;
