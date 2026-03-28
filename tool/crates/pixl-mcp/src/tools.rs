@@ -51,8 +51,10 @@ pub fn tool_definitions() -> Vec<Tool> {
         // ── Validation ──
         tool(
             "pixl_validate",
-            "Validate the entire session. Args: {check_edges?: bool}. \
-             Returns errors, warnings, and stats.",
+            "Validate the entire session. Args: {check_edges?: bool, quality?: bool}. \
+             Returns errors, warnings, and stats. When quality=true, also runs per-tile \
+             structural analysis (outline, contrast, centering) and cross-tile style \
+             consistency checks, with knowledge base advice for each issue.",
         ),
         tool(
             "pixl_check_edge_pair",
@@ -237,16 +239,15 @@ pub fn tool_definitions() -> Vec<Tool> {
             "pixl_generate_sprite",
             "Generate a pixel art sprite via image AI (DALL-E) + palette quantization. \
              Args: {prompt (description of the sprite), name (tile name to create), \
-             size? (default '16x16'), dither? (default false)}. \
-             Pipeline: sends prompt to DALL-E → generates reference image → downscales to \
-             target size → quantizes each pixel to the session palette → creates tile in session. \
-             Returns: quantized preview PNG, reference image, PAX grid, color accuracy score, \
-             and structural critique. Requires OPENAI_API_KEY environment variable. \
-             This produces dramatically better results than text-grid generation because the \
-             image model handles spatial layout, proportions, and shading natively. \
-             With auto_palette (default true), extracts colors from the generated image for \
-             perfect color fidelity — the palette_toml in the response can be pasted into .pax. \
-             Set auto_palette=false to quantize to the session's existing palette instead.",
+             size? (default 'auto' — detects native resolution), max_colors? (default 32), \
+             target_palette? (remap to this project palette after generation), dither? (default false)}. \
+             Pipeline: DALL-E generates reference → detect native pixel grid → center-sample → \
+             auto-extract palette from image → quantize → background removal → AA cleanup → \
+             outline enforcement → optional remap to target_palette. \
+             Always extracts colors from the generated image for maximum fidelity. \
+             The palette_toml in the response can be pasted into your .pax file. \
+             To integrate with an existing project palette, pass target_palette. \
+             Requires OPENAI_API_KEY environment variable.",
         ),
         tool(
             "pixl_remap_tile",

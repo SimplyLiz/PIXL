@@ -2946,8 +2946,8 @@ pub async fn handle_generate_sprite(state: &Mutex<McpState>, args: &Value) -> Va
     let name = args.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let size_str = args.get("size").and_then(|v| v.as_str());
     let dither = args.get("dither").and_then(|v| v.as_bool()).unwrap_or(false);
-    let auto_palette = args.get("auto_palette").and_then(|v| v.as_bool()).unwrap_or(true);
     let max_colors = args.get("max_colors").and_then(|v| v.as_u64()).unwrap_or(32) as u32;
+    let target_palette_name = args.get("target_palette").and_then(|v| v.as_str());
 
     if prompt.is_empty() || name.is_empty() {
         return json!({"error": "both 'prompt' and 'name' are required"});
@@ -2991,30 +2991,17 @@ pub async fn handle_generate_sprite(state: &Mutex<McpState>, args: &Value) -> Va
         }
     };
 
-    // Call the diffusion bridge (async — this makes the API call)
-    let result = if auto_palette {
-        match crate::diffusion::generate_with_auto_palette(
-            &config, prompt, target_w, target_h, max_colors, dither,
-        )
-        .await
-        {
-            Ok(r) => r,
-            Err(e) => return json!({"error": format!("diffusion bridge failed: {}", e)}),
-        }
-    } else {
-        let w = target_w.unwrap_or(16);
-        let h = target_h.unwrap_or(16);
-        match crate::diffusion::generate_and_quantize(
-            &config, prompt, w, h, &palette.1, dither,
-        )
-        .await
-        {
-            Ok(r) => r,
-            Err(e) => return json!({"error": format!("diffusion bridge failed: {}", e)}),
-        }
+    // Always use auto-palette: extract colors from the generated image for
+    // maximum fidelity. Remap to project palette afterward if target_palette set.
+    let result = match crate::diffusion::generate_with_auto_palette(
+        &config, prompt, target_w, target_h, max_colors, dither,
+    )
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => return json!({"error": format!("diffusion bridge failed: {}", e)}),
     };
 
-    // Use extracted palette for rendering if auto_palette, else session palette
     let render_palette = result.extracted_palette.as_ref().unwrap_or(&palette.1);
 
     // Render the quantized grid as preview
@@ -3028,24 +3015,42 @@ pub async fn handle_generate_sprite(state: &Mutex<McpState>, args: &Value) -> Va
     let report = pixl_core::structural::analyze(&result.grid, render_palette, '.');
     let critique = pixl_core::structural::critique_text(&report, &name);
 
-    // Store extracted palette in session if auto_palette
-    let tile_palette_name = if auto_palette && result.extracted_palette.is_some() {
-        let pal_name = format!("{}_palette", name);
+    // Store extracted palette in session
+    let auto_pal_name = format!("{}_palette", name);
+    if let Some(ref extracted) = result.extracted_palette {
         let mut st = state.lock().unwrap();
-        st.palettes
-            .insert(pal_name.clone(), result.extracted_palette.clone().unwrap());
+        st.palettes.insert(auto_pal_name.clone(), extracted.clone());
         drop(st);
-        pal_name
-    } else {
-        palette.0.clone()
-    };
+    }
+    let tile_palette_name = auto_pal_name.clone();
+
+    // If target_palette specified, remap immediately to project palette
+    let (final_grid, final_grid_string, final_palette_name) =
+        if let Some(target_pal) = target_palette_name {
+            let st = state.lock().unwrap();
+            if let Some(target) = st.palettes.get(target_pal) {
+                let remapped = pixl_render::pixelize::remap_grid(
+                    &result.grid, render_palette, target, '.',
+                );
+                let remapped_str = remapped
+                    .iter()
+                    .map(|row| row.iter().collect::<String>())
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                (remapped, remapped_str, target_pal.to_string())
+            } else {
+                (result.grid.clone(), result.grid_string.clone(), tile_palette_name.clone())
+            }
+        } else {
+            (result.grid.clone(), result.grid_string.clone(), tile_palette_name.clone())
+        };
 
     // Store tile in session
     {
         let mut st = state.lock().unwrap();
         let actual_size = format!("{}x{}", result.width, result.height);
         let tile_raw = pixl_core::types::TileRaw {
-            palette: tile_palette_name.clone(),
+            palette: final_palette_name.clone(),
             size: Some(actual_size.clone()),
             encoding: None,
             symmetry: None,
@@ -3062,7 +3067,7 @@ pub async fn handle_generate_sprite(state: &Mutex<McpState>, args: &Value) -> Va
             nine_slice: None,
             visual_height_extra: None,
             semantic: None,
-            grid: Some(result.grid_string.clone()),
+            grid: Some(final_grid_string.clone()),
             rle: None,
             layout: None,
         };
@@ -3083,18 +3088,18 @@ pub async fn handle_generate_sprite(state: &Mutex<McpState>, args: &Value) -> Va
         "dither": dither,
         "preview_b64": preview_b64,
         "reference_b64": reference_b64,
-        "grid": result.grid_string,
+        "grid": final_grid_string,
         "critique": critique,
         "has_errors": pixl_core::structural::has_errors(&report),
         "has_warnings": pixl_core::structural::has_warnings(&report),
-        "auto_palette": auto_palette,
-        "palette_name": tile_palette_name,
+        "palette_name": final_palette_name,
+        "auto_palette_name": auto_pal_name,
         "palette_toml": result.palette_toml,
-        "hint": "Compare the quantized preview against the reference image. \
-                 Use pixl_critique_tile to analyze structural quality, then \
-                 pixl_refine_tile to fix any issues (outline gaps, palette discipline). \
-                 If auto_palette is true, the palette_toml field contains the extracted \
-                 palette ready to paste into your .pax file.",
+        "target_palette": target_palette_name,
+        "hint": "The sprite was generated with auto-extracted colors for maximum fidelity. \
+                 The palette_toml can be pasted into your .pax file. \
+                 To convert to your project palette, use pixl_remap_tile or pass \
+                 target_palette to this tool.",
     })
 }
 
