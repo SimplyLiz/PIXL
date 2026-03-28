@@ -32,6 +32,7 @@ pub mod animate;
 pub mod blueprint;
 pub mod completeness;
 pub mod compose;
+pub mod composite;
 pub mod corpus;
 pub mod cycle;
 pub mod edges;

@@ -1,3 +1,4 @@
+use crate::composite::{self, CompositeError};
 use crate::grid::{GridError, parse_grid};
 use crate::parser::{ParseError, resolve_all_palettes};
 use crate::rle::{RleError, parse_rle};
@@ -22,6 +23,7 @@ pub struct ValidationStats {
     pub sprites: usize,
     pub objects: usize,
     pub tile_runs: usize,
+    pub composites: usize,
 }
 
 #[derive(Debug, Error)]
@@ -99,6 +101,25 @@ pub enum ValidationError {
 
     #[error("sprite '{spriteset}/{sprite}': frame indices not contiguous starting at 1")]
     NonContiguousFrames { spriteset: String, sprite: String },
+
+    #[error("composite '{name}': {source}")]
+    Composite {
+        name: String,
+        source: CompositeError,
+    },
+
+    #[error("composite '{composite}': tile '{tile}' not found in [tile] section")]
+    CompositeTileNotFound { composite: String, tile: String },
+
+    #[error("composite '{composite}': tile '{tile}' size {got_w}x{got_h} doesn't match tile_size {exp_w}x{exp_h}")]
+    CompositeTileSizeMismatch {
+        composite: String,
+        tile: String,
+        exp_w: u32,
+        exp_h: u32,
+        got_w: u32,
+        got_h: u32,
+    },
 }
 
 /// Validate an entire PaxFile. Returns all errors and warnings.
@@ -373,6 +394,72 @@ pub fn validate(file: &PaxFile, _check_edges: bool) -> ValidationResult {
         }
     }
 
+    // 9. Validate composites
+    for (name, raw) in &file.composite {
+        match composite::resolve_composite(raw, name) {
+            Ok(comp) => {
+                // Validate all referenced tiles exist and have correct size
+                let (tw, th) = (comp.tile_width, comp.tile_height);
+
+                let mut check_tile_ref = |tile_name: &str| {
+                    if tile_name == "_" {
+                        return;
+                    }
+                    if let Some(tile_raw) = file.tile.get(tile_name) {
+                        if let Some(ref size_str) = tile_raw.size {
+                            if let Ok((w, h)) = parse_size(size_str) {
+                                if w != tw || h != th {
+                                    errors.push(ValidationError::CompositeTileSizeMismatch {
+                                        composite: name.clone(),
+                                        tile: tile_name.to_string(),
+                                        exp_w: tw,
+                                        exp_h: th,
+                                        got_w: w,
+                                        got_h: h,
+                                    });
+                                }
+                            }
+                        }
+                    } else {
+                        errors.push(ValidationError::CompositeTileNotFound {
+                            composite: name.clone(),
+                            tile: tile_name.to_string(),
+                        });
+                    }
+                };
+
+                // Check base layout tiles
+                for row in &comp.slots {
+                    for slot in row {
+                        check_tile_ref(&slot.name);
+                    }
+                }
+
+                // Check variant tiles
+                for (_vname, overrides) in &comp.variants {
+                    for (_, tile_ref) in overrides {
+                        check_tile_ref(&tile_ref.name);
+                    }
+                }
+
+                // Check animation frame tiles
+                for (_aname, anim) in &comp.animations {
+                    for frame in &anim.frames {
+                        for (_, tile_ref) in &frame.swaps {
+                            check_tile_ref(&tile_ref.name);
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                errors.push(ValidationError::Composite {
+                    name: name.clone(),
+                    source: e,
+                });
+            }
+        }
+    }
+
     let stats = ValidationStats {
         palettes: file.palette.len(),
         themes: file.theme.len(),
@@ -381,6 +468,7 @@ pub fn validate(file: &PaxFile, _check_edges: bool) -> ValidationResult {
         sprites: file.spriteset.values().map(|ss| ss.sprite.len()).sum(),
         objects: file.object.len(),
         tile_runs: file.tile_run.len(),
+        composites: file.composite.len(),
     };
 
     ValidationResult {
@@ -388,6 +476,139 @@ pub fn validate(file: &PaxFile, _check_edges: bool) -> ValidationResult {
         warnings,
         stats,
     }
+}
+
+/// Seam discontinuity found between two adjacent slots.
+#[derive(Debug)]
+pub struct SeamWarning {
+    pub composite: String,
+    pub slot_a: String,
+    pub slot_b: String,
+    pub direction: String,
+    pub mismatched: Vec<(u32, char, char)>,
+}
+
+impl std::fmt::Display for SeamWarning {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "composite '{}': {} seam between {} and {} — {} mismatched pixel(s)",
+            self.composite,
+            self.direction,
+            self.slot_a,
+            self.slot_b,
+            self.mismatched.len(),
+        )
+    }
+}
+
+/// Check seam continuity across adjacent tiles in all composites.
+/// Returns warnings (not errors) for pixel discontinuities at tile boundaries.
+/// Requires resolved tiles (grids already materialized).
+pub fn check_seams(
+    file: &PaxFile,
+    tiles: &std::collections::HashMap<String, crate::types::Tile>,
+) -> Vec<SeamWarning> {
+    let mut warnings = Vec::new();
+
+    for (name, raw) in &file.composite {
+        let comp = match composite::resolve_composite(raw, name) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+
+        // Check horizontal seams (right edge of (r,c) vs left edge of (r,c+1))
+        for r in 0..comp.rows {
+            for c in 0..comp.cols.saturating_sub(1) {
+                let left_ref = &comp.slots[r as usize][c as usize];
+                let right_ref = &comp.slots[r as usize][(c + 1) as usize];
+
+                if left_ref.name == "_" || right_ref.name == "_" {
+                    continue;
+                }
+
+                let (Some(left_tile), Some(right_tile)) =
+                    (tiles.get(&left_ref.name), tiles.get(&right_ref.name))
+                else {
+                    continue;
+                };
+
+                let left_grid = crate::composite::apply_flips_pub(&left_tile.grid, left_ref);
+                let right_grid = crate::composite::apply_flips_pub(&right_tile.grid, right_ref);
+
+                let mut mismatched = Vec::new();
+                let right_col = (comp.tile_width - 1) as usize;
+                for y in 0..comp.tile_height {
+                    let l = left_grid[y as usize][right_col];
+                    let r_sym = right_grid[y as usize][0];
+                    // Both transparent = no seam issue
+                    if l == '.' && r_sym == '.' {
+                        continue;
+                    }
+                    if l != r_sym {
+                        mismatched.push((y, l, r_sym));
+                    }
+                }
+
+                if !mismatched.is_empty() {
+                    warnings.push(SeamWarning {
+                        composite: name.clone(),
+                        slot_a: format!("{}_{}", r, c),
+                        slot_b: format!("{}_{}", r, c + 1),
+                        direction: "vertical".to_string(),
+                        mismatched,
+                    });
+                }
+            }
+        }
+
+        // Check vertical seams (bottom edge of (r,c) vs top edge of (r+1,c))
+        for r in 0..comp.rows.saturating_sub(1) {
+            for c in 0..comp.cols {
+                let top_ref = &comp.slots[r as usize][c as usize];
+                let bottom_ref = &comp.slots[(r + 1) as usize][c as usize];
+
+                if top_ref.name == "_" || bottom_ref.name == "_" {
+                    continue;
+                }
+
+                let (Some(top_tile), Some(bottom_tile)) =
+                    (tiles.get(&top_ref.name), tiles.get(&bottom_ref.name))
+                else {
+                    continue;
+                };
+
+                let top_grid = crate::composite::apply_flips_pub(&top_tile.grid, top_ref);
+                let bottom_grid =
+                    crate::composite::apply_flips_pub(&bottom_tile.grid, bottom_ref);
+
+                let mut mismatched = Vec::new();
+                let bottom_row = (comp.tile_height - 1) as usize;
+                for x in 0..comp.tile_width {
+                    let t = top_grid[bottom_row][x as usize];
+                    let b = bottom_grid[0][x as usize];
+                    if t == '.' && b == '.' {
+                        continue;
+                    }
+                    if t != b {
+                        mismatched.push((x, t, b));
+                    }
+                }
+
+                if !mismatched.is_empty() {
+                    warnings.push(SeamWarning {
+                        composite: name.clone(),
+                        slot_a: format!("{}_{}", r, c),
+                        slot_b: format!("{}_{}", r + 1, c),
+                        direction: "horizontal".to_string(),
+                        mismatched,
+                    });
+                }
+            }
+        }
+    }
+
+    warnings
 }
 
 #[cfg(test)]

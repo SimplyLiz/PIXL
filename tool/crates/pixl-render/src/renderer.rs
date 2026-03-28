@@ -67,6 +67,35 @@ pub fn render_grid_with_swap(
     img
 }
 
+/// Render a composite sprite to an image.
+///
+/// Resolves the composite grid (with optional variant and animation frame),
+/// then renders it like any other tile grid.
+pub fn render_composite(
+    composite: &pixl_core::types::Composite,
+    variant: Option<&str>,
+    anim_name: Option<&str>,
+    frame_index: Option<u32>,
+    tiles: &std::collections::HashMap<String, pixl_core::types::Tile>,
+    palette: &Palette,
+    scale: u32,
+) -> Result<RgbaImage, pixl_core::composite::CompositeError> {
+    let grid = if let Some(anim) = anim_name {
+        pixl_core::composite::compose_anim_frame(
+            composite,
+            anim,
+            frame_index.unwrap_or(1),
+            variant,
+            tiles,
+            '.',
+        )?
+    } else {
+        pixl_core::composite::compose_grid(composite, variant, frame_index, tiles, '.')?
+    };
+
+    Ok(render_grid(&grid, palette, scale))
+}
+
 /// Error color for unknown symbols — hot pink (#FF00FF).
 const ERROR_COLOR: PaxRgba = PaxRgba {
     r: 255,
