@@ -48,10 +48,12 @@ pub async fn generate_image(
     size: &str,
 ) -> Result<Vec<u8>, String> {
     let pixel_prompt = format!(
-        "Pixel art sprite on a solid black background. Clean 1-pixel dark outline around the entire subject. \
-         Limited color palette, flat shading, no anti-aliasing, no gradients. \
+        "Pixel art sprite on a transparent background. \
+         Hard 1-pixel dark outline around the entire subject with NO glow, NO halo, NO bloom, NO soft edges. \
+         The outline must be crisp single pixels directly adjacent to transparent pixels. \
+         Limited color palette, completely flat shading, no anti-aliasing, no gradients, no sub-pixel blending. \
          The subject should be centered and fill most of the frame. \
-         Style: 16-bit era SNES pixel art. \
+         Style: 16-bit era SNES pixel art, game sprite. \
          Subject: {}",
         prompt
     );
