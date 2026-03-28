@@ -49,6 +49,7 @@ pub fn handle_tool(state: &Mutex<McpState>, tool_name: &str, args: &Value) -> Va
         "pixl_critique_tile" => handle_critique_tile(state, args),
         "pixl_refine_tile" => handle_refine_tile(state, args),
         "pixl_upscale_tile" => handle_upscale_tile(state, args),
+        "pixl_show_references" => handle_show_references(state, args),
         _ => json!({"error": format!("unknown tool: {}", tool_name)}),
     }
 }
@@ -1200,6 +1201,44 @@ fn handle_generate_context(state: &Mutex<McpState>, args: &Value) -> Value {
 
     let stats = st.feedback.stats();
 
+    // Render few-shot examples as preview images for multimodal context.
+    // The MCP server extracts "references[].preview_b64" as Content::image(),
+    // so the LLM sees both the text grid AND the rendered visual.
+    let mut example_previews: Vec<Value> = Vec::new();
+    let empty_stamps: std::collections::HashMap<String, pixl_core::types::Stamp> =
+        std::collections::HashMap::new();
+    let _ = &empty_stamps; // suppress unused warning when no examples
+    for ex in &constraints.examples {
+        // Parse the example grid string back into a 2D grid
+        let grid: Vec<Vec<char>> = ex
+            .grid
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .map(|l| l.chars().collect())
+            .collect();
+
+        if grid.is_empty() {
+            continue;
+        }
+
+        // Find the palette for this example (look up in session tiles)
+        let palette = st
+            .file
+            .tile
+            .get(&ex.name)
+            .and_then(|t| st.palettes.get(&t.palette));
+
+        if let Some(pal) = palette {
+            let img = renderer::render_grid(&grid, pal, 16);
+            let b64 = renderer::png_to_base64(&renderer::encode_png(&img));
+            example_previews.push(json!({
+                "name": ex.name,
+                "tags": ex.tags,
+                "preview_b64": b64,
+            }));
+        }
+    }
+
     json!({
         "system_prompt": system_prompt,
         "user_prompt": user_prompt,
@@ -1209,6 +1248,7 @@ fn handle_generate_context(state: &Mutex<McpState>, args: &Value) -> Value {
         "existing_tiles": st.tile_names(),
         "style_latent": style_text,
         "available_layers": layer_roles,
+        "references": example_previews,
         "feedback": {
             "min_style_score": constraints.min_style_score,
             "acceptance_rate": stats.acceptance_rate,
@@ -2814,6 +2854,140 @@ fn handle_refine_tile(state: &Mutex<McpState>, args: &Value) -> Value {
         "has_errors": pixl_core::structural::has_errors(&report),
         "has_warnings": pixl_core::structural::has_warnings(&report),
         "should_refine": pixl_core::structural::has_warnings(&report) && refinement_count < 3,
+    })
+}
+
+fn handle_show_references(state: &Mutex<McpState>, args: &Value) -> Value {
+    let st = state.lock().unwrap();
+
+    let query = args["query"].as_str().unwrap_or("").to_lowercase();
+    let count = args.get("count").and_then(|v| v.as_u64()).unwrap_or(4) as usize;
+    let size_filter = args.get("size").and_then(|v| v.as_str());
+
+    if query.is_empty() {
+        return json!({"error": "query is required — e.g. 'wall', 'character', 'potion'"});
+    }
+
+    // Score each tile in the session by relevance to the query
+    let query_words: Vec<&str> = query.split_whitespace().collect();
+    let empty_stamps = std::collections::HashMap::new();
+
+    let mut scored: Vec<(String, f64)> = st
+        .file
+        .tile
+        .iter()
+        .filter_map(|(name, tile_raw)| {
+            // Skip template tiles
+            if tile_raw.template.is_some() {
+                return None;
+            }
+
+            // Filter by size if specified
+            if let Some(size) = size_filter {
+                if tile_raw.size.as_deref() != Some(size) {
+                    return None;
+                }
+            }
+
+            // Must have grid data
+            if tile_raw.grid.is_none() && tile_raw.rle.is_none() {
+                return None;
+            }
+
+            // Score by name match + tag match
+            let name_lower = name.to_lowercase();
+            let mut score = 0.0f64;
+
+            for word in &query_words {
+                if name_lower.contains(word) {
+                    score += 2.0;
+                }
+                for tag in &tile_raw.tags {
+                    if tag.to_lowercase().contains(word) {
+                        score += 1.5;
+                    }
+                }
+                // Also check target_layer
+                if let Some(ref layer) = tile_raw.target_layer {
+                    if layer.to_lowercase().contains(word) {
+                        score += 1.0;
+                    }
+                }
+            }
+
+            if score > 0.0 {
+                Some((name.clone(), score))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // Sort by score descending
+    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    scored.truncate(count);
+
+    if scored.is_empty() {
+        // If no matches, return a random sample of tiles
+        let all_names: Vec<String> = st
+            .file
+            .tile
+            .iter()
+            .filter(|(_, t)| t.template.is_none() && (t.grid.is_some() || t.rle.is_some()))
+            .filter(|(_, t)| {
+                size_filter.map_or(true, |s| t.size.as_deref() == Some(s))
+            })
+            .map(|(n, _)| n.clone())
+            .take(count)
+            .collect();
+
+        if all_names.is_empty() {
+            return json!({
+                "ok": true,
+                "message": "no tiles found in session",
+                "references": [],
+            });
+        }
+        scored = all_names.into_iter().map(|n| (n, 0.0)).collect();
+    }
+
+    // Render each matched tile as a preview image
+    let mut references = Vec::new();
+    for (tile_name, score) in &scored {
+        let tile_raw = &st.file.tile[tile_name];
+
+        if let Ok((parsed, w, h)) = pixl_core::resolve::resolve_tile_grid(
+            tile_name,
+            &st.file.tile,
+            &st.palettes,
+            &empty_stamps,
+        ) {
+            let palette = match st.palettes.get(&tile_raw.palette) {
+                Some(p) => p,
+                None => continue,
+            };
+
+            // Render at 16x for clear visibility
+            let img = renderer::render_grid(&parsed, palette, 16);
+            let b64 = renderer::png_to_base64(&renderer::encode_png(&img));
+
+            references.push(json!({
+                "name": tile_name,
+                "size": format!("{}x{}", w, h),
+                "tags": tile_raw.tags,
+                "relevance": score,
+                "preview_b64": b64,
+            }));
+        }
+    }
+
+    json!({
+        "ok": true,
+        "query": query,
+        "count": references.len(),
+        "references": references,
+        "hint": "Study these rendered tiles carefully before generating. Note the outline style, \
+                 color distribution, shading direction, and level of detail at this canvas size.",
     })
 }
 

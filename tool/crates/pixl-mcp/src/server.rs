@@ -95,6 +95,15 @@ impl ServerHandler for PixlServer {
                 content.push(Content::image(b64.to_string(), "image/png".to_string()));
             }
 
+            // Extract images from array fields (e.g., references[].preview_b64)
+            if let Some(refs) = result.get("references").and_then(|v| v.as_array()) {
+                for r in refs {
+                    if let Some(b64) = r.get("preview_b64").and_then(|v| v.as_str()) {
+                        content.push(Content::image(b64.to_string(), "image/png".to_string()));
+                    }
+                }
+            }
+
             let is_error = result.get("error").is_some();
             let mut call_result = CallToolResult::default();
             call_result.content = content;

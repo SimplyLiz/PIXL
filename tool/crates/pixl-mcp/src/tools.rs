@@ -214,6 +214,15 @@ pub fn tool_definitions() -> Vec<Tool> {
              Use this after pixl_critique_tile identifies specific row/region issues.",
         ),
         tool(
+            "pixl_show_references",
+            "Show rendered reference tiles as visual examples. Args: {query (search term like \
+             'wall', 'character', 'potion'), count? (default 4), size? (filter by size e.g. '16x16')}. \
+             Searches all tiles in the session by name and tags, renders the best matches as \
+             preview images at 16x zoom. CALL THIS BEFORE generating a new tile — seeing real \
+             rendered pixel art at the target size dramatically improves generation quality. \
+             The returned images are your visual reference for style, proportions, and technique.",
+        ),
+        tool(
             "pixl_upscale_tile",
             "Upscale a tile's character grid by an integer factor (nearest-neighbor). \
              Args: {name, factor? (default 2), new_name? (default: name_upscaled)}. \
