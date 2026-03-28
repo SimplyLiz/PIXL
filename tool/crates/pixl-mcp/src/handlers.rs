@@ -589,13 +589,39 @@ fn handle_narrate_map(state: &Mutex<McpState>, args: &Value) -> Value {
         .filter_map(|r| narrate::parse_predicate(r))
         .collect();
 
+    // Apply weight overrides: {"weights": {"tile_name": 5.0, ...}}
+    if let Some(weights) = args.get("weights").and_then(|v| v.as_object()) {
+        for (tile_name, weight_val) in weights {
+            if let Some(w) = weight_val.as_f64() {
+                for te in &mut tile_edges {
+                    if te.name == *tile_name {
+                        te.weight = w;
+                    }
+                }
+            }
+        }
+    }
+
+    // Parse pin overrides: {"pins": [{"x": 0, "y": 0, "tile": "wall_solid"}, ...]}
+    let mut extra_pins = Vec::new();
+    if let Some(pins) = args.get("pins").and_then(|v| v.as_array()) {
+        for pin in pins {
+            let px = pin.get("x").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+            let py = pin.get("y").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+            let tile = pin.get("tile").and_then(|v| v.as_str()).unwrap_or("");
+            if let Some(idx) = tile_names.iter().position(|n| n == tile) {
+                extra_pins.push(pixl_wfc::wfc::Pin { x: px, y: py, tile_idx: idx });
+            }
+        }
+    }
+
     let config = narrate::NarrateConfig {
         width,
         height,
         seed,
         max_retries: 5,
         predicates,
-        extra_pins: vec![],
+        extra_pins,
     };
 
     match narrate::narrate_map(&tile_edges, &tile_affordances, &adj_rules, &forbids, &requires, require_boost, &config) {
