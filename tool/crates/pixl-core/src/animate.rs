@@ -158,8 +158,9 @@ fn resolve_delta_frame(
     let mut grid = base_grid.clone();
     for change in &frame.changes {
         let ch = change.sym.chars().next().unwrap_or('.');
-        if (change.y as usize) < grid.len() && (change.x as usize) < grid[0].len() {
-            grid[change.y as usize][change.x as usize] = ch;
+        let y = change.y as usize;
+        if y < grid.len() && (change.x as usize) < grid[y].len() {
+            grid[y][change.x as usize] = ch;
         }
     }
 

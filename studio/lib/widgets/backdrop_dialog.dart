@@ -82,25 +82,33 @@ class _BackdropDialogState extends ConsumerState<BackdropDialog> {
       _error = null;
     });
 
-    final backend = ref.read(backendProvider.notifier).backend;
-    final resp = await backend.backdropImport(
-      inputPath: _inputPath!,
-      name: _sceneName ?? 'scene',
-      colors: _colors,
-    );
+    try {
+      final backend = ref.read(backendProvider.notifier).backend;
+      final resp = await backend.backdropImport(
+        inputPath: _inputPath!,
+        name: _sceneName ?? 'scene',
+        colors: _colors,
+      );
 
-    if (mounted) {
-      setState(() {
-        _importing = false;
-        if (resp['ok'] == true) {
-          _importResult = resp;
-          // Auto-fill render tab
-          _paxPath = resp['path'] as String?;
-          _backdropName = _sceneName ?? 'scene';
-        } else {
-          _error = resp['error']?.toString() ?? 'Unknown error';
-        }
-      });
+      if (mounted) {
+        setState(() {
+          _importing = false;
+          if (resp['ok'] == true) {
+            _importResult = resp;
+            _paxPath = resp['path'] as String?;
+            _backdropName = _sceneName ?? 'scene';
+          } else {
+            _error = resp['error']?.toString() ?? 'Unknown error';
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _importing = false;
+          _error = 'Import failed: $e';
+        });
+      }
     }
   }
 
@@ -113,24 +121,33 @@ class _BackdropDialogState extends ConsumerState<BackdropDialog> {
       _error = null;
     });
 
-    final backend = ref.read(backendProvider.notifier).backend;
-    final resp = await backend.backdropRender(
-      filePath: _paxPath!,
-      name: _backdropName!,
-      frames: _frames,
-      scale: _scale,
-    );
+    try {
+      final backend = ref.read(backendProvider.notifier).backend;
+      final resp = await backend.backdropRender(
+        filePath: _paxPath!,
+        name: _backdropName!,
+        frames: _frames,
+        scale: _scale,
+      );
 
-    if (mounted) {
-      setState(() {
-        _rendering = false;
-        if (resp['ok'] == true) {
-          _renderResult = resp;
-          _previewBase64 = (resp['png_base64'] ?? resp['gif_base64']) as String?;
-        } else {
-          _error = resp['error']?.toString() ?? 'Unknown error';
-        }
-      });
+      if (mounted) {
+        setState(() {
+          _rendering = false;
+          if (resp['ok'] == true) {
+            _renderResult = resp;
+            _previewBase64 = (resp['png_base64'] ?? resp['gif_base64']) as String?;
+          } else {
+            _error = resp['error']?.toString() ?? 'Unknown error';
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _rendering = false;
+          _error = 'Render failed: $e';
+        });
+      }
     }
   }
 

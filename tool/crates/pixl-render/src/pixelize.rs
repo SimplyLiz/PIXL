@@ -62,7 +62,7 @@ pub fn pixelize(
     let aspect = src_h as f64 / src_w as f64;
 
     let tw = max_width.min(src_w);
-    let th = (tw as f64 * aspect).round() as u32;
+    let th = ((tw as f64 * aspect).round() as u32).max(1);
 
     // Step 1: Downsample with Lanczos3 for high-quality color averaging
     let small = img.resize_exact(tw, th, image::imageops::Lanczos3);

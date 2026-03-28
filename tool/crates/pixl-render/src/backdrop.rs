@@ -186,16 +186,19 @@ fn apply_flips(x: u32, y: u32, w: u32, h: u32, tile_ref: &TileRef) -> (u32, u32)
     let mut sx = x;
     let mut sy = y;
 
-    // Diagonal flip (transpose) first — enables 90° rotations when combined with h/v
+    // Diagonal flip (transpose) first — swaps both coords AND dimensions
     if tile_ref.flip_d {
         std::mem::swap(&mut sx, &mut sy);
     }
 
+    // After diagonal flip, the effective dimensions are swapped
+    let (ew, eh) = if tile_ref.flip_d { (h, w) } else { (w, h) };
+
     if tile_ref.flip_h {
-        sx = w.saturating_sub(1) - sx;
+        sx = ew.saturating_sub(1).saturating_sub(sx);
     }
     if tile_ref.flip_v {
-        sy = h.saturating_sub(1) - sy;
+        sy = eh.saturating_sub(1).saturating_sub(sy);
     }
 
     (sx, sy)
@@ -277,19 +280,12 @@ fn blend_multiply(dst: &Rgba<u8>, src: &Rgba<u8>, src_a: f64) -> Rgba<u8> {
 }
 
 fn blend_screen(dst: &Rgba<u8>, src: &Rgba<u8>, src_a: f64) -> Rgba<u8> {
-    let inv_a = 1.0 - src_a;
-    let screen = |d: u8, s: u8| -> u8 {
-        let df = d as f64 / 255.0;
-        let sf = s as f64 / 255.0;
-        let result = 1.0 - (1.0 - df) * (1.0 - sf * src_a + inv_a * (1.0 - df) / (1.0 - df + 0.001));
-        (result.clamp(0.0, 1.0) * 255.0) as u8
-    };
-    // Simplified screen: dst + src - dst*src, mixed by src_a
+    // Screen blend: dst + src - dst*src, mixed by src_a
     Rgba([
         ((dst.0[0] as f64 + src.0[0] as f64 * src_a - dst.0[0] as f64 * src.0[0] as f64 / 255.0 * src_a).clamp(0.0, 255.0)) as u8,
         ((dst.0[1] as f64 + src.0[1] as f64 * src_a - dst.0[1] as f64 * src.0[1] as f64 / 255.0 * src_a).clamp(0.0, 255.0)) as u8,
         ((dst.0[2] as f64 + src.0[2] as f64 * src_a - dst.0[2] as f64 * src.0[2] as f64 / 255.0 * src_a).clamp(0.0, 255.0)) as u8,
-        dst.0[3].max((src_a * 255.0) as u8),
+        dst.0[3].max((src_a.min(1.0) * 255.0) as u8),
     ])
 }
 
@@ -317,7 +313,9 @@ fn apply_tile_animations(
                 if total_duration == 0 {
                     continue;
                 }
-                let tick_in_cycle = (tick * 120) % total_duration; // tick * default_ms
+                // Each tick represents one rendered frame; use average frame duration
+                let avg_duration = total_duration / anim.len().max(1) as u32;
+                let tick_in_cycle = (tick * avg_duration) % total_duration;
                 let mut elapsed = 0u32;
                 let mut current_tile = &anim[0].0;
                 for (tile_name, duration) in anim {
