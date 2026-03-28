@@ -517,6 +517,8 @@ pub fn import_backdrop(
 
 /// Extract dominant colors from an image as RGB triples.
 /// Uses median-cut quantization on all non-transparent pixels.
+/// Ensures the darkest and lightest colors from the original are always
+/// preserved (critical for outlines and highlights).
 pub fn extract_palette(img: &DynamicImage, max_colors: u32) -> Vec<[u8; 3]> {
     let rgba = img.to_rgba8();
     let mut pixels: Vec<[u8; 3]> = rgba
@@ -529,7 +531,41 @@ pub fn extract_palette(img: &DynamicImage, max_colors: u32) -> Vec<[u8; 3]> {
         return vec![];
     }
 
-    median_cut(&mut pixels, max_colors as usize)
+    // Find the actual darkest and lightest pixels before median-cut
+    // (median-cut averages within buckets, which can lose the extremes)
+    let darkest = pixels
+        .iter()
+        .min_by_key(|p| (p[0] as u32 + p[1] as u32 + p[2] as u32))
+        .copied();
+    let lightest = pixels
+        .iter()
+        .max_by_key(|p| (p[0] as u32 + p[1] as u32 + p[2] as u32))
+        .copied();
+
+    // Reserve 2 slots for extremes, use remaining for median-cut
+    let mc_count = (max_colors as usize).saturating_sub(2).max(1);
+    let mut palette = median_cut(&mut pixels, mc_count);
+
+    // Ensure darkest and lightest are in the palette
+    if let Some(dark) = darkest {
+        if !palette.iter().any(|p| color_dist(p, &dark) < 15) {
+            palette.push(dark);
+        }
+    }
+    if let Some(light) = lightest {
+        if !palette.iter().any(|p| color_dist(p, &light) < 15) {
+            palette.push(light);
+        }
+    }
+
+    palette
+}
+
+fn color_dist(a: &[u8; 3], b: &[u8; 3]) -> u32 {
+    let dr = (a[0] as i32 - b[0] as i32).unsigned_abs();
+    let dg = (a[1] as i32 - b[1] as i32).unsigned_abs();
+    let db = (a[2] as i32 - b[2] as i32).unsigned_abs();
+    dr + dg + db
 }
 
 /// Build a PAX Palette from extracted RGB colors.
