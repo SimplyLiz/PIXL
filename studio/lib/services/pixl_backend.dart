@@ -17,13 +17,13 @@ class PixlBackend {
   String get _baseUrl => 'http://127.0.0.1:$port';
 
   static String _findBinary() {
-    // Resolve the project root — works regardless of working directory.
-    // When running from `flutter run` inside studio/, the script is in
-    // studio/lib/. When running a built app, fall back to cwd-relative
-    // paths and then PATH lookup.
-    final scriptDir = File(Platform.script.toFilePath()).parent.path;
+    // 1. Check inside the .app bundle (bundled binary next to the runner)
+    final execPath = Platform.resolvedExecutable;
+    final bundledPath = '${File(execPath).parent.path}/pixl';
+    if (File(bundledPath).existsSync()) return bundledPath;
 
-    // Walk up from studio/lib/ or studio/ to find the project root
+    // 2. Resolve the project root — for development (flutter run)
+    final scriptDir = File(Platform.script.toFilePath()).parent.path;
     Directory? projectRoot;
     var dir = Directory(scriptDir);
     for (var i = 0; i < 6; i++) {
