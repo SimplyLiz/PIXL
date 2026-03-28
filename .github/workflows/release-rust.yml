@@ -44,7 +44,7 @@ jobs:
 
       - name: Build CLI
         working-directory: tool
-        run: cargo build --release --target ${{ matrix.target }} -p pixl-cli
+        run: cargo build --release --target ${{ matrix.target }} -p pixl
 
       - name: Build MCP server
         working-directory: tool
@@ -55,8 +55,8 @@ jobs:
         run: |
           tag="${GITHUB_REF#refs/tags/}"
           mkdir -p dist
-          tar czf "dist/pixl-cli-${tag}-${{ matrix.target }}.tar.gz" \
-            -C tool/target/${{ matrix.target }}/release pixl-cli
+          tar czf "dist/pixl-${tag}-${{ matrix.target }}.tar.gz" \
+            -C tool/target/${{ matrix.target }}/release pixl
           tar czf "dist/pixl-mcp-${tag}-${{ matrix.target }}.tar.gz" \
             -C tool/target/${{ matrix.target }}/release pixl-mcp
 
@@ -66,8 +66,8 @@ jobs:
         run: |
           $tag = "${{ github.ref_name }}"
           New-Item -ItemType Directory -Force -Path dist
-          Compress-Archive -Path "tool/target/${{ matrix.target }}/release/pixl-cli.exe" `
-            -DestinationPath "dist/pixl-cli-${tag}-${{ matrix.target }}.zip"
+          Compress-Archive -Path "tool/target/${{ matrix.target }}/release/pixl.exe" `
+            -DestinationPath "dist/pixl-${tag}-${{ matrix.target }}.zip"
           Compress-Archive -Path "tool/target/${{ matrix.target }}/release/pixl-mcp.exe" `
             -DestinationPath "dist/pixl-mcp-${tag}-${{ matrix.target }}.zip"
 

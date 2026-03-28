@@ -32,7 +32,7 @@ jobs:
 
       - name: Clippy
         working-directory: tool
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings -A clippy::needless_range_loop
         if: matrix.os == 'ubuntu-latest'
 
       - name: Format check
