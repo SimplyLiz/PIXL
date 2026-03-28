@@ -26,6 +26,8 @@ class _BackdropViewportState extends ConsumerState<BackdropViewport> {
   bool _spaceHeld = false;
   Timer? _animTimer;
 
+  double _pinchAccum = 0.0;
+
   // Zone dragging state
   int? _draggingZone;
   Offset? _dragStart;
@@ -47,7 +49,9 @@ class _BackdropViewportState extends ConsumerState<BackdropViewport> {
         return;
       }
       final notifier = ref.read(backdropEditorProvider.notifier);
-      notifier.setTick((state.currentTick + 1) % state.totalFrames.clamp(1, 999));
+      notifier.setTick(
+        (state.currentTick + 1) % state.totalFrames.clamp(1, 999),
+      );
       _refreshAnimatedFrame();
     });
   }
@@ -70,7 +74,8 @@ class _BackdropViewportState extends ConsumerState<BackdropViewport> {
         scale: 1,
       );
       if (resp['ok'] == true && resp['gif_base64'] is String) {
-        ref.read(backdropEditorProvider.notifier)
+        ref
+            .read(backdropEditorProvider.notifier)
             .setAnimatedPreview(base64Decode(resp['gif_base64'] as String));
       }
     } catch (_) {}
@@ -113,17 +118,16 @@ class _BackdropViewportState extends ConsumerState<BackdropViewport> {
   Offset _toCanvasCoords(Offset local, Size size) {
     final cx = size.width / 2 + _panOffset.dx;
     final cy = size.height / 2 + _panOffset.dy;
-    return Offset(
-      (local.dx - cx) / _zoom,
-      (local.dy - cy) / _zoom,
-    );
+    return Offset((local.dx - cx) / _zoom, (local.dy - cy) / _zoom);
   }
 
   int? _hitTestZone(Offset canvasPos, BackdropEditorState state) {
     for (var i = state.zones.length - 1; i >= 0; i--) {
       final z = state.zones[i];
-      if (canvasPos.dx >= z.x && canvasPos.dx < z.x + z.w &&
-          canvasPos.dy >= z.y && canvasPos.dy < z.y + z.h) {
+      if (canvasPos.dx >= z.x &&
+          canvasPos.dx < z.x + z.w &&
+          canvasPos.dy >= z.y &&
+          canvasPos.dy < z.y + z.h) {
         return i;
       }
     }
@@ -145,8 +149,12 @@ class _BackdropViewportState extends ConsumerState<BackdropViewport> {
             children: [
               Icon(Icons.landscape, size: 48, color: theme.dividerColor),
               const SizedBox(height: 12),
-              Text('No backdrop loaded',
-                  style: theme.textTheme.bodySmall!.copyWith(color: theme.dividerColor)),
+              Text(
+                'No backdrop loaded',
+                style: theme.textTheme.bodySmall!.copyWith(
+                  color: theme.dividerColor,
+                ),
+              ),
               const SizedBox(height: 12),
               ElevatedButton.icon(
                 onPressed: _loadBackdrop,
@@ -174,152 +182,231 @@ class _BackdropViewportState extends ConsumerState<BackdropViewport> {
     return Focus(
       autofocus: true,
       onKeyEvent: (node, event) {
-        if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.space) {
-          setState(() => _spaceHeld = true);
+        // Track space for pan mode
+        if (event.logicalKey == LogicalKeyboardKey.space) {
+          final isDown = event is KeyDownEvent || event is KeyRepeatEvent;
+          if (_spaceHeld != isDown) setState(() => _spaceHeld = isDown);
           return KeyEventResult.handled;
-        } else if (event is KeyUpEvent && event.logicalKey == LogicalKeyboardKey.space) {
-          setState(() => _spaceHeld = false);
+        }
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        final meta = HardwareKeyboard.instance.isMetaPressed;
+        // +/= and - for zoom
+        if (event.logicalKey == LogicalKeyboardKey.equal ||
+            event.logicalKey == LogicalKeyboardKey.numpadAdd) {
+          setState(() => _zoom = (_zoom * 1.2).clamp(0.5, 16.0));
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.minus ||
+            event.logicalKey == LogicalKeyboardKey.numpadSubtract) {
+          setState(() => _zoom = (_zoom / 1.2).clamp(0.5, 16.0));
+          return KeyEventResult.handled;
+        }
+        // Cmd+0 → reset zoom and pan
+        if (meta && event.logicalKey == LogicalKeyboardKey.digit0) {
+          setState(() {
+            _zoom = 2.0;
+            _panOffset = Offset.zero;
+          });
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
       },
-      child: LayoutBuilder(builder: (context, constraints) {
-        return Listener(
-          onPointerSignal: (signal) {
-            if (signal is PointerScrollEvent) {
-              setState(() {
-                if (signal.scrollDelta.dy > 0) {
-                  _zoom = (_zoom / 1.2).clamp(0.5, 16.0);
-                } else {
-                  _zoom = (_zoom * 1.2).clamp(0.5, 16.0);
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return Listener(
+            onPointerSignal: (signal) {
+              if (signal is PointerScaleEvent) {
+                // Pinch-to-zoom on trackpad
+                _pinchAccum += (signal.scale - 1.0);
+                if (_pinchAccum.abs() > 0.1) {
+                  setState(() {
+                    if (_pinchAccum > 0) {
+                      _zoom = (_zoom * 1.2).clamp(0.5, 16.0);
+                    } else {
+                      _zoom = (_zoom / 1.2).clamp(0.5, 16.0);
+                    }
+                  });
+                  _pinchAccum = 0.0;
                 }
-              });
-            }
-          },
-          child: GestureDetector(
-            onPanStart: (details) {
-              if (_spaceHeld) return; // pan mode handled by onPanUpdate
-              final canvas = _toCanvasCoords(details.localPosition, constraints.biggest);
-              final hit = _hitTestZone(canvas, state);
-              if (hit != null) {
-                ref.read(backdropEditorProvider.notifier).selectZone(hit);
-                _draggingZone = hit;
-                _dragStart = canvas;
-              }
-            },
-            onPanUpdate: (details) {
-              if (_spaceHeld) {
-                setState(() => _panOffset += details.delta);
                 return;
               }
-              if (_draggingZone != null && _dragStart != null) {
-                final canvas = _toCanvasCoords(details.localPosition, constraints.biggest);
-                final dx = (canvas.dx - _dragStart!.dx).round();
-                final dy = (canvas.dy - _dragStart!.dy).round();
-                final zone = state.zones[_draggingZone!];
-                ref.read(backdropEditorProvider.notifier).updateZone(
-                  _draggingZone!,
-                  zone.copyWith(x: zone.x + dx, y: zone.y + dy),
-                );
-                _dragStart = canvas;
+              if (signal is PointerScrollEvent) {
+                if (HardwareKeyboard.instance.isMetaPressed) {
+                  // Cmd + scroll → zoom
+                  setState(() {
+                    if (signal.scrollDelta.dy > 0) {
+                      _zoom = (_zoom / 1.2).clamp(0.5, 16.0);
+                    } else {
+                      _zoom = (_zoom * 1.2).clamp(0.5, 16.0);
+                    }
+                  });
+                } else {
+                  // Scroll → pan
+                  setState(() {
+                    _panOffset -= signal.scrollDelta;
+                  });
+                }
               }
             },
-            onPanEnd: (_) {
-              _draggingZone = null;
-              _dragStart = null;
-            },
-            child: Container(
-              color: StudioTheme.canvasBg,
-              child: Stack(
-                children: [
-                  // Centered image + zone overlay
-                  Center(
-                    child: Transform.translate(
-                      offset: _panOffset,
-                      child: Transform.scale(
-                        scale: _zoom,
-                        filterQuality: FilterQuality.none,
-                        child: Stack(
-                          children: [
-                            // Base image
-                            Image.memory(
-                              state.isPlaying && state.animatedPreview != null
-                                  ? state.animatedPreview!
-                                  : state.staticPreview!,
-                              filterQuality: FilterQuality.none,
-                              fit: BoxFit.none,
-                              gaplessPlayback: true,
-                            ),
-                            // Zone overlays
-                            if (state.zones.isNotEmpty)
-                              Positioned.fill(
-                                child: CustomPaint(
-                                  painter: _BackdropPainter(
-                                    zones: state.zones,
-                                    selectedZone: state.selectedZoneIndex,
-                                  ),
+            child: MouseRegion(
+              cursor: _spaceHeld
+                  ? SystemMouseCursors.grab
+                  : SystemMouseCursors.basic,
+              child: GestureDetector(
+                onPanStart: (details) {
+                  if (_spaceHeld) return; // pan mode handled by onPanUpdate
+                  final canvas = _toCanvasCoords(
+                    details.localPosition,
+                    constraints.biggest,
+                  );
+                  final hit = _hitTestZone(canvas, state);
+                  if (hit != null) {
+                    ref.read(backdropEditorProvider.notifier).selectZone(hit);
+                    _draggingZone = hit;
+                    _dragStart = canvas;
+                  }
+                },
+                onPanUpdate: (details) {
+                  if (_spaceHeld) {
+                    setState(() => _panOffset += details.delta);
+                    return;
+                  }
+                  if (_draggingZone != null && _dragStart != null) {
+                    final canvas = _toCanvasCoords(
+                      details.localPosition,
+                      constraints.biggest,
+                    );
+                    final dx = (canvas.dx - _dragStart!.dx).round();
+                    final dy = (canvas.dy - _dragStart!.dy).round();
+                    final zone = state.zones[_draggingZone!];
+                    ref
+                        .read(backdropEditorProvider.notifier)
+                        .updateZone(
+                          _draggingZone!,
+                          zone.copyWith(x: zone.x + dx, y: zone.y + dy),
+                        );
+                    _dragStart = canvas;
+                  }
+                },
+                onPanEnd: (_) {
+                  _draggingZone = null;
+                  _dragStart = null;
+                },
+                child: Container(
+                  color: StudioTheme.canvasBg,
+                  child: Stack(
+                    children: [
+                      // Centered image + zone overlay
+                      Center(
+                        child: Transform.translate(
+                          offset: _panOffset,
+                          child: Transform.scale(
+                            scale: _zoom,
+                            filterQuality: FilterQuality.none,
+                            child: Stack(
+                              children: [
+                                // Base image
+                                Image.memory(
+                                  state.isPlaying &&
+                                          state.animatedPreview != null
+                                      ? state.animatedPreview!
+                                      : state.staticPreview!,
+                                  filterQuality: FilterQuality.none,
+                                  fit: BoxFit.none,
+                                  gaplessPlayback: true,
                                 ),
-                              ),
-                          ],
+                                // Zone overlays
+                                if (state.zones.isNotEmpty)
+                                  Positioned.fill(
+                                    child: CustomPaint(
+                                      painter: _BackdropPainter(
+                                        zones: state.zones,
+                                        selectedZone: state.selectedZoneIndex,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ),
 
-                  // Animation controls bar at bottom
-                  Positioned(
-                    left: 0, right: 0, bottom: 0,
-                    child: _AnimationBar(
-                      isPlaying: state.isPlaying,
-                      tick: state.currentTick,
-                      totalFrames: state.totalFrames,
-                      onPlay: _startAnimation,
-                      onPause: _stopAnimation,
-                      onSeek: (t) => ref.read(backdropEditorProvider.notifier).setTick(t),
-                      onExport: () async {
-                        if (state.paxPath == null || state.backdropName == null) return;
-                        final backend = ref.read(backendProvider.notifier).backend;
-                        final resp = await backend.backdropRender(
-                          filePath: state.paxPath!,
-                          name: state.backdropName!,
-                          frames: state.totalFrames,
-                          scale: 4,
-                        );
-                        if (resp['ok'] == true && resp['gif_base64'] is String) {
-                          final dir = await FilePicker.platform.getDirectoryPath(
-                            dialogTitle: 'Save Animated GIF',
-                          );
-                          if (dir != null) {
-                            final bytes = base64Decode(resp['gif_base64'] as String);
-                            final path = '$dir/${state.backdropName}_animated.gif';
-                            await io.File(path).writeAsBytes(bytes);
-                          }
-                        }
-                      },
-                    ),
-                  ),
+                      // Animation controls bar at bottom
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: _AnimationBar(
+                          isPlaying: state.isPlaying,
+                          tick: state.currentTick,
+                          totalFrames: state.totalFrames,
+                          onPlay: _startAnimation,
+                          onPause: _stopAnimation,
+                          onSeek: (t) => ref
+                              .read(backdropEditorProvider.notifier)
+                              .setTick(t),
+                          onExport: () async {
+                            if (state.paxPath == null ||
+                                state.backdropName == null)
+                              return;
+                            final backend = ref
+                                .read(backendProvider.notifier)
+                                .backend;
+                            final resp = await backend.backdropRender(
+                              filePath: state.paxPath!,
+                              name: state.backdropName!,
+                              frames: state.totalFrames,
+                              scale: 4,
+                            );
+                            if (resp['ok'] == true &&
+                                resp['gif_base64'] is String) {
+                              final dir = await FilePicker.platform
+                                  .getDirectoryPath(
+                                    dialogTitle: 'Save Animated GIF',
+                                  );
+                              if (dir != null) {
+                                final bytes = base64Decode(
+                                  resp['gif_base64'] as String,
+                                );
+                                final path =
+                                    '$dir/${state.backdropName}_animated.gif';
+                                await io.File(path).writeAsBytes(bytes);
+                              }
+                            }
+                          },
+                        ),
+                      ),
 
-                  // Zoom indicator
-                  Positioned(
-                    right: 8, top: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(4),
+                      // Zoom indicator
+                      Positioned(
+                        right: 8,
+                        top: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '${_zoom.toStringAsFixed(1)}x',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ),
                       ),
-                      child: Text(
-                        '${_zoom.toStringAsFixed(1)}x',
-                        style: const TextStyle(color: Colors.white, fontSize: 10),
-                      ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
-          ),
-        );
-      }),
+          );
+        },
+      ),
     );
   }
 }
@@ -329,10 +416,7 @@ class _BackdropPainter extends CustomPainter {
   final List<ZoneState> zones;
   final int? selectedZone;
 
-  _BackdropPainter({
-    required this.zones,
-    this.selectedZone,
-  });
+  _BackdropPainter({required this.zones, this.selectedZone});
 
   static const _zoneColors = [
     Color(0x404CAF50), // green
@@ -352,7 +436,12 @@ class _BackdropPainter extends CustomPainter {
 
     for (var i = 0; i < zones.length; i++) {
       final z = zones[i];
-      final rect = Rect.fromLTWH(z.x.toDouble(), z.y.toDouble(), z.w.toDouble(), z.h.toDouble());
+      final rect = Rect.fromLTWH(
+        z.x.toDouble(),
+        z.y.toDouble(),
+        z.w.toDouble(),
+        z.h.toDouble(),
+      );
       final color = _zoneColors[i % _zoneColors.length];
 
       // Fill

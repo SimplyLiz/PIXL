@@ -35,6 +35,8 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
   bool _shiftHeld = false;
   // Selection drag
   (int, int)? _selectStart;
+  // Pinch-to-zoom accumulator
+  double _pinchAccum = 0.0;
 
   (int, int)? _pixelFromLocal(Offset localPos, CanvasState cs) {
     final ps = cs.zoomLevel;
@@ -52,7 +54,11 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
     return (x, y);
   }
 
-  void _handlePointerDown(PointerDownEvent event, CanvasState cs, PixlPalette palette) {
+  void _handlePointerDown(
+    PointerDownEvent event,
+    CanvasState cs,
+    PixlPalette palette,
+  ) {
     final pixel = _pixelFromLocal(event.localPosition, cs);
     if (pixel == null) return;
     final (x, y) = pixel;
@@ -94,11 +100,17 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
     }
   }
 
-  void _handlePointerMove(PointerMoveEvent event, CanvasState cs, PixlPalette palette) {
+  void _handlePointerMove(
+    PointerMoveEvent event,
+    CanvasState cs,
+    PixlPalette palette,
+  ) {
     final pixel = _pixelFromLocal(event.localPosition, cs);
     final notifier = ref.read(canvasProvider.notifier);
 
-    final newHover = pixel != null ? Offset(pixel.$1.toDouble(), pixel.$2.toDouble()) : null;
+    final newHover = pixel != null
+        ? Offset(pixel.$1.toDouble(), pixel.$2.toDouble())
+        : null;
     if (_hoverPixel != newHover) {
       setState(() => _hoverPixel = newHover);
     }
@@ -128,7 +140,10 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
             final w = (x - sx).abs() + 1;
             final h = (y - sy).abs() + 1;
             ref.read(selectionProvider.notifier).state = SelectionState(
-              x: minX, y: minY, width: w, height: h,
+              x: minX,
+              y: minY,
+              width: w,
+              height: h,
             );
           }
           break;
@@ -138,7 +153,11 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
     }
   }
 
-  void _handlePointerUp(PointerUpEvent event, CanvasState cs, PixlPalette palette) {
+  void _handlePointerUp(
+    PointerUpEvent event,
+    CanvasState cs,
+    PixlPalette palette,
+  ) {
     final notifier = ref.read(canvasProvider.notifier);
 
     // Commit line/rect on mouse up
@@ -169,7 +188,9 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
 
   void _handlePointerHover(PointerHoverEvent event, CanvasState cs) {
     final pixel = _pixelFromLocal(event.localPosition, cs);
-    final newHover = pixel != null ? Offset(pixel.$1.toDouble(), pixel.$2.toDouble()) : null;
+    final newHover = pixel != null
+        ? Offset(pixel.$1.toDouble(), pixel.$2.toDouble())
+        : null;
     if (_hoverPixel == newHover) return;
     setState(() => _hoverPixel = newHover);
     // Update hover provider for status bar display
@@ -182,12 +203,32 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
   }
 
   void _handleScroll(PointerSignalEvent event, CanvasState cs) {
+    if (event is PointerScaleEvent) {
+      // Pinch-to-zoom on trackpad
+      _pinchAccum += (event.scale - 1.0);
+      if (_pinchAccum > 0.1) {
+        ref.read(canvasProvider.notifier).zoomIn();
+        _pinchAccum = 0.0;
+      } else if (_pinchAccum < -0.1) {
+        ref.read(canvasProvider.notifier).zoomOut();
+        _pinchAccum = 0.0;
+      }
+      return;
+    }
     if (event is PointerScrollEvent) {
-      final notifier = ref.read(canvasProvider.notifier);
-      if (event.scrollDelta.dy > 0) {
-        notifier.zoomOut();
+      if (HardwareKeyboard.instance.isMetaPressed) {
+        // Cmd + scroll → zoom
+        final notifier = ref.read(canvasProvider.notifier);
+        if (event.scrollDelta.dy > 0) {
+          notifier.zoomOut();
+        } else {
+          notifier.zoomIn();
+        }
       } else {
-        notifier.zoomIn();
+        // Scroll → pan
+        setState(() {
+          _panOffset -= event.scrollDelta;
+        });
       }
     }
   }
@@ -221,7 +262,8 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
             if (event.logicalKey == LogicalKeyboardKey.shiftLeft ||
                 event.logicalKey == LogicalKeyboardKey.shiftRight) {
               _shiftHeld = event is KeyDownEvent || event is KeyRepeatEvent;
-              return KeyEventResult.ignored; // let other handlers also see shift
+              return KeyEventResult
+                  .ignored; // let other handlers also see shift
             }
 
             if (event is! KeyDownEvent) return KeyEventResult.ignored;
@@ -275,7 +317,12 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
             if (meta && event.logicalKey == LogicalKeyboardKey.keyC) {
               final sel = ref.read(selectionProvider);
               if (sel.hasSelection) {
-                final data = notifier.copyRegion(sel.x, sel.y, sel.width, sel.height);
+                final data = notifier.copyRegion(
+                  sel.x,
+                  sel.y,
+                  sel.width,
+                  sel.height,
+                );
                 ref.read(selectionProvider.notifier).state = sel.copyWith(
                   clipboard: data,
                   clipboardWidth: sel.width,
@@ -287,14 +334,25 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
             if (meta && event.logicalKey == LogicalKeyboardKey.keyV) {
               final sel = ref.read(selectionProvider);
               if (sel.hasClipboard) {
-                notifier.pasteRegion(sel.x, sel.y, sel.clipboard!, sel.clipboardWidth, sel.clipboardHeight);
+                notifier.pasteRegion(
+                  sel.x,
+                  sel.y,
+                  sel.clipboard!,
+                  sel.clipboardWidth,
+                  sel.clipboardHeight,
+                );
               }
               return KeyEventResult.handled;
             }
             if (meta && event.logicalKey == LogicalKeyboardKey.keyX) {
               final sel = ref.read(selectionProvider);
               if (sel.hasSelection) {
-                final data = notifier.copyRegion(sel.x, sel.y, sel.width, sel.height);
+                final data = notifier.copyRegion(
+                  sel.x,
+                  sel.y,
+                  sel.width,
+                  sel.height,
+                );
                 ref.read(selectionProvider.notifier).state = sel.copyWith(
                   clipboard: data,
                   clipboardWidth: sel.width,
@@ -313,7 +371,8 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
               return KeyEventResult.handled;
             }
             if (event.logicalKey == LogicalKeyboardKey.escape) {
-              ref.read(selectionProvider.notifier).state = const SelectionState();
+              ref.read(selectionProvider.notifier).state =
+                  const SelectionState();
               return KeyEventResult.handled;
             }
             // H = toggle grid
@@ -337,19 +396,29 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
               notifier.zoomOut();
               return KeyEventResult.handled;
             }
+            // Cmd+0 → reset zoom and pan
+            if (meta && event.logicalKey == LogicalKeyboardKey.digit0) {
+              notifier.resetZoom();
+              setState(() => _panOffset = Offset.zero);
+              return KeyEventResult.handled;
+            }
             return KeyEventResult.ignored;
           },
           child: Listener(
             onPointerSignal: (event) => _handleScroll(event, cs),
             child: MouseRegion(
-              cursor: _spaceHeld ? SystemMouseCursors.grab : _cursorForTool(cs.activeTool),
+              cursor: _spaceHeld
+                  ? SystemMouseCursors.grab
+                  : _cursorForTool(cs.activeTool),
               onHover: (event) => _handlePointerHover(event, cs),
               onExit: (_) {
                 setState(() => _hoverPixel = null);
                 ref.read(hoverProvider.notifier).clear();
               },
               child: Listener(
-                onPointerDown: _isPanMode(cs) ? null : (event) => _handlePointerDown(event, cs, palette),
+                onPointerDown: _isPanMode(cs)
+                    ? null
+                    : (event) => _handlePointerDown(event, cs, palette),
                 onPointerMove: (event) {
                   if (_isPanMode(cs) && event.buttons != 0) {
                     // Pan mode: drag to pan
@@ -375,8 +444,14 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
                             pixelSize: ps,
                             hoverPixel: _hoverPixel,
                             blueprintLandmarks: ref.watch(blueprintProvider),
-                            shapePreview: _shapeStart != null && _shapeEnd != null
-                                ? (cs.activeTool, _shapeStart!, _shapeEnd!, _shiftHeld)
+                            shapePreview:
+                                _shapeStart != null && _shapeEnd != null
+                                ? (
+                                    cs.activeTool,
+                                    _shapeStart!,
+                                    _shapeEnd!,
+                                    _shiftHeld,
+                                  )
                                 : null,
                             selection: ref.watch(selectionProvider),
                           ),

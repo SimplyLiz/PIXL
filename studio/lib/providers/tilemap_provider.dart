@@ -31,9 +31,11 @@ class TilemapNotifier extends StateNotifier<TilemapState> {
   void undo() {
     if (_undoStack.isEmpty) return;
     // Save current state to redo
-    _redoStack.add(TilemapSnapshot(
-      cells: state.cells.map((row) => List<String?>.from(row)).toList(),
-    ));
+    _redoStack.add(
+      TilemapSnapshot(
+        cells: state.cells.map((row) => List<String?>.from(row)).toList(),
+      ),
+    );
     final snap = _undoStack.removeLast();
     state = state.copyWith(
       cells: snap.cells,
@@ -44,9 +46,11 @@ class TilemapNotifier extends StateNotifier<TilemapState> {
 
   void redo() {
     if (_redoStack.isEmpty) return;
-    _undoStack.add(TilemapSnapshot(
-      cells: state.cells.map((row) => List<String?>.from(row)).toList(),
-    ));
+    _undoStack.add(
+      TilemapSnapshot(
+        cells: state.cells.map((row) => List<String?>.from(row)).toList(),
+      ),
+    );
     final snap = _redoStack.removeLast();
     state = state.copyWith(
       cells: snap.cells,
@@ -72,7 +76,8 @@ class TilemapNotifier extends StateNotifier<TilemapState> {
   // ── Stamp / Erase (stroke-based) ────────────────
 
   void beginStamp(int col, int row) {
-    if (col < 0 || col >= state.gridWidth || row < 0 || row >= state.gridHeight) return;
+    if (col < 0 || col >= state.gridWidth || row < 0 || row >= state.gridHeight)
+      return;
     _pushSnapshot();
     _inStroke = true;
     _setCell(col, row);
@@ -81,7 +86,8 @@ class TilemapNotifier extends StateNotifier<TilemapState> {
 
   void continueStamp(int col, int row) {
     if (!_inStroke) return;
-    if (col < 0 || col >= state.gridWidth || row < 0 || row >= state.gridHeight) return;
+    if (col < 0 || col >= state.gridWidth || row < 0 || row >= state.gridHeight)
+      return;
     _setCell(col, row);
     _notifyChange();
   }
@@ -104,15 +110,14 @@ class TilemapNotifier extends StateNotifier<TilemapState> {
   }
 
   void _notifyChange() {
-    state = state.copyWith(
-      cells: List.from(state.cells),
-    );
+    state = state.copyWith(cells: List.from(state.cells));
   }
 
   // ── Bucket Fill ──────────────────────────────────
 
   void bucketFill(int col, int row) {
-    if (col < 0 || col >= state.gridWidth || row < 0 || row >= state.gridHeight) return;
+    if (col < 0 || col >= state.gridWidth || row < 0 || row >= state.gridHeight)
+      return;
     _pushSnapshot();
 
     final fillWith = state.activeTool == TilemapTool.eraser
@@ -129,7 +134,8 @@ class TilemapNotifier extends StateNotifier<TilemapState> {
       final (cx, cy) = stack.removeLast();
       final idx = cy * w + cx;
       if (visited.contains(idx)) continue;
-      if (cx < 0 || cx >= state.gridWidth || cy < 0 || cy >= state.gridHeight) continue;
+      if (cx < 0 || cx >= state.gridWidth || cy < 0 || cy >= state.gridHeight)
+        continue;
       if (state.cells[cy][cx] != target) continue;
 
       visited.add(idx);
@@ -165,7 +171,11 @@ class TilemapNotifier extends StateNotifier<TilemapState> {
         return null;
       });
     });
-    state = state.copyWith(gridWidth: width, gridHeight: height, cells: newCells);
+    state = state.copyWith(
+      gridWidth: width,
+      gridHeight: height,
+      cells: newCells,
+    );
   }
 
   void clear() {
@@ -198,6 +208,10 @@ class TilemapNotifier extends StateNotifier<TilemapState> {
   void zoomOut() {
     final idx = _zoomLevels.lastIndexWhere((z) => z < state.zoomLevel);
     if (idx >= 0) state = state.copyWith(zoomLevel: _zoomLevels[idx]);
+  }
+
+  void resetZoom() {
+    state = state.copyWith(zoomLevel: _zoomLevels[1]); // default 2.0
   }
 
   void toggleGrid() {

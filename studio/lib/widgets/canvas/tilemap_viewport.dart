@@ -24,9 +24,10 @@ class _TilemapViewportState extends ConsumerState<TilemapViewport> {
   (int, int)? _hoverTile;
   double _centerX = 0;
   double _centerY = 0;
-  bool _isPanMode = false;
+  bool _spaceHeld = false;
   Offset _panOffset = Offset.zero;
   Offset _panStart = Offset.zero;
+  double _pinchAccum = 0.0;
 
   @override
   void initState() {
@@ -51,12 +52,18 @@ class _TilemapViewportState extends ConsumerState<TilemapViewport> {
 
   Future<void> _ensureTileImages(List<TileInfo> tiles) async {
     for (final tile in tiles) {
-      if (_tileImages.containsKey(tile.name) || _loadingTiles.contains(tile.name)) continue;
-      final bytes = tile.previewBase64 != null ? base64Decode(tile.previewBase64!) : null;
+      if (_tileImages.containsKey(tile.name) ||
+          _loadingTiles.contains(tile.name))
+        continue;
+      final bytes = tile.previewBase64 != null
+          ? base64Decode(tile.previewBase64!)
+          : null;
       if (bytes == null) {
         // Fetch from backend
         _loadingTiles.add(tile.name);
-        final b64 = await ref.read(backendProvider.notifier).renderTile(tile.name, scale: 1);
+        final b64 = await ref
+            .read(backendProvider.notifier)
+            .renderTile(tile.name, scale: 1);
         _loadingTiles.remove(tile.name);
         if (b64 != null && mounted) {
           final decoded = await _decodeImage(base64Decode(b64));
@@ -93,14 +100,15 @@ class _TilemapViewportState extends ConsumerState<TilemapViewport> {
     final dy = localPos.dy - _centerY - _panOffset.dy;
     final col = (dx / cellSize).floor();
     final row = (dy / cellSize).floor();
-    if (col < 0 || col >= ts.gridWidth || row < 0 || row >= ts.gridHeight) return null;
+    if (col < 0 || col >= ts.gridWidth || row < 0 || row >= ts.gridHeight)
+      return null;
     return (col, row);
   }
 
   // ── Pointer handlers ─────────────────────────────
 
   void _handlePointerDown(PointerDownEvent event) {
-    if (_isPanMode) {
+    if (_spaceHeld) {
       _panStart = event.localPosition - _panOffset;
       return;
     }
@@ -125,7 +133,7 @@ class _TilemapViewportState extends ConsumerState<TilemapViewport> {
   }
 
   void _handlePointerMove(PointerMoveEvent event) {
-    if (_isPanMode && event.buttons != 0) {
+    if (_spaceHeld && event.buttons != 0) {
       setState(() => _panOffset = event.localPosition - _panStart);
       return;
     }
@@ -145,18 +153,38 @@ class _TilemapViewportState extends ConsumerState<TilemapViewport> {
   }
 
   void _handleScroll(PointerSignalEvent event) {
+    if (event is PointerScaleEvent) {
+      // Pinch-to-zoom on trackpad
+      _pinchAccum += (event.scale - 1.0);
+      if (_pinchAccum > 0.1) {
+        ref.read(tilemapProvider.notifier).zoomIn();
+        _pinchAccum = 0.0;
+      } else if (_pinchAccum < -0.1) {
+        ref.read(tilemapProvider.notifier).zoomOut();
+        _pinchAccum = 0.0;
+      }
+      return;
+    }
     if (event is PointerScrollEvent) {
-      final notifier = ref.read(tilemapProvider.notifier);
-      if (event.scrollDelta.dy < 0) {
-        notifier.zoomIn();
+      if (HardwareKeyboard.instance.isMetaPressed) {
+        // Cmd + scroll → zoom
+        final notifier = ref.read(tilemapProvider.notifier);
+        if (event.scrollDelta.dy < 0) {
+          notifier.zoomIn();
+        } else {
+          notifier.zoomOut();
+        }
       } else {
-        notifier.zoomOut();
+        // Scroll → pan
+        setState(() {
+          _panOffset -= event.scrollDelta;
+        });
       }
     }
   }
 
   MouseCursor _cursorForTool(TilemapTool tool) {
-    if (_isPanMode) return SystemMouseCursors.grab;
+    if (_spaceHeld) return SystemMouseCursors.grab;
     return switch (tool) {
       TilemapTool.stamp => SystemMouseCursors.precise,
       TilemapTool.eraser => SystemMouseCursors.precise,
@@ -180,8 +208,15 @@ class _TilemapViewportState extends ConsumerState<TilemapViewport> {
         return Focus(
           autofocus: true,
           onKeyEvent: (node, event) {
+            // Track space for pan mode
+            if (event.logicalKey == LogicalKeyboardKey.space) {
+              final isDown = event is KeyDownEvent || event is KeyRepeatEvent;
+              if (_spaceHeld != isDown) setState(() => _spaceHeld = isDown);
+              return KeyEventResult.handled;
+            }
             if (event is! KeyDownEvent) return KeyEventResult.ignored;
             final notifier = ref.read(tilemapProvider.notifier);
+            final meta = HardwareKeyboard.instance.isMetaPressed;
             switch (event.logicalKey) {
               case LogicalKeyboardKey.keyT:
                 notifier.setTool(TilemapTool.stamp);
@@ -198,11 +233,8 @@ class _TilemapViewportState extends ConsumerState<TilemapViewport> {
               case LogicalKeyboardKey.keyH:
                 notifier.toggleGrid();
                 return KeyEventResult.handled;
-              case LogicalKeyboardKey.space:
-                if (!_isPanMode) setState(() => _isPanMode = true);
-                return KeyEventResult.handled;
               case LogicalKeyboardKey.keyZ:
-                if (HardwareKeyboard.instance.isMetaPressed) {
+                if (meta) {
                   if (HardwareKeyboard.instance.isShiftPressed) {
                     notifier.redo();
                   } else {
@@ -211,38 +243,47 @@ class _TilemapViewportState extends ConsumerState<TilemapViewport> {
                   return KeyEventResult.handled;
                 }
                 return KeyEventResult.ignored;
+              // Zoom shortcuts
+              case LogicalKeyboardKey.equal:
+              case LogicalKeyboardKey.numpadAdd:
+                notifier.zoomIn();
+                return KeyEventResult.handled;
+              case LogicalKeyboardKey.minus:
+              case LogicalKeyboardKey.numpadSubtract:
+                notifier.zoomOut();
+                return KeyEventResult.handled;
+              // Cmd+0 → reset zoom and pan
+              case LogicalKeyboardKey.digit0:
+                if (meta) {
+                  notifier.resetZoom();
+                  setState(() => _panOffset = Offset.zero);
+                  return KeyEventResult.handled;
+                }
+                return KeyEventResult.ignored;
               default:
                 return KeyEventResult.ignored;
             }
           },
-          child: KeyboardListener(
-            focusNode: FocusNode(),
-            onKeyEvent: (event) {
-              if (event is KeyUpEvent && event.logicalKey == LogicalKeyboardKey.space) {
-                setState(() => _isPanMode = false);
-              }
-            },
-            child: Listener(
-              onPointerSignal: _handleScroll,
-              child: MouseRegion(
-                cursor: _cursorForTool(ts.activeTool),
-                onHover: (event) {
-                  final tile = _tileFromLocal(event.localPosition, ts);
-                  if (tile != _hoverTile) setState(() => _hoverTile = tile);
-                },
-                child: Listener(
-                  onPointerDown: _handlePointerDown,
-                  onPointerMove: _handlePointerMove,
-                  onPointerUp: _handlePointerUp,
-                  child: CustomPaint(
-                    size: Size(constraints.maxWidth, constraints.maxHeight),
-                    painter: _TilemapPainter(
-                      tilemapState: ts,
-                      tileImages: _tileImages,
-                      centerX: _centerX + _panOffset.dx,
-                      centerY: _centerY + _panOffset.dy,
-                      hoverTile: _hoverTile,
-                    ),
+          child: Listener(
+            onPointerSignal: _handleScroll,
+            child: MouseRegion(
+              cursor: _cursorForTool(ts.activeTool),
+              onHover: (event) {
+                final tile = _tileFromLocal(event.localPosition, ts);
+                if (tile != _hoverTile) setState(() => _hoverTile = tile);
+              },
+              child: Listener(
+                onPointerDown: _handlePointerDown,
+                onPointerMove: _handlePointerMove,
+                onPointerUp: _handlePointerUp,
+                child: CustomPaint(
+                  size: Size(constraints.maxWidth, constraints.maxHeight),
+                  painter: _TilemapPainter(
+                    tilemapState: ts,
+                    tileImages: _tileImages,
+                    centerX: _centerX + _panOffset.dx,
+                    centerY: _centerY + _panOffset.dy,
+                    hoverTile: _hoverTile,
                   ),
                 ),
               ),
@@ -292,13 +333,23 @@ class _TilemapPainter extends CustomPainter {
     // Draw cells
     for (var row = 0; row < h; row++) {
       for (var col = 0; col < w; col++) {
-        final rect = Rect.fromLTWH(col * cellSize, row * cellSize, cellSize, cellSize);
+        final rect = Rect.fromLTWH(
+          col * cellSize,
+          row * cellSize,
+          cellSize,
+          cellSize,
+        );
         final tileName = ts.cells[row][col];
 
         if (tileName != null && tileImages.containsKey(tileName)) {
           // Draw tile image scaled to cell
           final img = tileImages[tileName]!;
-          final src = Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble());
+          final src = Rect.fromLTWH(
+            0,
+            0,
+            img.width.toDouble(),
+            img.height.toDouble(),
+          );
           canvas.drawImageRect(img, src, rect, paint);
         } else {
           // Checkerboard for empty cells

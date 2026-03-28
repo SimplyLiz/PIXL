@@ -15,9 +15,13 @@ class CanvasNotifier extends StateNotifier<CanvasState> {
   // -- Snapshot / Undo / Redo --
 
   void _pushSnapshot() {
-    _undoStack.add(CanvasSnapshot(
-      layerPixels: state.layers.map((l) => List<Color?>.from(l.pixels)).toList(),
-    ));
+    _undoStack.add(
+      CanvasSnapshot(
+        layerPixels: state.layers
+            .map((l) => List<Color?>.from(l.pixels))
+            .toList(),
+      ),
+    );
     if (_undoStack.length > maxUndoSteps) {
       _undoStack.removeAt(0);
     }
@@ -27,18 +31,26 @@ class CanvasNotifier extends StateNotifier<CanvasState> {
   void undo() {
     if (_undoStack.isEmpty) return;
     // Save current for redo
-    _redoStack.add(CanvasSnapshot(
-      layerPixels: state.layers.map((l) => List<Color?>.from(l.pixels)).toList(),
-    ));
+    _redoStack.add(
+      CanvasSnapshot(
+        layerPixels: state.layers
+            .map((l) => List<Color?>.from(l.pixels))
+            .toList(),
+      ),
+    );
     final snapshot = _undoStack.removeLast();
     _restoreSnapshot(snapshot);
   }
 
   void redo() {
     if (_redoStack.isEmpty) return;
-    _undoStack.add(CanvasSnapshot(
-      layerPixels: state.layers.map((l) => List<Color?>.from(l.pixels)).toList(),
-    ));
+    _undoStack.add(
+      CanvasSnapshot(
+        layerPixels: state.layers
+            .map((l) => List<Color?>.from(l.pixels))
+            .toList(),
+      ),
+    );
     final snapshot = _redoStack.removeLast();
     _restoreSnapshot(snapshot);
   }
@@ -195,6 +207,10 @@ class CanvasNotifier extends StateNotifier<CanvasState> {
   }
 
   static const _zoomLevels = [2.0, 4.0, 8.0, 14.0, 20.0, 32.0];
+
+  void resetZoom() {
+    state = state.copyWith(zoomLevel: 8.0); // default mid-range
+  }
 
   void setZoom(double zoom) {
     // Snap to nearest discrete zoom level
@@ -401,15 +417,28 @@ class CanvasNotifier extends StateNotifier<CanvasState> {
       _setPixelWithSymmetry(x0, y0, color);
       if (x0 == x1 && y0 == y1) break;
       final e2 = 2 * err;
-      if (e2 >= dy) { err += dy; x0 += sx; }
-      if (e2 <= dx) { err += dx; y0 += sy; }
+      if (e2 >= dy) {
+        err += dy;
+        x0 += sx;
+      }
+      if (e2 <= dx) {
+        err += dx;
+        y0 += sy;
+      }
     }
   }
 
   // ── Rectangle Tool ───────────────────────────────
 
   /// Draw a rectangle outline (or filled if [filled] is true).
-  void drawRect(int x0, int y0, int x1, int y1, Color? color, {bool filled = false}) {
+  void drawRect(
+    int x0,
+    int y0,
+    int x1,
+    int y1,
+    Color? color, {
+    bool filled = false,
+  }) {
     _pushSnapshot();
     final minX = x0 < x1 ? x0 : x1;
     final maxX = x0 > x1 ? x0 : x1;
@@ -496,10 +525,14 @@ final canvasProvider = StateNotifierProvider<CanvasNotifier, CanvasState>(
 );
 
 /// Blueprint landmarks overlay toggle + data.
-final blueprintProvider = StateProvider<List<Map<String, dynamic>>?>((ref) => null);
+final blueprintProvider = StateProvider<List<Map<String, dynamic>>?>(
+  (ref) => null,
+);
 
 /// Selection state for copy/paste.
-final selectionProvider = StateProvider<SelectionState>((ref) => const SelectionState());
+final selectionProvider = StateProvider<SelectionState>(
+  (ref) => const SelectionState(),
+);
 
 /// Reference image overlay (dart:ui.Image stored externally, path tracked here).
 final referenceImagePathProvider = StateProvider<String?>((ref) => null);
