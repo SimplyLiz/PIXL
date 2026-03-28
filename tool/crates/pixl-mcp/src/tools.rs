@@ -213,6 +213,16 @@ pub fn tool_definitions() -> Vec<Tool> {
              as the tile. Returns updated preview PNG + new structural critique. \
              Use this after pixl_critique_tile identifies specific row/region issues.",
         ),
+        tool(
+            "pixl_upscale_tile",
+            "Upscale a tile's character grid by an integer factor (nearest-neighbor). \
+             Args: {name, factor? (default 2), new_name? (default: name_upscaled)}. \
+             Creates a new tile in the session with the upscaled grid. \
+             A factor of 2 turns 8x8 → 16x16 (each pixel becomes a 2x2 block). \
+             Use this as step 2 of the progressive resolution workflow: \
+             (1) generate at 8x8, (2) upscale to 16x16, (3) refine detail with pixl_refine_tile. \
+             Returns preview PNG of the upscaled result for visual inspection.",
+        ),
         // ── Local AI Generation ──
         tool(
             "pixl_generate_tile",

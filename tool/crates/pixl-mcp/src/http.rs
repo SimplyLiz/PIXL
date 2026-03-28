@@ -68,6 +68,7 @@ pub fn create_router(state: McpState, inference_config: Option<InferenceConfig>)
         .route("/api/composite/check-seams", get(check_composite_seams))
         .route("/api/tile/critique", post(critique_tile))
         .route("/api/tile/refine", post(refine_tile))
+        .route("/api/tile/upscale", post(upscale_tile))
         .route("/api/tool", post(generic_tool_call))
         .with_state(shared)
 }
@@ -319,6 +320,10 @@ async fn check_composite_seams(State(state): State<SharedState>) -> Json<Value> 
         "pixl_check_seams",
         &Value::Null,
     ))
+}
+
+async fn upscale_tile(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
+    Json(handlers::handle_tool(&state.mcp, "pixl_upscale_tile", &args))
 }
 
 async fn critique_tile(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {

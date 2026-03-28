@@ -150,6 +150,24 @@ enum Commands {
         tile: String,
     },
 
+    /// Upscale a tile grid (nearest-neighbor) for progressive resolution workflow
+    Upscale {
+        /// Path to the .pax file
+        file: PathBuf,
+
+        /// Tile name to upscale
+        #[arg(long)]
+        tile: String,
+
+        /// Scale factor (2 = 8x8→16x16, 4 = 8x8→32x32)
+        #[arg(long, default_value = "2")]
+        factor: u32,
+
+        /// Output PNG path (rendered preview)
+        #[arg(long, short, alias = "output")]
+        out: PathBuf,
+    },
+
     /// Show anatomy blueprint for a canvas size
     Blueprint {
         /// Canvas size (e.g., "32x48")
@@ -598,6 +616,14 @@ fn main() {
         }
         Commands::Critique { file, tile } => {
             cmd_critique(&file, &tile);
+        }
+        Commands::Upscale {
+            file,
+            tile,
+            factor,
+            out,
+        } => {
+            cmd_upscale(&file, &tile, factor, &out);
         }
         Commands::Blueprint { size, model } => {
             cmd_blueprint(&size, &model);
@@ -1926,6 +1952,75 @@ fn cmd_render_composite(
         scale,
         out.display()
     );
+}
+
+fn cmd_upscale(file: &PathBuf, tile_name: &str, factor: u32, out: &PathBuf) {
+    let (pax_file, palettes) = load_pax(file);
+
+    let tile_raw = match pax_file.tile.get(tile_name) {
+        Some(t) => t,
+        None => {
+            eprintln!("error: tile '{}' not found", tile_name);
+            process::exit(1);
+        }
+    };
+
+    let palette = match palettes.get(&tile_raw.palette) {
+        Some(p) => p,
+        None => {
+            eprintln!("error: palette '{}' not found", tile_raw.palette);
+            process::exit(1);
+        }
+    };
+
+    let empty_stamps = std::collections::HashMap::new();
+    let (grid, w, h) = match pixl_core::resolve::resolve_tile_grid(
+        tile_name,
+        &pax_file.tile,
+        &palettes,
+        &empty_stamps,
+    ) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("error: {}", e);
+            process::exit(1);
+        }
+    };
+
+    let (upscaled, grid_str, new_w, new_h) = pixl_core::upscale::upscale_tile_grid(&grid, factor);
+
+    // Render
+    let img = pixl_render::renderer::render_grid(&upscaled, palette, 4);
+    ensure_parent_dir(out);
+    if let Err(e) = img.save(out) {
+        eprintln!("error: cannot write {}: {}", out.display(), e);
+        process::exit(1);
+    }
+
+    println!(
+        "upscaled '{}' {}x{} → {}x{} (factor {}) -> {}",
+        tile_name, w, h, new_w, new_h, factor, out.display()
+    );
+
+    // Print the upscaled grid for copy-paste into a .pax file
+    println!("\nUpscaled grid ({new_w}x{new_h}):");
+    println!("'''");
+    println!("{}", grid_str);
+    println!("'''");
+
+    // Run critique on upscaled result
+    let report = pixl_core::structural::analyze(&upscaled, palette, '.');
+    if !report.issues.is_empty() {
+        println!();
+        for issue in &report.issues {
+            let prefix = match issue.severity {
+                pixl_core::structural::Severity::Error => "ERROR",
+                pixl_core::structural::Severity::Warning => "WARN",
+                pixl_core::structural::Severity::Info => "INFO",
+            };
+            println!("  [{}] {}", prefix, issue.message);
+        }
+    }
 }
 
 fn cmd_critique(file: &PathBuf, tile_name: &str) {

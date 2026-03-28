@@ -54,5 +54,6 @@ pub mod template;
 pub mod theme;
 pub mod tilemap;
 pub mod types;
+pub mod upscale;
 pub mod validate;
 pub mod vary;
