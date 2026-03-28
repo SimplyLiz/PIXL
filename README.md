@@ -18,6 +18,53 @@ composition. PIXL bridges this gap with three-tier encoding:
 With symmetry declarations, a 32x32 tile becomes a 16x16 grid (quad symmetry).
 The LLM works within its reliable accuracy zone. The tool does the rest.
 
+## Install
+
+### CLI (macOS, Linux, Windows)
+
+Download pre-built binaries from [GitHub Releases](https://github.com/SimplyLiz/PIXL/releases):
+
+```bash
+# macOS (Apple Silicon)
+curl -fsSL https://github.com/SimplyLiz/PIXL/releases/latest/download/pixl-v1.0.0-aarch64-apple-darwin.tar.gz | tar xz
+sudo mv pixl /usr/local/bin/
+
+# macOS (Intel)
+curl -fsSL https://github.com/SimplyLiz/PIXL/releases/latest/download/pixl-v1.0.0-x86_64-apple-darwin.tar.gz | tar xz
+sudo mv pixl /usr/local/bin/
+
+# Linux (x86_64)
+curl -fsSL https://github.com/SimplyLiz/PIXL/releases/latest/download/pixl-v1.0.0-x86_64-unknown-linux-gnu.tar.gz | tar xz
+sudo mv pixl /usr/local/bin/
+```
+
+Or build from source:
+
+```bash
+cd tool && cargo build --release
+# Binary at tool/target/release/pixl
+```
+
+### Studio (macOS)
+
+Install via [Homebrew](https://brew.sh):
+
+```bash
+brew install SimplyLiz/pixl/pixl-studio
+```
+
+Or download the `.dmg` from [GitHub Releases](https://github.com/SimplyLiz/PIXL/releases).
+
+### As a Rust library
+
+Add `pixl-core` to your project to parse, validate, and work with `.pax` files:
+
+```bash
+cargo add pixl-core
+```
+
+[![crates.io](https://img.shields.io/crates/v/pixl-core.svg)](https://crates.io/crates/pixl-core)
+
 ## Quick Start
 
 ```bash
@@ -140,18 +187,20 @@ Full format specification: [docs/specs/pax.md](docs/specs/pax.md)
 
 ## MCP Integration (Claude Code)
 
-Add to your Claude Code MCP config:
+Add to your Claude Code MCP config (`~/.claude/settings.json`):
 
 ```json
 {
   "mcpServers": {
     "pixl": {
-      "command": "/path/to/pixl",
+      "command": "pixl",
       "args": ["mcp", "--file", "examples/dungeon.pax"]
     }
   }
 }
 ```
+
+For Claude Desktop, add to `~/Library/Application Support/Claude/claude_desktop_config.json`.
 
 24 MCP tools available:
 - `pixl_session_start` — palette, theme, stamps, workflow
@@ -296,13 +345,32 @@ PIXL/
     └── gameboy.pax          4-color Game Boy
 ```
 
-## Building
+## Building from Source
 
 ```bash
 cd tool
 cargo build --release
 cargo test  # 136 tests
 ```
+
+### Studio from Source
+
+```bash
+cd studio
+flutter pub get
+flutter run -d macos
+```
+
+See [Getting Started](docs/user/getting-started.md) for detailed Studio setup.
+
+## Links
+
+- [Website](https://pixl.dev)
+- [GitHub Releases](https://github.com/SimplyLiz/PIXL/releases)
+- [pixl-core on crates.io](https://crates.io/crates/pixl-core)
+- [Homebrew Tap](https://github.com/SimplyLiz/homebrew-pixl)
+- [PAX Format Spec](docs/specs/pax.md)
+- [User Documentation](docs/user/)
 
 ## License
 

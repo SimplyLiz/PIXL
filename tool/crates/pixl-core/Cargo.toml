@@ -5,6 +5,10 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 description = "PIXL core format types, parser, and validator"
+readme = "README.md"
+repository.workspace = true
+keywords = ["pixel-art", "tileset", "pax", "gamedev", "llm"]
+categories = ["game-development", "parser-implementations"]
 
 [dependencies]
 serde = { workspace = true }

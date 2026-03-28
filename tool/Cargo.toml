@@ -17,7 +17,7 @@ version = "0.1.0"
 edition = "2024"
 authors = ["Lisa <lisa@tastehub.com>"]
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/tastehub/pixl"
+repository = "https://github.com/SimplyLiz/PIXL"
 description = "PIXL — LLM-native pixel art toolchain"
 
 [workspace.dependencies]
