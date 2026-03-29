@@ -84,6 +84,21 @@ pub fn tool_definitions() -> Vec<Tool> {
             "pixl_check_style",
             "Score a tile against the style latent. Args: {name}. Returns 0-1 score + assessment.",
         ),
+        tool(
+            "pixl_generate_wang",
+            "Generate a complete Wang tileset for terrain transitions. \
+             Args: {terrain_a, terrain_b, method?: 'dual_grid'|'blob_47', size?: 16, \
+             palette?, sym_a?: '+', sym_b?: '~', sym_border?: '#'}. \
+             Creates all transition tiles with correct edge classes for WFC. \
+             dual_grid = 15 tiles (simpler, top-down). blob_47 = 47 tiles (complex, walls/caves).",
+        ),
+        tool(
+            "pixl_rate_tile",
+            "Rate a tile aesthetically (1-5) on readability, appeal, and consistency. \
+             Args: {name, criteria?: ['readability','appeal','consistency']}. \
+             Returns per-axis scores, overall rating, and a suggested WFC weight. \
+             Use after generating multiple variants to rank them.",
+        ),
         // ── Blueprint ──
         tool(
             "pixl_get_blueprint",

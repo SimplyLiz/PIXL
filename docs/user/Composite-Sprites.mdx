@@ -1,0 +1,113 @@
+# Composite Sprites
+
+Build 32×32 characters from reusable 16×16 parts. Mix and match heads, bodies, and weapons without redrawing anything.
+
+## How it works
+
+<CompositeDiagram />
+
+Four small tiles (easy to draw well) assemble into one large character. The parts are reusable — a wizard and a knight can share the same boots.
+
+## Why composites?
+
+<Callout type="info">
+  Drawing a 32×32 character in a text grid means placing 1024 pixels correctly. But four 16×16 tiles? Each one is only 256 pixels — much easier to get right. And each part is reusable across characters.
+</Callout>
+
+## Defining a composite
+
+Create 16×16 tiles for each body part, then assemble:
+
+```toml
+[tile.knight_head_l]
+palette = "hero"
+size = "16x16"
+grid = '''
+...your head art...
+'''
+
+[composite.knight]
+size = "32x32"
+tile_size = "16x16"
+layout = """
+knight_head_l    knight_head_l!h
+knight_body_l    knight_body_r
+"""
+```
+
+The `!h` suffix flips the tile horizontally — draw one side of a face, flip it for the other. Perfect seam alignment guaranteed.
+
+## Variants
+
+Swap parts without redefining the whole character:
+
+```toml
+[composite.knight.variant.shield]
+slot = { "1_0" = "knight_shield_body" }
+```
+
+This replaces just the bottom-left tile. Everything else stays the same. Great for equipment changes, damage states, or color swaps.
+
+## Animation
+
+Walk cycles only change the tiles that move:
+
+```toml
+[composite.knight.anim.walk]
+fps = 8
+loop = true
+
+[[composite.knight.anim.walk.frame]]
+index = 1
+# base layout — no changes
+
+[[composite.knight.anim.walk.frame]]
+index = 2
+swap = { "1_0" = "knight_walk2_l", "1_1" = "knight_walk2_r" }
+```
+
+Frame 1 uses the base. Frame 2 only swaps the leg tiles. Head and torso stay put — no wasted data.
+
+## Per-tile offsets
+
+Add bounce effects without changing the tile art:
+
+```toml
+[composite.knight.offset]
+"0_0" = [0, -1]    # head bobs up 1px during walk
+```
+
+## Seam checking
+
+PIXL validates that adjacent tiles line up at the boundary:
+
+```bash
+pixl validate tileset.pax --check-seams
+```
+
+<Callout type="tip">
+  Use the symmetry shortcut for symmetric characters: `knight_head_l  knight_head_l!h` guarantees the left and right halves match perfectly at the seam.
+</Callout>
+
+## Rendering
+
+```bash
+pixl render-composite tileset.pax \
+  --composite knight \
+  --variant shield \
+  --scale 4 \
+  --out knight_shield.png
+```
+
+## Atlas packing
+
+Composites get their own atlas with every variant and animation frame as separate entries:
+
+```
+knight           → base layout
+knight:shield    → shield variant
+knight:walk:1    → walk frame 1
+knight:walk:2    → walk frame 2
+```
+
+Each has its own coordinates in the TexturePacker JSON metadata.

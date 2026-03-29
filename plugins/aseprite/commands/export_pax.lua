@@ -18,11 +18,11 @@ return function()
     label = "Tile name",
     text = app.fs.fileTitle(sprite.filename):gsub("[^%w_]", "_"),
   }
-  dlg:separator{ text = "Target PAX file" }
+  dlg:separator{ text = "Target file" }
   dlg:file{
     id = "pax_file",
-    label = "Append to .pax",
-    filetypes = { "pax" },
+    label = "Append to .pax / .paxl",
+    filetypes = { "pax", "paxl" },
     open = true,
   }
   dlg:label{ text = "Leave empty to print to console" }
@@ -59,12 +59,22 @@ return function()
   local h = sprite.height
   local size_str = w .. "x" .. h
 
-  -- Step 3: If we have a target PAX, use `pixl import` to quantize against its palette
+  -- Step 3: If we have a target file, use `pixl import` to quantize against its palette
+  local is_paxl = pax_path and pax_path:match("%.paxl$")
+
   if pax_path and pax_path ~= "" then
+    -- Expand .paxl to temp .pax so `pixl import` can read the palette
+    local import_pax, expand_cleanup = cli.ensure_pax(pax_path)
+    if not import_pax then
+      os.remove(tmp_png)
+      app.alert(expand_cleanup)
+      return
+    end
+
     local args = {
       "import", tmp_png,
       "--size", size_str,
-      "--pax", pax_path,
+      "--pax", import_pax,
       "--palette", palette_name,
     }
     if dlg.data.dither then
@@ -73,24 +83,40 @@ return function()
 
     local output, err_msg = cli.run(args)
     os.remove(tmp_png)
+    expand_cleanup()
 
     if output then
-      -- Build the TOML tile block
       -- Strip leading comment lines (# ...) and trailing whitespace
       local grid = output:gsub("^(#[^\n]*\n)+", ""):gsub("%s+$", "")
-      local tile_block = string.format(
-        '\n[tile.%s]\npalette = "%s"\nsize = "%s"\ngrid = \'\'\'\n%s\n\'\'\'\n',
-        tile_name, palette_name, size_str, grid
-      )
 
-      -- Append to PAX file
-      local f = io.open(pax_path, "a")
-      if f then
-        f:write(tile_block)
-        f:close()
-        app.alert("Tile '" .. tile_name .. "' appended to " .. app.fs.fileName(pax_path))
+      if is_paxl then
+        -- Build PAX-L tile block
+        local paxl_block = string.format(
+          "\n@tile %s %s pal=%s\n%s\n",
+          tile_name, size_str, palette_name, grid
+        )
+        local f = io.open(pax_path, "a")
+        if f then
+          f:write(paxl_block)
+          f:close()
+          app.alert("Tile '" .. tile_name .. "' appended to " .. app.fs.fileName(pax_path))
+        else
+          app.alert("Could not write to " .. pax_path .. "\n\nGenerated block:\n" .. paxl_block)
+        end
       else
-        app.alert("Could not write to " .. pax_path .. "\n\nGenerated block:\n" .. tile_block)
+        -- Build TOML tile block
+        local tile_block = string.format(
+          '\n[tile.%s]\npalette = "%s"\nsize = "%s"\ngrid = \'\'\'\n%s\n\'\'\'\n',
+          tile_name, palette_name, size_str, grid
+        )
+        local f = io.open(pax_path, "a")
+        if f then
+          f:write(tile_block)
+          f:close()
+          app.alert("Tile '" .. tile_name .. "' appended to " .. app.fs.fileName(pax_path))
+        else
+          app.alert("Could not write to " .. pax_path .. "\n\nGenerated block:\n" .. tile_block)
+        end
       end
     else
       app.alert("pixl import failed:\n" .. (err_msg or "unknown error"))

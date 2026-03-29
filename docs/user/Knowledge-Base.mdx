@@ -1,0 +1,59 @@
+# Knowledge Base
+
+PIXL ships with a curated library of pixel art techniques. When the AI generates a tile, it doesn't guess — it pulls in the relevant craft knowledge for the specific task.
+
+## What's covered
+
+<FeatureGrid>
+  <Feature title="Color theory">
+    Palette design, color ramps, warm/cool balance, complementary colors
+  </Feature>
+  <Feature title="Dithering">
+    Bayer patterns, checkerboard, gradient approximation with limited colors
+  </Feature>
+  <Feature title="Shading & lighting">
+    Light direction, shadow placement, cel shading, ambient occlusion
+  </Feature>
+  <Feature title="Outlines">
+    When to use them, thickness, selective outlines, color selection
+  </Feature>
+  <Feature title="Animation">
+    Frame timing, squash and stretch, walk cycles, idle animations
+  </Feature>
+  <Feature title="Tiling">
+    Seamless edges, transition tiles, autotiling rules, WFC constraints
+  </Feature>
+  <Feature title="Hardware constraints">
+    NES, SNES, Game Boy, GBA — palette limits, sprite sizes, tile counts
+  </Feature>
+  <Feature title="Sprite design">
+    Silhouettes, readability at small sizes, chibi proportions
+  </Feature>
+</FeatureGrid>
+
+## How it works
+
+When you ask PIXL to generate a "dungeon wall tile," the knowledge base:
+
+1. **Searches** for relevant passages about walls, dungeon aesthetics, tiling rules, and shadow placement
+2. **Expands** using a concept graph — "dungeon wall" connects to stone materials, mortar patterns, WFC edge compatibility
+3. **Ranks** results by relevance and injects the top passages into the AI's context
+4. **Positions strategically** — most relevant first, second-most last (where LLMs pay the most attention)
+
+<Callout type="info">
+  The knowledge base contains 30+ documents with 1,300+ cross-referenced concepts. When you search for one concept, related concepts are automatically discovered.
+</Callout>
+
+## Concept graph
+
+The knowledge base isn't a flat list. Concepts are linked by relationships:
+
+- "dithering" → "Bayer matrix", "color reduction", "gradient approximation"
+- "NES palette" → "4 colors per sprite", "background palette sharing"
+- "walk cycle" → "frame count", "bob height", "arm swing"
+
+A query for one concept pulls in its neighbors — so the AI understands the full context, not just isolated facts.
+
+## Expandable
+
+Add your own documents to the knowledge base. Write markdown about your game's art style, specific technique notes, or reference material — it gets indexed alongside the built-in knowledge.

@@ -248,6 +248,24 @@ class _BackdropViewportState extends ConsumerState<BackdropViewport> {
                 }
               }
             },
+            onPointerPanZoomUpdate: (event) {
+              setState(() {
+                _panOffset += event.panDelta;
+              });
+              if (event.scale != 1.0) {
+                _pinchAccum += (event.scale - 1.0);
+                if (_pinchAccum.abs() > 0.1) {
+                  setState(() {
+                    if (_pinchAccum > 0) {
+                      _zoom = (_zoom * 1.2).clamp(0.5, 16.0);
+                    } else {
+                      _zoom = (_zoom / 1.2).clamp(0.5, 16.0);
+                    }
+                  });
+                  _pinchAccum = 0.0;
+                }
+              }
+            },
             child: MouseRegion(
               cursor: _spaceHeld
                   ? SystemMouseCursors.grab

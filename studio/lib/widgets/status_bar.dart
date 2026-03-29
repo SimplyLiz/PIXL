@@ -62,6 +62,8 @@ class StatusBar extends ConsumerWidget {
               style: style.copyWith(color: theme.colorScheme.primary),
             ),
           const Spacer(),
+          _SubcompleteIndicator(),
+          _sep(),
           _EngineIndicator(),
           _sep(),
           Text('PIXL Studio v1.0', style: style),
@@ -89,6 +91,38 @@ class _PixelPosition extends ConsumerWidget {
           color: hover.hasPosition ? null : StudioTheme.separatorColor,
         ),
       ),
+    );
+  }
+}
+
+class _SubcompleteIndicator extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final status = ref.watch(backendProvider.select((s) => s.status));
+    if (status != BackendStatus.connected) return const SizedBox.shrink();
+
+    final style = Theme.of(context).textTheme.bodySmall!.copyWith(fontSize: 10);
+    // Check sub-completeness lazily via FutureBuilder
+    return FutureBuilder<Map<String, dynamic>?>(
+      future: ref.read(backendProvider.notifier).checkSubcomplete(),
+      builder: (context, snap) {
+        if (!snap.hasData || snap.data == null) return const SizedBox.shrink();
+        final isSub = snap.data!['is_subcomplete'] == true;
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: (isSub ? StudioTheme.success : StudioTheme.warning).withAlpha(30),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            isSub ? 'WFC safe' : 'WFC gaps',
+            style: style.copyWith(
+              color: isSub ? StudioTheme.success : StudioTheme.warning,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        );
+      },
     );
   }
 }

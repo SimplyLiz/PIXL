@@ -382,6 +382,22 @@ class _CompositeViewportState extends ConsumerState<CompositeViewport> {
                   }
                 }
               },
+              onPointerPanZoomUpdate: (event) {
+                setState(() {
+                  _panOffset += event.panDelta;
+                });
+                if (event.scale != 1.0) {
+                  _pinchAccum += (event.scale - 1.0);
+                  if (_pinchAccum.abs() > 0.1) {
+                    setState(() {
+                      _zoom = _pinchAccum > 0
+                          ? (_zoom * 1.2).clamp(1.0, 32.0)
+                          : (_zoom / 1.2).clamp(1.0, 32.0);
+                    });
+                    _pinchAccum = 0.0;
+                  }
+                }
+              },
               child: MouseRegion(
                 cursor: _spaceHeld ? SystemMouseCursors.grab : SystemMouseCursors.basic,
                 child: GestureDetector(

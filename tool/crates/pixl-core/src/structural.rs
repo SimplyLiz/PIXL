@@ -589,6 +589,110 @@ fn find_outline_gap_rows(grid: &[Vec<char>], void_sym: char) -> Vec<usize> {
     gap_rows
 }
 
+// ── Aesthetic Rating ───────────────────────────────────────────────
+
+/// Per-axis rating (1-5) for a tile.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct AestheticRating {
+    /// Readability: can you tell what the tile is at a glance? (outline, contrast, centering)
+    pub readability: u8,
+    /// Appeal: does it look good? (density, complexity, proportions)
+    pub appeal: u8,
+    /// Consistency: does it match the project style? (style latent score, 0 if no latent)
+    pub consistency: u8,
+    /// Overall weighted score (1-5)
+    pub overall: u8,
+    /// Overall as float for WFC weight adjustment (0.0-1.0)
+    pub score: f64,
+    /// Brief text assessment
+    pub assessment: String,
+}
+
+/// Rate a tile aesthetically, combining structural quality + style consistency.
+///
+/// Returns a 1-5 rating per axis + overall.
+/// If `style_score` is None (no style latent learned), consistency is rated 3 (neutral).
+pub fn rate_tile(report: &StructuralReport, style_score: Option<f64>) -> AestheticRating {
+    // Readability: outline + contrast + centering
+    let outline_score = report.outline_coverage;
+    let contrast_score = (report.mean_adjacent_contrast / 0.15).min(1.0); // 0.15 = excellent contrast
+    let center_score = report.centering_score;
+    let readability_raw = outline_score * 0.4 + contrast_score * 0.35 + center_score * 0.25;
+    let readability = to_1_5(readability_raw);
+
+    // Appeal: canvas utilization + density + silhouette complexity + low fragmentation
+    let util_score = report.canvas_utilization.min(1.0);
+    let density_score = if report.pixel_density > 0.15 && report.pixel_density < 0.95 {
+        1.0 // Good range
+    } else {
+        0.5 // Too sparse or too full
+    };
+    let frag_score = match report.connected_components {
+        0 | 1 => 1.0,
+        2 => 0.8,
+        3 => 0.5,
+        _ => 0.2,
+    };
+    let complexity_score = report.silhouette_complexity.min(1.0);
+    let appeal_raw =
+        util_score * 0.3 + density_score * 0.25 + frag_score * 0.25 + complexity_score * 0.2;
+    let appeal = to_1_5(appeal_raw);
+
+    // Consistency: style latent score (or neutral if no latent)
+    let consistency_raw = style_score.unwrap_or(0.5); // 0.5 = neutral when no latent
+    let consistency = to_1_5(consistency_raw);
+
+    // Overall: weighted combination
+    let overall_raw = if style_score.is_some() {
+        readability_raw * 0.4 + appeal_raw * 0.3 + consistency_raw * 0.3
+    } else {
+        readability_raw * 0.5 + appeal_raw * 0.5
+    };
+    let overall = to_1_5(overall_raw);
+    let score = overall_raw.max(0.0).min(1.0);
+
+    let assessment = match overall {
+        5 => "excellent — publish-ready".to_string(),
+        4 => "good — minor polish possible".to_string(),
+        3 => "acceptable — consider refinement".to_string(),
+        2 => "below average — needs improvement".to_string(),
+        _ => "poor — consider regenerating".to_string(),
+    };
+
+    AestheticRating {
+        readability,
+        appeal,
+        consistency,
+        overall,
+        score,
+        assessment,
+    }
+}
+
+/// Map 0.0-1.0 to 1-5 scale.
+fn to_1_5(raw: f64) -> u8 {
+    let clamped = raw.max(0.0).min(1.0);
+    match clamped {
+        x if x >= 0.85 => 5,
+        x if x >= 0.7 => 4,
+        x if x >= 0.5 => 3,
+        x if x >= 0.3 => 2,
+        _ => 1,
+    }
+}
+
+/// Suggest a WFC weight based on aesthetic rating.
+/// Higher-rated tiles get higher weight (appear more often).
+pub fn suggested_weight(rating: &AestheticRating) -> f64 {
+    match rating.overall {
+        5 => 1.0,
+        4 => 0.8,
+        3 => 0.5,
+        2 => 0.3,
+        _ => 0.1,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -746,5 +850,53 @@ mod tests {
         let text = critique_text(&report, "test_tile");
         assert!(text.contains("test_tile"));
         assert!(text.contains("outline") || text.contains("ERROR") || text.contains("WARN"));
+    }
+
+    #[test]
+    fn rate_well_outlined_tile() {
+        let palette = test_palette();
+        let grid = make_grid(&[
+            "..####..",
+            ".#++++#.",
+            ".#++++#.",
+            ".#++++#.",
+            ".#++++#.",
+            "..####..",
+        ]);
+        let report = analyze(&grid, &palette, '.');
+        let rating = rate_tile(&report, Some(0.9));
+        assert!(rating.overall >= 3, "well-outlined tile should rate ≥3, got {}", rating.overall);
+        assert!(rating.readability >= 3);
+    }
+
+    #[test]
+    fn rate_empty_tile_low() {
+        let report = empty_report();
+        let rating = rate_tile(&report, None);
+        assert!(rating.overall <= 2, "empty tile should rate ≤2, got {}", rating.overall);
+    }
+
+    #[test]
+    fn suggested_weight_scales() {
+        let high = AestheticRating {
+            readability: 5, appeal: 5, consistency: 5, overall: 5,
+            score: 0.95, assessment: String::new(),
+        };
+        let low = AestheticRating {
+            readability: 1, appeal: 1, consistency: 1, overall: 1,
+            score: 0.1, assessment: String::new(),
+        };
+        assert_eq!(suggested_weight(&high), 1.0);
+        assert_eq!(suggested_weight(&low), 0.1);
+    }
+
+    #[test]
+    fn to_1_5_boundaries() {
+        assert_eq!(to_1_5(0.0), 1);
+        assert_eq!(to_1_5(0.3), 2);
+        assert_eq!(to_1_5(0.5), 3);
+        assert_eq!(to_1_5(0.7), 4);
+        assert_eq!(to_1_5(0.85), 5);
+        assert_eq!(to_1_5(1.0), 5);
     }
 }

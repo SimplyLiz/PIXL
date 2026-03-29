@@ -98,4 +98,42 @@ function M.read_tile(path, tile_name)
   return tile
 end
 
+-- Scan a .paxl file and return { tiles = {}, palettes = {}, sprites = {}, composites = {} }
+-- PAX-L uses line-oriented sigil directives: @pal, @tile, @sprite, @composite, @stamp
+function M.scan_paxl(path)
+  local result = { tiles = {}, palettes = {}, sprites = {}, composites = {}, stamps = {} }
+
+  local f = io.open(path, "r")
+  if not f then return nil, "cannot open " .. path end
+
+  for line in f:lines() do
+    local directive, name = line:match("^@(%w+)%s+([%w_%-]+)")
+    if directive and name then
+      if directive == "tile" then
+        result.tiles[#result.tiles + 1] = name
+      elseif directive == "pal" then
+        result.palettes[#result.palettes + 1] = name
+      elseif directive == "sprite" then
+        result.sprites[#result.sprites + 1] = name
+      elseif directive == "composite" then
+        result.composites[#result.composites + 1] = name
+      elseif directive == "stamp" then
+        result.stamps[#result.stamps + 1] = name
+      end
+    end
+  end
+  f:close()
+
+  return result
+end
+
+-- Detect format from file extension and scan accordingly.
+function M.scan_auto(path)
+  if path:match("%.paxl$") then
+    return M.scan_paxl(path)
+  else
+    return M.scan(path)
+  end
+end
+
 return M

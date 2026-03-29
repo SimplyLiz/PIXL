@@ -1,0 +1,138 @@
+# MCP Tools
+
+PIXL includes an MCP (Model Context Protocol) server that lets AI assistants create, critique, and refine pixel art through natural conversation. 28 tools cover the full workflow from tile creation to game export.
+
+## What is MCP?
+
+MCP is a protocol that connects AI assistants (Claude, GPT, etc.) to external tools. Instead of the AI guessing about your tileset, it can directly call PIXL to render tiles, check quality, generate sprites, and export assets.
+
+## Starting the server
+
+```bash
+pixl mcp --file my_tileset.pax
+```
+
+<Callout type="warn">Always call `pixl_session_start` first in any MCP session. It returns the active theme, palette, stamps, and tile list — without it, the AI is working blind.</Callout>
+
+- `--file` — your `.pax` tileset file. This is your project — palettes, tiles, sprites, settings. Create one with `pixl new dark_fantasy -o my_tileset.pax` or see [PAX Format](./PAX-Format).
+- The server runs over **stdio** — Claude Code and other MCP clients detect and connect to it automatically.
+- Add `--model MODEL --adapter PATH` to enable local LoRA generation.
+
+## Using with Claude Code
+
+Add PIXL to your Claude Code MCP config:
+
+```json
+{
+  "mcpServers": {
+    "pixl": {
+      "command": "pixl",
+      "args": ["mcp", "--file", "path/to/your/tileset.pax"]
+    }
+  }
+}
+```
+
+Then ask Claude to create tiles, generate sprites, build maps — it calls the tools automatically.
+
+## Tool reference
+
+### Discovery — learn about the current session
+
+| Tool | What it does |
+|------|-------------|
+| `pixl_session_start` | Returns the active theme, palette symbols, stamps, and tile list. **Call this first** in any session. |
+| `pixl_get_palette` | Full symbol table: each character, its hex color, and semantic role (background, foreground, shadow, etc.) |
+| `pixl_list_tiles` | All tiles with their edge classes, tags, size, and template info |
+| `pixl_list_themes` | Available themes with palette name, scale, canvas size, light source |
+| `pixl_list_stamps` | Reusable stamp blocks with sizes |
+| `pixl_list_composites` | Composite sprites with their variant and animation names |
+
+### Creation — make new tiles
+
+| Tool | What it does |
+|------|-------------|
+| `pixl_create_tile` | Create a tile from a character grid. Pass `name`, `palette`, `size`, and `grid` — or pass `paxl_data` with a PAX-L tile definition for compact input. Returns a 16x preview PNG, auto-classified edge classes, border pixel strings, and compatible neighbors. |
+| `pixl_generate_sprite` | Generate a sprite from a text description via DALL-E. Extracts palette from the result for maximum fidelity. Pass `prompt` and `name`. Returns preview PNG, reference image, PAX grid, and palette TOML. |
+| `pixl_upscale_tile` | Nearest-neighbor upscale: each pixel becomes a 2x2 block. Pass `name` and `factor`. Use for the 8→16 progressive workflow. |
+| `pixl_load_source` | Load a `.pax` source string into the session, replacing everything. |
+
+### Quality — check and fix your art
+
+| Tool | What it does |
+|------|-------------|
+| `pixl_critique_tile` | Render the tile and run structural analysis. Returns the preview image + a text critique listing specific issues (outline gaps, off-center, low contrast) + a refinement prompt with row-level fix instructions. |
+| `pixl_refine_tile` | Patch specific rows of a tile grid. Pass `name`, `start_row`, and the replacement `rows`. Returns the updated preview + new critique. Tracks iteration count (max 3). |
+| `pixl_show_references` | Search tiles by name or tags and render the best matches as preview images. Use before generating to see what good tiles look like at the target size. |
+| `pixl_check_seams` | Check pixel continuity at composite tile boundaries. Returns warnings for each seam that has mismatched pixels. |
+| `pixl_remap_tile` | Map a tile from one palette to another using perceptual color matching (OKLab). Use after `pixl_generate_sprite` to convert auto-extracted colors to your project palette. |
+
+### Style — keep things consistent
+
+| Tool | What it does |
+|------|-------------|
+| `pixl_learn_style` | Extract an 8-point style fingerprint from your tiles: light direction, pixel density, shadow ratio, palette breadth, run length, hue bias, luminance, entropy. |
+| `pixl_check_style` | Score a tile against the session style fingerprint (0.0-1.0). Higher = closer match. |
+| `pixl_rate_tile` | Rate a tile aesthetically (1-5) on readability, appeal, and consistency. Returns per-axis scores, overall rating, and a suggested WFC weight. Use after generating variants to rank them. |
+| `pixl_generate_context` | Build a full generation prompt with palette, theme, style, edge context, few-shot examples (as rendered images), and knowledge base passages. Use when calling an external LLM. |
+
+### Rendering — see your art
+
+| Tool | What it does |
+|------|-------------|
+| `pixl_render_tile` | Render a tile to PNG at specified scale. Returns base64 image. |
+| `pixl_render_sprite_gif` | Render an animated sprite as GIF. Returns base64 GIF. |
+| `pixl_render_composite` | Render a composite sprite with optional variant, animation, and frame selection. |
+| `pixl_check_edge_pair` | Test if two tiles can be placed next to each other in a given direction. |
+| `pixl_delete_tile` | Remove a tile from the session. |
+
+### Maps — build worlds
+
+| Tool | What it does |
+|------|-------------|
+| `pixl_narrate_map` | Generate a WFC map from spatial rules. Rules: `"border:wall"`, `"region:boss:floor:3x3:southeast"`, `"path:0,3:11,3"`. Returns rendered map PNG + tile name grid. |
+| `pixl_generate_wang` | Generate a complete Wang tileset for terrain transitions. Pass `terrain_a`, `terrain_b`, and optional `method` (`dual_grid` or `blob_47`). Creates all transition tiles with correct edge classes for WFC in one call. |
+| `pixl_check_completeness` | Find missing transition tiles in your tileset. Reports which edge class pairs have no connecting tile. |
+
+### Export — ship your game
+
+| Tool | What it does |
+|------|-------------|
+| `pixl_pack_atlas` | Pack all tiles into a sprite atlas. Returns base64 PNG + TexturePacker JSON metadata. |
+| `pixl_export` | Export to a game engine format: `tiled`, `godot`, `unity`, `texturepacker`, `gbstudio`. |
+| `pixl_get_file` | Get the full session source. Pass `format: "paxl"` for compact PAX-L (~40% fewer tokens) or `format: "pax"` for TOML (default). |
+| `pixl_new_from_template` | Create a fresh `.pax` from a built-in theme template. |
+
+### Feedback — teach the AI your taste
+
+| Tool | What it does |
+|------|-------------|
+| `pixl_record_feedback` | Record an accept, reject, or edit decision on a tile. Captures style features and reject reason. |
+| `pixl_feedback_stats` | Statistics: acceptance rate, total accepts/rejects. |
+| `pixl_feedback_constraints` | Learned constraints: preferred style profile, avoid rules, few-shot examples, minimum style score. |
+
+### Style Scanner — learn from reference art
+
+| Tool | What it does |
+|------|-------------|
+| `pixl_scan_reference` | Scan reference images and extract quality-filtered patches. Auto-detects background colors, tile boundaries, and categories. Returns scan manifest with patch count and category breakdown. |
+| `pixl_prepare_training` | Prepare training data from scanned patches. Quantizes to PAX, augments, stratifies. Returns dataset stats and estimated training time. |
+| `pixl_start_training` | Start LoRA fine-tuning on prepared data. Returns immediately — poll with `pixl_training_status`. |
+| `pixl_training_status` | Check training progress: current iteration, loss, ETA. |
+| `pixl_list_adapters` | List available style adapters with metadata (source, samples, epochs). |
+| `pixl_switch_adapter` | Switch the active adapter for generation. |
+
+## The recommended workflow
+
+```
+1. pixl_session_start          → see what's in the session
+2. pixl_show_references        → look at existing tiles as rendered images
+3. pixl_generate_sprite        → generate from a text prompt
+   or pixl_create_tile         → create from a hand-written grid
+4. pixl_critique_tile          → check quality, get fix instructions
+5. pixl_refine_tile            → patch specific rows (repeat 4-5 up to 3x)
+6. pixl_record_feedback        → accept or reject the result
+7. pixl_pack_atlas             → pack everything for your game
+```
+
+The AI sees rendered preview images at steps 2-5 — it's looking at the actual pixels, not guessing from text grids.

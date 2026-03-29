@@ -35,7 +35,42 @@ class ChatPanel extends ConsumerStatefulWidget {
 class _ChatPanelState extends ConsumerState<ChatPanel> {
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
-  final _focusNode = FocusNode();
+  late final _focusNode = FocusNode(
+    onKeyEvent: (node, event) {
+      if (event is! KeyDownEvent) return KeyEventResult.ignored;
+      final key = event.logicalKey;
+      final isMeta = HardwareKeyboard.instance.isMetaPressed ||
+                     HardwareKeyboard.instance.isControlPressed;
+
+      if (key == LogicalKeyboardKey.enter) {
+        if (isMeta) {
+          // Cmd+Enter → insert newline
+          final sel = _controller.selection;
+          final text = _controller.text;
+          _controller.value = TextEditingValue(
+            text: '${text.substring(0, sel.baseOffset)}\n${text.substring(sel.baseOffset)}',
+            selection: TextSelection.collapsed(offset: sel.baseOffset + 1),
+          );
+          return KeyEventResult.handled;
+        }
+        // Enter → send
+        _send();
+        return KeyEventResult.handled;
+      }
+
+      if (key == LogicalKeyboardKey.arrowUp &&
+          _controller.selection.baseOffset == 0) {
+        _historyUp();
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.arrowDown &&
+          _controller.selection.baseOffset == _controller.text.length) {
+        _historyDown();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    },
+  );
 
   // Input history (up/down arrow recall)
   final _inputHistory = <String>[];
@@ -339,9 +374,16 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
       previews.add((name: tileName, base64: previewB64));
     }
 
+    // Rate the tile aesthetically
+    final rating = await ref.read(backendProvider.notifier).rateTile(tileName);
+    final stars = rating != null
+        ? '${'★' * (rating['overall'] as int? ?? 0)}${'☆' * (5 - (rating['overall'] as int? ?? 0))} ${rating['assessment'] ?? ''}'
+        : '';
+
     chat.addAssistantMessage(
       '**Generated: `$tileName`** ($finalSize)\n\n'
-      '${isValid ? 'Validation passed.' : 'Validation warnings — check the validation panel.'}\n\n'
+      '${isValid ? 'Validation passed.' : 'Validation warnings — check the validation panel.'}'
+      '${stars.isNotEmpty ? '\n\nRating: $stars' : ''}\n\n'
       '*${resp.totalTokens} tokens*',
       previewImages: previews,
     );
@@ -392,9 +434,16 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
       previews.add((name: tileName, base64: previewB64));
     }
 
+    // Rate the tile
+    final loraRating = await ref.read(backendProvider.notifier).rateTile(tileName);
+    final loraStars = loraRating != null
+        ? '${'★' * (loraRating['overall'] as int? ?? 0)}${'☆' * (5 - (loraRating['overall'] as int? ?? 0))} ${loraRating['assessment'] ?? ''}'
+        : '';
+
     chat.addAssistantMessage(
       '**Generated: `$tileName`** ($sizeStr)\n\n'
-      '${generated ? 'Generated on-device with LoRA adapter.' : 'Created.'}',
+      '${generated ? 'Generated on-device with LoRA adapter.' : 'Created.'}'
+      '${loraStars.isNotEmpty ? '\n\nRating: $loraStars' : ''}',
       previewImages: previews,
     );
     _scrollToBottom();
@@ -776,7 +825,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
             child: Container(
               padding: const EdgeInsets.all(8),
               decoration: const BoxDecoration(
-                color: Color(0xFF121212),
+                color: Color(0xFF0E0E0E),
                 borderRadius: BorderRadius.vertical(top: Radius.circular(5)),
               ),
               child: Center(
@@ -790,18 +839,36 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
             ),
           ),
 
-          // Name + action icons
+          // Footer: name + actions
           Padding(
-            padding: const EdgeInsets.fromLTRB(6, 4, 4, 4),
+            padding: const EdgeInsets.fromLTRB(8, 5, 4, 5),
             child: Row(
               children: [
                 Expanded(
                   child: Text(
                     img.name,
-                    style: theme.textTheme.bodySmall!.copyWith(fontSize: 9),
+                    style: theme.textTheme.bodySmall!.copyWith(
+                      fontSize: 9,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                    ),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                if (isPending) ...[
+                  _TinyIconBtn(
+                    icon: Icons.check_circle_outline,
+                    tooltip: 'Add to session',
+                    color: StudioTheme.success,
+                    onTap: _acceptTile,
+                  ),
+                  _TinyIconBtn(
+                    icon: Icons.cancel_outlined,
+                    tooltip: 'Reject',
+                    color: StudioTheme.error,
+                    onTap: _rejectTile,
+                  ),
+                  const SizedBox(width: 2),
+                ],
                 _TinyIconBtn(
                   icon: Icons.visibility_outlined,
                   tooltip: 'Preview on canvas',
@@ -824,33 +891,6 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
               ],
             ),
           ),
-
-          // Accept / Reject — only for pending tiles
-          if (isPending)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(6, 0, 6, 6),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _CompactActionBtn(
-                      icon: Icons.check,
-                      label: 'Add',
-                      color: StudioTheme.success,
-                      onTap: _acceptTile,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: _CompactActionBtn(
-                      icon: Icons.close,
-                      label: 'Reject',
-                      color: StudioTheme.error,
-                      onTap: _rejectTile,
-                    ),
-                  ),
-                ],
-              ),
-            ),
         ],
       ),
     );
@@ -938,6 +978,9 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
       final learnStr = autoLearn ? ' Saved as training data.' : '';
       chat.addAssistantMessage('Accepted **`$_pendingTileName`**.$rateStr$learnStr');
       ref.read(backendProvider.notifier).refreshTiles();
+
+      // Check if engine suggests retraining
+      _checkRetrainSuggestion();
     }
     setState(() {
       _pendingTileName = null;
@@ -953,35 +996,109 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
   }
 
   void _showRejectReasonPicker() {
-    final reasons = {
-      'too_sparse': 'Too sparse',
-      'too_dense': 'Too dense',
-      'wrong_style': 'Wrong style',
-      'bad_edges': 'Bad edges',
-      'palette_violation': 'Palette issue',
-      'bad_composition': 'Bad composition',
-    };
+    const reasons = [
+      ('too_sparse', 'Too sparse', Icons.blur_on),
+      ('too_dense', 'Too dense', Icons.grid_on),
+      ('wrong_style', 'Wrong style', Icons.style),
+      ('bad_edges', 'Bad edges', Icons.crop),
+      ('palette_violation', 'Palette issue', Icons.palette_outlined),
+      ('bad_composition', 'Bad composition', Icons.dashboard_outlined),
+      ('looks_bad', 'Looks bad', Icons.thumb_down_outlined),
+    ];
 
-    showDialog(
+    final theme = Theme.of(context);
+    final customController = TextEditingController();
+
+    showModalBottomSheet(
       context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('Why reject?', style: TextStyle(fontSize: 14)),
-        children: [
-          ...reasons.entries.map((e) => SimpleDialogOption(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              _doReject(e.key);
-            },
-            child: Text(e.value, style: const TextStyle(fontSize: 12)),
-          )),
-          SimpleDialogOption(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              _doReject(null);
-            },
-            child: const Text('Skip (no reason)', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(ctx).viewInsets.bottom,
+        ),
+        child: Container(
+          margin: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: StudioTheme.recessedBg,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: theme.dividerColor.withValues(alpha: 0.3)),
           ),
-        ],
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+                child: Text(
+                  'Why reject?',
+                  style: theme.textTheme.bodySmall!.copyWith(
+                    fontSize: 10,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final (key, label, icon) in reasons)
+                      _RejectChip(
+                        icon: icon,
+                        label: label,
+                        onTap: () {
+                          Navigator.of(ctx).pop();
+                          _doReject(key);
+                        },
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: TextField(
+                  controller: customController,
+                  style: theme.textTheme.bodySmall!.copyWith(fontSize: 11),
+                  decoration: InputDecoration(
+                    hintText: 'Or type your own reason...',
+                    hintStyle: theme.textTheme.bodySmall!.copyWith(
+                      fontSize: 10,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                    ),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    filled: true,
+                    fillColor: theme.dividerColor.withValues(alpha: 0.1),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide.none,
+                    ),
+                    suffixIcon: IconButton(
+                      icon: Icon(Icons.send, size: 14,
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.4)),
+                      onPressed: () {
+                        final text = customController.text.trim();
+                        Navigator.of(ctx).pop();
+                        _doReject(text.isEmpty ? null : text);
+                      },
+                    ),
+                    suffixIconConstraints: const BoxConstraints(maxHeight: 30, maxWidth: 30),
+                  ),
+                  onSubmitted: (text) {
+                    Navigator.of(ctx).pop();
+                    _doReject(text.trim().isEmpty ? null : text.trim());
+                  },
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -998,12 +1115,28 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
       ref.read(backendProvider.notifier).deleteTile(_pendingTileName!);
       final reasonText = reason != null ? ' (${reason.replaceAll('_', ' ')})' : '';
       chat.addAssistantMessage('Rejected **`$_pendingTileName`**$reasonText');
+
+      // Check if engine suggests retraining
+      _checkRetrainSuggestion();
     }
     setState(() {
       _pendingTileName = null;
 
     });
     _scrollToBottom();
+  }
+
+  /// Check if the engine suggests retraining based on feedback stats.
+  Future<void> _checkRetrainSuggestion() async {
+    final stats = await ref.read(backendProvider.notifier).backend.feedbackStats();
+    final suggest = stats['suggest_retrain'] as bool? ?? false;
+    if (suggest && mounted) {
+      final hint = stats['retrain_hint'] as String? ?? 'Consider retraining your adapter.';
+      ref.read(chatProvider.notifier).addAssistantMessage(
+        '**Retrain suggested:** $hint\n\n'
+        'Open the Style Scanner to retrain with your feedback.',
+      );
+    }
   }
 
   /// Re-generate with the same prompt (single variation).
@@ -1803,44 +1936,22 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
               ),
               child: Column(
                 children: [
-                  KeyboardListener(
-                    focusNode: FocusNode(),
-                    onKeyEvent: (event) {
-                      if (event is! KeyDownEvent) return;
-                      if (event.logicalKey == LogicalKeyboardKey.enter &&
-                          (HardwareKeyboard.instance.isMetaPressed ||
-                           HardwareKeyboard.instance.isControlPressed)) {
-                        _send();
-                        return;
-                      }
-                      if (event.logicalKey == LogicalKeyboardKey.arrowUp &&
-                          _controller.selection.baseOffset == 0) {
-                        _historyUp();
-                        return;
-                      }
-                      if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
-                          _controller.selection.baseOffset == _controller.text.length) {
-                        _historyDown();
-                        return;
-                      }
-                    },
-                    child: TextField(
-                      controller: _controller,
-                      focusNode: _focusNode,
-                      enabled: !isGenerating,
-                      style: theme.textTheme.bodyMedium!.copyWith(fontSize: 12),
-                      maxLines: 4,
-                      minLines: 1,
-                      textInputAction: TextInputAction.newline,
-                      decoration: InputDecoration(
-                        hintText: isGenerating
-                            ? 'Generating...'
-                            : 'Message...',
-                        hintStyle: theme.textTheme.bodySmall!.copyWith(fontSize: 11),
-                        isDense: true,
-                        contentPadding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
-                        border: InputBorder.none,
-                      ),
+                  TextField(
+                    controller: _controller,
+                    focusNode: _focusNode,
+                    enabled: !isGenerating,
+                    style: theme.textTheme.bodyMedium!.copyWith(fontSize: 12),
+                    maxLines: 4,
+                    minLines: 1,
+                    textInputAction: TextInputAction.newline,
+                    decoration: InputDecoration(
+                      hintText: isGenerating
+                          ? 'Generating...'
+                          : 'Message...',
+                      hintStyle: theme.textTheme.bodySmall!.copyWith(fontSize: 11),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+                      border: InputBorder.none,
                     ),
                   ),
                   // Bottom controls row
@@ -2224,22 +2335,24 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(4),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: onTap != null ? color : color.withValues(alpha: 0.3)),
-        ),
-        child: Center(
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              color: onTap != null ? color : color.withValues(alpha: 0.3),
+    final c = onTap != null ? color : color.withValues(alpha: 0.3);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        hoverColor: c.withValues(alpha: 0.08),
+        splashColor: c.withValues(alpha: 0.12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 5),
+          child: Center(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+                color: c.withValues(alpha: 0.7),
+              ),
             ),
           ),
         ),
@@ -2356,15 +2469,18 @@ class _TinyIconBtn extends StatelessWidget {
     required this.tooltip,
     required this.onTap,
     this.isActive = false,
+    this.color,
   });
   final IconData icon;
   final String tooltip;
   final VoidCallback onTap;
   final bool isActive;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final c = color ?? (isActive ? theme.colorScheme.primary : theme.textTheme.bodySmall?.color);
     return Tooltip(
       message: tooltip,
       child: InkWell(
@@ -2372,59 +2488,7 @@ class _TinyIconBtn extends StatelessWidget {
         borderRadius: BorderRadius.circular(3),
         child: Padding(
           padding: const EdgeInsets.all(3),
-          child: Icon(
-            icon,
-            size: 12,
-            color: isActive ? theme.colorScheme.primary : theme.textTheme.bodySmall?.color,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Compact action button with icon + label for tile cards.
-class _CompactActionBtn extends StatelessWidget {
-  const _CompactActionBtn({
-    required this.icon,
-    required this.label,
-    required this.color,
-    this.onTap,
-  });
-  final IconData icon;
-  final String label;
-  final Color color;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final active = onTap != null;
-    final c = active ? color : color.withValues(alpha: 0.3);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(4),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(4),
-          color: c.withValues(alpha: 0.1),
-          border: Border.all(color: c.withValues(alpha: 0.4)),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 10, color: c),
-            const SizedBox(width: 3),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w700,
-                color: c,
-              ),
-            ),
-          ],
+          child: Icon(icon, size: 12, color: c),
         ),
       ),
     );
@@ -2465,3 +2529,52 @@ class _SmallActionBtn extends StatelessWidget {
     );
   }
 }
+
+class _RejectChip extends StatelessWidget {
+  const _RejectChip({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        hoverColor: StudioTheme.error.withValues(alpha: 0.08),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: theme.dividerColor.withValues(alpha: 0.2),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 12, color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: theme.textTheme.bodySmall!.copyWith(
+                  fontSize: 10,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+

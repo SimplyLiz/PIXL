@@ -237,17 +237,20 @@ class PixlBackend {
 
   /// Get enriched context for AI generation.
   /// Returns system_prompt + user_prompt for the Studio to send to Claude.
+  /// Set [format] to 'paxl' for compact PAX-L context (~40% fewer tokens).
   Future<Map<String, dynamic>> generateContext({
     required String prompt,
     String type = 'tile',
     String size = '16x16',
     bool knowledgeEnabled = true,
+    String format = 'paxl',
   }) async {
     return _post('/api/generate/context', {
       'prompt': prompt,
       'type': type,
       'size': size,
       'knowledge_enabled': knowledgeEnabled,
+      'format': format,
     });
   }
 
@@ -296,6 +299,42 @@ class PixlBackend {
     return _post('/api/style/check', {'name': tileName});
   }
 
+  /// Rate a tile aesthetically (1-5 on readability, appeal, consistency).
+  Future<Map<String, dynamic>> rateTile(String tileName) async {
+    return _post('/api/tool', {
+      'tool': 'pixl_rate_tile',
+      'args': {'name': tileName},
+    });
+  }
+
+  /// Generate a complete Wang tileset for terrain transitions.
+  Future<Map<String, dynamic>> generateWang({
+    required String terrainA,
+    required String terrainB,
+    String method = 'dual_grid',
+    int size = 16,
+    String? palette,
+  }) async {
+    return _post('/api/tool', {
+      'tool': 'pixl_generate_wang',
+      'args': {
+        'terrain_a': terrainA,
+        'terrain_b': terrainB,
+        'method': method,
+        'size': size,
+        if (palette != null) 'palette': palette,
+      },
+    });
+  }
+
+  /// Check if the tileset is sub-complete (WFC contradiction-free guarantee).
+  Future<Map<String, dynamic>> checkSubcomplete() async {
+    return _post('/api/tool', {
+      'tool': 'pixl_check_subcomplete',
+      'args': {},
+    });
+  }
+
   // ── Blueprint ──────────────────────────────────────────
 
   /// Get anatomy blueprint for character sprites.
@@ -339,9 +378,18 @@ class PixlBackend {
     });
   }
 
-  /// Get the full .pax source.
+  /// Get the full .pax source in TOML format.
   Future<Map<String, dynamic>> getFile() async {
     return _get('/api/file');
+  }
+
+  /// Get the file in compact PAX-L format (~40% fewer tokens).
+  /// Use this for AI context to save token budget.
+  Future<Map<String, dynamic>> getFilePaxl() async {
+    return _post('/api/tool', {
+      'tool': 'pixl_get_file',
+      'args': {'format': 'paxl'},
+    });
   }
 
   // ── Feedback ─────────────────────────────────────────
@@ -495,6 +543,99 @@ class PixlBackend {
     Map<String, dynamic> args,
   ) async {
     return _post('/api/tool', {'tool': toolName, 'args': args});
+  }
+
+  // ── Style Scanner ──────────────────────────────────────
+
+  /// Scan reference images and extract patches.
+  Future<Map<String, dynamic>> scanReference({
+    required String inputPath,
+    int patchSize = 16,
+    int stride = 8,
+  }) async {
+    return _post('/api/scan/start', {
+      'input': inputPath,
+      'patch_size': patchSize,
+      'stride': stride,
+    });
+  }
+
+  /// Prepare training data from scanned patches.
+  Future<Map<String, dynamic>> prepareTraining({
+    required String scanDir,
+    required String outputDir,
+    String style = 'custom',
+    int aug = 4,
+    bool colorAug = true,
+    int maxPerBin = 150,
+  }) async {
+    return _post('/api/prepare', {
+      'scan_dir': scanDir,
+      'out': outputDir,
+      'style': style,
+      'aug': aug,
+      'color_aug': colorAug,
+      'max_per_bin': maxPerBin,
+    });
+  }
+
+  /// Start LoRA training in background.
+  Future<Map<String, dynamic>> startTraining({
+    required String dataDir,
+    required String adapterPath,
+    String model = 'mlx-community/Qwen2.5-3B-Instruct-4bit',
+    int epochs = 3,
+    double lr = 0.00002,
+    int layers = 16,
+    bool resume = false,
+  }) async {
+    return _post('/api/train/start', {
+      'data_dir': dataDir,
+      'adapter': adapterPath,
+      'model': model,
+      'epochs': epochs,
+      'lr': lr,
+      'layers': layers,
+      'resume': resume,
+    });
+  }
+
+  /// Poll training status.
+  Future<Map<String, dynamic>> trainingStatus() async {
+    return _get('/api/train/status');
+  }
+
+  /// Stop a running training job.
+  Future<Map<String, dynamic>> stopTraining() async {
+    return _post('/api/train/stop', {});
+  }
+
+  /// Pause or resume training.
+  Future<Map<String, dynamic>> pauseTraining() async {
+    return _post('/api/train/pause', {});
+  }
+
+  /// Set training throttle level.
+  Future<Map<String, dynamic>> throttleTraining(String level) async {
+    return _post('/api/train/throttle', {'level': level});
+  }
+
+  /// List available training datasets from the given directories.
+  Future<Map<String, dynamic>> listDatasets({List<String>? dirs}) async {
+    if (dirs != null && dirs.isNotEmpty) {
+      return _post('/api/datasets', {'dirs': dirs});
+    }
+    return _get('/api/datasets');
+  }
+
+  /// List available LoRA adapters.
+  Future<Map<String, dynamic>> listAdapters() async {
+    return _get('/api/adapters');
+  }
+
+  /// Activate a specific adapter for generation.
+  Future<Map<String, dynamic>> activateAdapter(String path) async {
+    return _post('/api/adapter/activate', {'path': path});
   }
 
   // ── HTTP helpers ───────────────────────────────────────

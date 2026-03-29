@@ -243,6 +243,197 @@ pub fn analyze(pax: &PaxFile) -> CompletenessReport {
     }
 }
 
+// ── Sub-completeness (N-WFC, Nie et al. 2024) ──────────────────────
+
+/// A missing edge pairing that breaks sub-completeness.
+#[derive(Debug, Clone, Serialize)]
+pub struct SubcompleteMissing {
+    /// The edge class that has no match on the opposite side.
+    pub edge_class: String,
+    /// The direction where the edge class appears (e.g., "north").
+    pub appears_on: String,
+    /// The opposite direction where no tile has this edge class (e.g., "south").
+    pub needs_on: String,
+    /// Tiles that have this edge class on `appears_on`.
+    pub example_tiles: Vec<String>,
+}
+
+/// Sub-completeness report.
+#[derive(Debug, Clone, Serialize)]
+pub struct SubcompleteReport {
+    /// Whether the tileset is sub-complete.
+    pub is_subcomplete: bool,
+    /// Missing pairings (empty if sub-complete).
+    pub missing: Vec<SubcompleteMissing>,
+    /// Human-readable summary.
+    pub summary: String,
+}
+
+/// Check if a tileset is sub-complete.
+///
+/// A tileset is sub-complete if for every edge class `e` on direction D,
+/// there exists at least one tile with edge class `e` on the opposite
+/// direction. This guarantees WFC propagation is contradiction-free
+/// without backtracking.
+///
+/// Reference: Nie et al., "N-WFC" (IEEE Transactions on Games, 2024).
+pub fn check_subcomplete(pax: &PaxFile) -> SubcompleteReport {
+    // Collect all (edge_class, direction) pairs including auto-rotated variants
+    // Direction pairs: N↔S, E↔W
+    let mut north_classes: HashMap<String, Vec<String>> = HashMap::new(); // class → tile names
+    let mut south_classes: HashMap<String, Vec<String>> = HashMap::new();
+    let mut east_classes: HashMap<String, Vec<String>> = HashMap::new();
+    let mut west_classes: HashMap<String, Vec<String>> = HashMap::new();
+
+    for (name, tile) in &pax.tile {
+        if tile.template.is_some() {
+            continue;
+        }
+        let ec = match &tile.edge_class {
+            Some(ec) => ec,
+            None => continue,
+        };
+
+        north_classes
+            .entry(ec.n.clone())
+            .or_default()
+            .push(name.clone());
+        south_classes
+            .entry(ec.s.clone())
+            .or_default()
+            .push(name.clone());
+        east_classes
+            .entry(ec.e.clone())
+            .or_default()
+            .push(name.clone());
+        west_classes
+            .entry(ec.w.clone())
+            .or_default()
+            .push(name.clone());
+
+        // Include auto-rotated variants
+        let rotate_mode = tile.auto_rotate.as_deref().unwrap_or("none");
+        if rotate_mode == "4way" || rotate_mode == "8way" {
+            let ec_struct = crate::types::EdgeClass {
+                n: ec.n.clone(),
+                e: ec.e.clone(),
+                s: ec.s.clone(),
+                w: ec.w.clone(),
+            };
+            let mut rotated = ec_struct.clone();
+            for suffix in ["_90", "_180", "_270"] {
+                rotated = rotate::rotate_edge_class_cw(&rotated);
+                let rname = format!("{}{}", name, suffix);
+                north_classes
+                    .entry(rotated.n.clone())
+                    .or_default()
+                    .push(rname.clone());
+                south_classes
+                    .entry(rotated.s.clone())
+                    .or_default()
+                    .push(rname.clone());
+                east_classes
+                    .entry(rotated.e.clone())
+                    .or_default()
+                    .push(rname.clone());
+                west_classes
+                    .entry(rotated.w.clone())
+                    .or_default()
+                    .push(rname.clone());
+            }
+        }
+    }
+
+    let mut missing = Vec::new();
+
+    // For every edge class on north, there must be a tile with that class on south
+    for (ec, tiles) in &north_classes {
+        if !south_classes.contains_key(ec) {
+            missing.push(SubcompleteMissing {
+                edge_class: ec.clone(),
+                appears_on: "north".to_string(),
+                needs_on: "south".to_string(),
+                example_tiles: tiles.iter().take(3).cloned().collect(),
+            });
+        }
+    }
+
+    // For every edge class on south, there must be a tile with that class on north
+    for (ec, tiles) in &south_classes {
+        if !north_classes.contains_key(ec) {
+            missing.push(SubcompleteMissing {
+                edge_class: ec.clone(),
+                appears_on: "south".to_string(),
+                needs_on: "north".to_string(),
+                example_tiles: tiles.iter().take(3).cloned().collect(),
+            });
+        }
+    }
+
+    // For every edge class on east, there must be a tile with that class on west
+    for (ec, tiles) in &east_classes {
+        if !west_classes.contains_key(ec) {
+            missing.push(SubcompleteMissing {
+                edge_class: ec.clone(),
+                appears_on: "east".to_string(),
+                needs_on: "west".to_string(),
+                example_tiles: tiles.iter().take(3).cloned().collect(),
+            });
+        }
+    }
+
+    // For every edge class on west, there must be a tile with that class on east
+    for (ec, tiles) in &west_classes {
+        if !east_classes.contains_key(ec) {
+            missing.push(SubcompleteMissing {
+                edge_class: ec.clone(),
+                appears_on: "west".to_string(),
+                needs_on: "east".to_string(),
+                example_tiles: tiles.iter().take(3).cloned().collect(),
+            });
+        }
+    }
+
+    let is_subcomplete = missing.is_empty();
+
+    let summary = if is_subcomplete {
+        let all_classes: HashSet<&String> = north_classes
+            .keys()
+            .chain(south_classes.keys())
+            .chain(east_classes.keys())
+            .chain(west_classes.keys())
+            .collect();
+        format!(
+            "Tileset is sub-complete ({} edge classes). WFC is guaranteed contradiction-free.",
+            all_classes.len()
+        )
+    } else {
+        let mut s = format!(
+            "Tileset is NOT sub-complete — {} missing edge pairing(s):\n",
+            missing.len()
+        );
+        for m in &missing {
+            s.push_str(&format!(
+                "  - '{}' appears on {} (e.g. {}) but no tile has it on {}\n",
+                m.edge_class,
+                m.appears_on,
+                m.example_tiles.first().unwrap_or(&"?".to_string()),
+                m.needs_on,
+            ));
+        }
+        s.push_str(
+            "Add tiles with the missing edge classes to guarantee contradiction-free WFC.",
+        );
+        s
+    };
+
+    SubcompleteReport {
+        is_subcomplete,
+        missing,
+        summary,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -339,5 +530,83 @@ mod tests {
             !water_missing.is_empty(),
             "should recommend water transition tiles"
         );
+    }
+
+    // ── Sub-completeness tests ────────────────────────────
+
+    #[test]
+    fn subcomplete_connected_tileset() {
+        // CONNECTED_PAX has wall (solid/solid/solid/solid),
+        // floor (floor/floor/floor/floor),
+        // wall_floor_n (solid/solid/floor/solid) with 4way rotation,
+        // wall_corner_ne (solid/solid/floor/floor) with 4way rotation.
+        //
+        // After rotation: every edge class (solid, floor) appears on
+        // every direction (N, E, S, W). Sub-complete.
+        let pax = parse(CONNECTED_PAX);
+        let report = check_subcomplete(&pax);
+        assert!(
+            report.is_subcomplete,
+            "connected tileset should be sub-complete: {}",
+            report.summary
+        );
+        assert!(report.missing.is_empty());
+    }
+
+    #[test]
+    fn subcomplete_disconnected_tileset() {
+        // DISCONNECTED_PAX has wall (solid all sides) + floor (floor all sides).
+        // Both solid and floor appear on all 4 directions → sub-complete.
+        // (Sub-completeness doesn't require transitions between different
+        // classes — it only requires each class appears on both sides of
+        // each axis.)
+        let pax = parse(DISCONNECTED_PAX);
+        let report = check_subcomplete(&pax);
+        assert!(
+            report.is_subcomplete,
+            "disconnected but symmetric tileset IS sub-complete: {}",
+            report.summary
+        );
+    }
+
+    #[test]
+    fn subcomplete_asymmetric_fails() {
+        // A tileset where "solid" only appears on north, never on south.
+        // This breaks sub-completeness.
+        let asym_pax = concat!(
+            "[pax]\nversion = \"2.0\"\nname = \"test\"\n\n",
+            "[palette.t]\n\".\" = \"#000000\"\n\"+\" = \"#ffffff\"\n\n",
+            "[tile.cap]\npalette = \"t\"\nsize = \"4x4\"\n",
+            "edge_class = { n = \"solid\", e = \"floor\", s = \"floor\", w = \"floor\" }\n",
+            "grid = '''\n....\n++++\n++++\n++++\n'''\n\n",
+            "[tile.floor]\npalette = \"t\"\nsize = \"4x4\"\n",
+            "edge_class = { n = \"floor\", e = \"floor\", s = \"floor\", w = \"floor\" }\n",
+            "grid = '''\n++++\n++++\n++++\n++++\n'''\n",
+        );
+        let pax = parse(asym_pax);
+        let report = check_subcomplete(&pax);
+        assert!(
+            !report.is_subcomplete,
+            "asymmetric tileset should NOT be sub-complete"
+        );
+        // "solid" appears on north but not south
+        let solid_missing = report
+            .missing
+            .iter()
+            .find(|m| m.edge_class == "solid" && m.needs_on == "south");
+        assert!(solid_missing.is_some(), "should report 'solid' missing on south");
+    }
+
+    #[test]
+    fn subcomplete_dungeon_example() {
+        let source = std::fs::read_to_string("../../examples/dungeon.pax")
+            .expect("dungeon.pax should exist");
+        let pax = parse(&source);
+        let report = check_subcomplete(&pax);
+        // dungeon.pax has auto_rotate tiles — should be sub-complete
+        // (solid, floor, water all appear symmetrically)
+        println!("Dungeon sub-completeness: {}", report.summary);
+        // Just verify it runs without panic — actual sub-completeness
+        // depends on the current tile set
     }
 }

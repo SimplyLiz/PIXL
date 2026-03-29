@@ -135,12 +135,12 @@ class ExportService {
   }
 
   /// Save PAX source to file.
-  static Future<bool> savePaxSource(String source) async {
+  static Future<bool> savePaxSource(String source, {String extension = 'pax'}) async {
     final path = await FilePicker.platform.saveFile(
-      dialogTitle: 'Save PAX Source',
-      fileName: 'tileset.pax',
+      dialogTitle: 'Save ${extension.toUpperCase()} Source',
+      fileName: 'tileset.$extension',
       type: FileType.custom,
-      allowedExtensions: ['pax'],
+      allowedExtensions: [extension],
     );
     if (path == null) return false;
 

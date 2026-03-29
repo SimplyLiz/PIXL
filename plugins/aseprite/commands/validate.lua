@@ -5,8 +5,8 @@ return function()
   local dlg = Dialog("PIXL Validate")
   dlg:file{
     id = "pax_file",
-    label = "PAX file",
-    filetypes = { "pax" },
+    label = "PAX / PAX-L file",
+    filetypes = { "pax", "paxl" },
     open = true,
   }
   dlg:check{ id = "edges", label = "Check edge compatibility", selected = true }
@@ -22,7 +22,14 @@ return function()
   local pax_path = dlg.data.pax_file
   if not pax_path or pax_path == "" then return end
 
-  local args = { "validate", pax_path }
+  -- Expand .paxl to temp .pax if needed
+  local cli_pax, cleanup = cli.ensure_pax(pax_path)
+  if not cli_pax then
+    app.alert(cleanup)
+    return
+  end
+
+  local args = { "validate", cli_pax }
   if dlg.data.edges then args[#args + 1] = "--check_edges" end
   if dlg.data.quality then args[#args + 1] = "--quality" end
   if dlg.data.completeness then args[#args + 1] = "--completeness" end
@@ -35,4 +42,6 @@ return function()
   dlg2:label{ text = clean }
   dlg2:button{ id = "ok", text = "OK" }
   dlg2:show()
+
+  cleanup()
 end

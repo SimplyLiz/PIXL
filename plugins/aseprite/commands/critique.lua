@@ -7,8 +7,8 @@ return function()
   local dlg = Dialog("PIXL Critique")
   dlg:file{
     id = "pax_file",
-    label = "PAX file",
-    filetypes = { "pax" },
+    label = "PAX / PAX-L file",
+    filetypes = { "pax", "paxl" },
     open = true,
   }
   dlg:button{ id = "scan", text = "Scan Tiles" }
@@ -23,7 +23,7 @@ return function()
     return
   end
 
-  local info = scan.scan(pax_path)
+  local info = scan.scan_auto(pax_path)
   if not info or #info.tiles == 0 then
     app.alert("No tiles found.")
     return
@@ -45,8 +45,14 @@ return function()
   local tile_name = dlg2.data.tile
   if not tile_name then return end
 
-  -- Step 3: Run critique
-  local ok, output, code = cli.exec({ "critique", pax_path, "--tile", tile_name })
+  -- Step 3: Expand .paxl to temp .pax if needed
+  local cli_pax, cleanup = cli.ensure_pax(pax_path)
+  if not cli_pax then
+    app.alert(cleanup)
+    return
+  end
+
+  local ok, output, code = cli.exec({ "critique", cli_pax, "--tile", tile_name })
 
   -- Step 4: Display results
   -- Strip ANSI color codes for display
@@ -66,4 +72,6 @@ return function()
 
   dlg3:button{ id = "ok", text = "OK" }
   dlg3:show()
+
+  cleanup()
 end

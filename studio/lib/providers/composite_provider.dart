@@ -121,6 +121,8 @@ class CompositeNotifier extends StateNotifier<CompositeEditorState> {
   void clear() {
     state = const CompositeEditorState();
   }
+
+  void restore(CompositeEditorState s) => state = s;
 }
 
 final compositeEditorProvider =

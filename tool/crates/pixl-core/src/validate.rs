@@ -254,6 +254,24 @@ pub fn validate(file: &PaxFile, _check_edges: bool) -> ValidationResult {
             continue;
         }
 
+        // Skip delta tiles — they inherit grid from base and apply patches
+        if let Some(ref delta_base) = tile_raw.delta {
+            // Validate base exists
+            if !file.tile.contains_key(delta_base.as_str()) {
+                errors.push(ValidationError::NoPixelData { tile: name.clone() });
+            }
+            // Validate no delta chains
+            if let Some(base_tile) = file.tile.get(delta_base.as_str()) {
+                if base_tile.delta.is_some() {
+                    warnings.push(format!(
+                        "tile '{}': delta chain — base '{}' is also a delta tile",
+                        name, delta_base
+                    ));
+                }
+            }
+            continue;
+        }
+
         // Must have size
         let Some(ref size_str) = tile_raw.size else {
             errors.push(ValidationError::NoSize { tile: name.clone() });
@@ -271,8 +289,12 @@ pub fn validate(file: &PaxFile, _check_edges: bool) -> ValidationResult {
             }
         };
 
-        // Must have pixel data
-        if tile_raw.grid.is_none() && tile_raw.rle.is_none() && tile_raw.layout.is_none() {
+        // Must have pixel data (grid, rle, layout, or fill)
+        if tile_raw.grid.is_none()
+            && tile_raw.rle.is_none()
+            && tile_raw.layout.is_none()
+            && tile_raw.fill.is_none()
+        {
             errors.push(ValidationError::NoPixelData { tile: name.clone() });
             continue;
         }

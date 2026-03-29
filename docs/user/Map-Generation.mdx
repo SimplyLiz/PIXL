@@ -1,0 +1,93 @@
+# Map Generation
+
+Draw a few tiles and PIXL generates entire maps that tile seamlessly. Describe a scene in plain language and the engine fills in the rest.
+
+## Wave Function Collapse
+
+PIXL uses Wave Function Collapse (WFC) — an algorithm that looks at the edges of your tiles and figures out which ones can go next to each other. You define the pieces, PIXL assembles the puzzle.
+
+Every tile has edge classes that describe what its borders look like:
+
+```toml
+[tile.wall_solid]
+edge_class = { n = "solid", e = "solid", s = "floor", w = "solid" }
+```
+
+Two tiles can sit next to each other only if their touching edges match. PIXL enforces this automatically.
+
+## Describe scenes in plain language
+
+Instead of placing tiles by hand, describe what you want:
+
+```bash
+pixl narrate tileset.pax --width 12 --height 8 \
+  -r "border:wall_solid" \
+  -r "region:boss_room:floor_stone:3x3:southeast" \
+  -r "path:0,3:11,3"
+```
+
+This generates a 12x8 map with walls around the border, a boss room in the southeast corner, and a corridor connecting left to right.
+
+## Semantic rules
+
+Beyond geometric edge matching, you can define logical rules:
+
+- **Forbids** — "a wall tile can never be directly above a water tile"
+- **Requires** — "moss only appears adjacent to floor tiles"
+
+These produce game-sensible maps, not just geometrically valid ones.
+
+## Auto-edge classification
+
+Don't want to label every edge by hand? PIXL can auto-classify edges from the pixel content — solid borders, open borders, and pattern-matched edges are detected automatically.
+
+<Callout type="tip">Run `pixl check tileset.pax --fix` to auto-classify all edges from pixel content. This saves a lot of manual labeling, especially on larger tilesets.</Callout>
+
+```bash
+pixl check tileset.pax --fix
+```
+
+## Completeness analysis
+
+PIXL tells you which transition tiles are missing from your set:
+
+```bash
+pixl validate tileset.pax --completeness
+```
+
+If you have "wall" and "floor" tiles but no "wall-to-floor" transition, PIXL flags it and suggests what edge classes the missing tile needs.
+
+## Sub-completeness (contradiction-free WFC)
+
+A tileset is **sub-complete** if every edge class that appears on any tile's north side also appears on at least one tile's south side (and the same for east/west). When this holds, WFC is mathematically guaranteed to never contradict — no backtracking needed.
+
+```bash
+pixl check tileset.pax --subcomplete
+```
+
+If your tileset passes, WFC map generation is guaranteed to succeed on the first try, regardless of map size or constraint complexity.
+
+## Wang tilesets (terrain transitions)
+
+Creating all the transition tiles between two terrain types (grass → water, wall → floor) is tedious. PIXL can generate a complete transition set in one call:
+
+```bash
+# Dual grid: 15 tiles (simpler, best for top-down terrain)
+pixl generate-wang tileset.pax --terrain-a grass --terrain-b water --method dual_grid
+
+# Blob 47: 47 tiles (complex, best for walls/caves)
+pixl generate-wang tileset.pax --terrain-a wall --terrain-b floor --method blob_47
+```
+
+Or via MCP: `pixl_generate_wang({ terrain_a: "grass", terrain_b: "water" })`. All generated tiles get correct edge classes for WFC automatically.
+
+## Export formats
+
+Maps can be exported to multiple game engine formats:
+
+<FeatureGrid>
+  <Feature title="Tiled (.tmx)">Tileset JSON + tilemap JSON + PNG atlas — the most common level editor</Feature>
+  <Feature title="Godot">TileMap resources + PNG, ready for Godot Engine</Feature>
+  <Feature title="Unity">Tile palette data + PNG atlas for Unity's tilemap system</Feature>
+  <Feature title="GB Studio">Game Boy compatible export for retro projects</Feature>
+</FeatureGrid>

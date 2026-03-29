@@ -7,8 +7,8 @@ return function()
   local dlg = Dialog("PIXL Render")
   dlg:file{
     id = "pax_file",
-    label = "PAX file",
-    filetypes = { "pax" },
+    label = "PAX / PAX-L file",
+    filetypes = { "pax", "paxl" },
     open = true,
   }
   dlg:number{
@@ -31,7 +31,7 @@ return function()
   local pax_path = dlg.data.pax_file
   if not pax_path or pax_path == "" then return end
 
-  local info = scan.scan(pax_path)
+  local info = scan.scan_auto(pax_path)
   if not info or #info.tiles == 0 then
     app.alert("No tiles found.")
     return
@@ -56,14 +56,21 @@ return function()
   local tile_name = dlg2.data.tile
   if not tile_name then return end
 
+  -- Expand .paxl to temp .pax if needed
+  local cli_pax, cleanup = cli.ensure_pax(pax_path)
+  if not cli_pax then
+    app.alert(cleanup)
+    return
+  end
+
   local out_path = img.tmp(".png")
 
   -- Use preview command for grid overlay, render for plain output
   local args
   if use_grid then
-    args = { "preview", pax_path, "--tile", tile_name, "-o", out_path, "--grid" }
+    args = { "preview", cli_pax, "--tile", tile_name, "-o", out_path, "--grid" }
   else
-    args = { "render", pax_path, "--tile", tile_name, "--scale", tostring(scale), "-o", out_path }
+    args = { "render", cli_pax, "--tile", tile_name, "--scale", tostring(scale), "-o", out_path }
   end
 
   local ok, output = cli.exec(args)
@@ -74,4 +81,5 @@ return function()
   end
 
   os.remove(out_path)
+  cleanup()
 end

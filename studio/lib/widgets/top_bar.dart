@@ -15,7 +15,9 @@ import '../providers/tilemap_provider.dart';
 import '../services/llm_provider.dart';
 import '../services/export_service.dart';
 import '../theme/studio_theme.dart';
+import 'adapter_picker.dart';
 import 'llm_provider_settings.dart';
+import 'scanner_dialog.dart';
 
 const _themes = [
   ('dark_fantasy', 'Dark Fantasy', Icons.castle),
@@ -408,6 +410,25 @@ class TopBar extends ConsumerWidget {
           _ModeToggle(),
 
           const Spacer(),
+
+          // Style Scanner
+          Tooltip(
+            message: 'Style Scanner — train from reference art',
+            child: InkWell(
+              onTap: () => ScannerDialog.show(context),
+              borderRadius: BorderRadius.circular(4),
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: Icon(Icons.document_scanner, size: 16,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7)),
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+
+          // Adapter picker
+          const AdapterPicker(),
+          const SizedBox(width: 8),
 
           // API key status
           _ApiKeyBadge(),

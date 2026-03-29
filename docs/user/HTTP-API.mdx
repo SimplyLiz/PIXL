@@ -1,0 +1,151 @@
+# HTTP API
+
+PIXL includes an HTTP server that Studio and custom tools use to interact with the engine. It loads a `.pax` file into memory and exposes every engine feature as a REST endpoint.
+
+## Starting the server
+
+```bash
+pixl serve --port 3742 --file my_tileset.pax
+```
+
+- `--file` — the `.pax` tileset to load. This is your project file containing palettes, tiles, sprites, and settings. Create one with `pixl new dark_fantasy -o my_tileset.pax` or write it by hand (see [PAX Format](./PAX-Format)).
+- `--port` — the HTTP port to listen on (default: 3742).
+
+The server holds the tileset in memory as a session. Changes made through the API (creating tiles, recording feedback) update the session. Use `GET /api/file` to retrieve the updated `.pax` source.
+
+## How Studio connects
+
+<Callout type="info">PIXL Studio launches this server automatically — you don't need to start it manually. When you open a `.pax` file in Studio, it starts `pixl serve` behind the scenes and talks to it over HTTP. You only need to run it yourself for custom integrations or debugging.</Callout>
+
+## Request / response format
+
+- All endpoints accept and return **JSON**
+- Image data is returned as **base64-encoded PNG** (or GIF for animations)
+- Error responses include an `"error"` field with a human-readable message
+- `Content-Type: application/json` for POST requests
+
+## Endpoints
+
+### Discovery
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/health` | Returns `"pixl ok"` — use for health checks |
+| POST | `/api/session` | Session info: active theme, palette symbols, stamps, tile list |
+| POST | `/api/palette` | Full symbol table with hex colors and semantic roles |
+| GET | `/api/themes` | All available themes with palette, scale, constraints |
+| GET | `/api/stamps` | Available stamps with sizes |
+| GET | `/api/tiles` | All tiles with edge classes, tags, and template info |
+| GET | `/api/file` | The full `.pax` TOML source (reflects all session changes) |
+
+### Tile operations
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/tile/create` | Create a tile from a character grid. Returns preview PNG + auto-classified edges + compatible neighbors. |
+| POST | `/api/tile/render` | Render a tile to base64 PNG at specified scale |
+| POST | `/api/tile/delete` | Remove a tile from the session |
+| POST | `/api/tile/edge-check` | Test if two tiles can be placed adjacent |
+| POST | `/api/tile/vary` | Generate controlled mutations of a tile |
+
+### Sprite generation
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/tile/generate-sprite` | Generate via DALL-E: prompt → reference image → palette extraction → quantized PAX tile. Requires `OPENAI_API_KEY`. |
+| POST | `/api/tile/upscale` | Nearest-neighbor grid upscale (e.g., 8x8 → 16x16) |
+| POST | `/api/tile/references` | Search tiles by name/tags and render matches as preview images |
+| POST | `/api/generate/context` | Build an enriched AI generation prompt with palette, theme, style, and few-shot examples |
+| POST | `/api/generate/tile` | Generate a tile via local LoRA model (requires `--model` flag on server start) |
+
+### Quality & refinement
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/tile/critique` | Structural analysis: outline coverage, centering, contrast, fragmentation. Returns preview PNG + text critique + fix instructions. |
+| POST | `/api/tile/refine` | Patch specific rows of a tile grid. Returns updated preview + new critique. Tracks iteration count. |
+| POST | `/api/validate` | Validate the full `.pax` file: palettes, grids, edges, composites |
+
+### Style & feedback
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/style/learn` | Extract 8-point style fingerprint from reference tiles |
+| POST | `/api/style/check` | Score a tile against the session style (0.0-1.0) |
+| POST | `/api/feedback` | Record accept/reject/edit feedback on a tile |
+| GET | `/api/feedback/stats` | Feedback statistics: acceptance rate, total events |
+| GET | `/api/feedback/constraints` | Learned constraints from feedback: avoid rules, few-shot examples, minimum style score |
+
+### Maps & composites
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/narrate` | WFC map generation from spatial predicate rules |
+| GET | `/api/composites` | List composites with their variants and animation names |
+| POST | `/api/composite/render` | Render a composite sprite with optional variant/animation/frame |
+| GET | `/api/composite/check-seams` | Check pixel continuity at composite tile boundaries |
+| POST | `/api/blueprint` | Character anatomy landmarks for a canvas size |
+
+### Sprites & export
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/sprite/gif` | Render an animated sprite as base64 GIF |
+| POST | `/api/atlas/pack` | Pack all tiles into a sprite atlas PNG + TexturePacker JSON |
+| POST | `/api/export` | Export to game engine format (Tiled, Godot, Unity, TexturePacker, GB Studio) |
+| POST | `/api/convert` | Convert an AI-generated image to pixel art |
+| POST | `/api/backdrop/import` | Import an image as a PAX backdrop |
+| POST | `/api/backdrop/render` | Render a backdrop scene (static PNG or animated GIF) |
+
+### Session management
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/load` | Load a `.pax` source string into the session, replacing current state |
+| POST | `/api/new` | Create a session from a built-in theme template |
+| GET | `/api/check/completeness` | Analyze tileset completeness for WFC — find missing transition tiles |
+| POST | `/api/tile/generate-transition` | Build an AI prompt for creating a missing transition tile |
+| POST | `/api/training/export` | Export feedback data as JSONL for LoRA training |
+| GET | `/api/training/stats` | Training data statistics: pair count, adapter info |
+
+### Generic tool call
+
+Any MCP tool can be called through a single generic endpoint:
+
+```
+POST /api/tool
+{
+  "tool": "pixl_critique_tile",
+  "args": { "name": "wizard", "scale": 16 }
+}
+```
+
+This is useful for tools that don't have a dedicated route, or for building custom integrations that call tools by name.
+
+### Style Scanner
+
+| Endpoint | Method | What it does |
+|----------|--------|-------------|
+| `/api/scan/start` | POST | Scan reference images. Body: `\{"input": "path/", "patch_size": 16, "stride": 8\}`. Returns scan manifest with patch count, categories, quality stats. |
+| `/api/prepare` | POST | Prepare training data from scan. Body: `\{"scan_dir": "...", "style": "my-game", "aug": 4, "color_aug": true, "max_per_bin": 150\}`. Returns dataset stats. |
+| `/api/train/start` | POST | Start LoRA training. Body: `\{"data_dir": "...", "adapter": "path/", "epochs": 5\}`. Spawns in background, returns immediately with `pid` and `total_iters`. |
+| `/api/train/status` | GET | Poll training progress. Returns: `status`, `progress`, `loss`, `best_loss`, `speed` (it/sec), `epoch`, `total_epochs`, `eta_minutes`, `paused`, `throttle`. |
+| `/api/train/stop` | POST | Stop a running training job. Kills the process and any child processes. |
+| `/api/train/pause` | POST | Pause training (saves checkpoint, stops process). Resume by calling `/api/train/start` with `resume: true` — continues from last checkpoint. |
+| `/api/train/throttle` | POST | Set CPU priority. Body: `\{"level": "full"|"normal"|"background"|"minimal"\}`. Uses `renice` to lower priority so your machine stays responsive. |
+| `/api/datasets` | GET/POST | List available training datasets. POST with `\{"dirs": [...]\}` to scan custom directories. |
+| `/api/adapters` | GET | List available LoRA adapters with metadata (name, path, training samples, epochs). |
+| `/api/adapter/activate` | POST | Switch active adapter. Body: `\{"path": "training/adapters/my-style/"\}`. Hot-swaps the inference server. |
+
+## Image fields in responses
+
+Responses that include rendered images use these field names:
+
+| Field | Format | What it contains |
+|-------|--------|-----------------|
+| `preview_b64` | base64 PNG | Tile or composite preview |
+| `reference_b64` | base64 PNG | DALL-E reference image (before quantization) |
+| `atlas_b64` | base64 PNG | Packed sprite atlas |
+| `gif_b64` | base64 GIF | Animated sprite |
+| `png_base64` | base64 PNG | Backdrop static render |
+| `gif_base64` | base64 GIF | Backdrop animated render |

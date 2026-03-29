@@ -1,0 +1,130 @@
+# Animation
+
+PIXL handles sprite animation, color cycling, and backdrop effects — from simple walk cycles to full retro-hardware screen effects.
+
+## Sprite animation
+
+Define a spriteset with named sprites, each containing animation frames:
+
+```toml
+[spriteset.hero]
+palette = "dungeon"
+width   = 16
+height  = 16
+
+[[spriteset.hero.sprite]]
+name = "walk_right"
+fps  = 8
+loop = true
+
+[[spriteset.hero.sprite.frames]]
+index    = 1
+encoding = "grid"
+grid = '''
+..your first frame...
+'''
+
+[[spriteset.hero.sprite.frames]]
+index    = 2
+encoding = "delta"
+base     = 1
+changes  = [
+  { x = 3, y = 6, sym = "#" },
+  { x = 4, y = 7, sym = "+" },
+]
+```
+
+## Frame encoding types
+
+<FeatureGrid>
+  <Feature title="Grid">
+    Full character grid per frame. Use for the base pose and frames that change significantly.
+  </Feature>
+  <Feature title="Delta">
+    Copy a base frame, then apply pixel changes. Just list the pixels that moved — everything else stays the same. Saves space on walk cycles.
+  </Feature>
+  <Feature title="Linked">
+    Alias to another frame (zero storage). Use when two animations share a pose, like idle frame 1 = walk frame 1.
+  </Feature>
+  <Feature title="Mirror">
+    Flip a frame horizontally or vertically. Walk-left from walk-right without storing duplicate data.
+  </Feature>
+</FeatureGrid>
+
+<Callout type="tip">
+  Start with a full `grid` frame for the base pose, then use `delta` for subsequent frames — only the pixels that change need to be listed.
+</Callout>
+
+## Mirror support
+
+Flip entire sprites without storing duplicate data:
+
+```toml
+[[spriteset.hero.sprite]]
+name   = "walk_left"
+mirror = "h"           # horizontal flip of walk_right
+source = "walk_right"
+```
+
+The engine flips every frame automatically. One set of tiles covers both directions.
+
+## Color cycling
+
+Animate water, fire, and lava without storing frames at all. Color cycling rotates palette entries at runtime:
+
+```toml
+[cycle.water_shimmer]
+palette   = "dungeon"
+symbols   = ["~", "h", "+"]
+direction = "forward"    # "forward" | "backward" | "ping-pong"
+fps       = 8
+```
+
+At each tick, the colors shift: `~` gets the color of `h`, `h` gets `+`, `+` gets `~`. The pixel grid never changes — only the color mapping moves.
+
+### Where cycles apply
+
+| Context | How to use |
+|---------|-----------|
+| **Tiles** | `cycles = ["water_shimmer"]` on any `[tile.*]` |
+| **Spritesets** | `cycles = ["torch_flicker"]` on `[spriteset.*]` |
+| **Backdrop zones** | `behavior = "cycle"` with `cycle = "water_shimmer"` |
+| **Tilemap layers** | `cycles = ["lightning"]` on any layer |
+
+## Rendering animations
+
+```bash
+# Animated GIF
+pixl render-sprite game.pax --spriteset hero --sprite walk_right -o walk.gif --scale 4
+
+# PNG spritesheet (all frames side by side)
+pixl render-sprite game.pax --spriteset hero --sprite idle -o idle.png --scale 4
+```
+
+## Animation in composites
+
+Composite sprites support per-frame tile swaps — only the tiles that change get replaced:
+
+```toml
+[[composite.knight.anim.walk.frame]]
+index = 2
+swap = { "1_0" = "knight_walk2_l", "1_1" = "knight_walk2_r" }
+```
+
+See [Composite Sprites](./Composite-Sprites) for the full system.
+
+## Global animation clocks
+
+For synchronized tile animations (water tiles that ripple in unison), use a shared clock instead of per-tile frame arrays:
+
+```toml
+[anim_clock.water]
+fps    = 6
+frames = 4
+mode   = "loop"
+
+[backdrop_tile.water_a]
+anim_clock = "water"   # cycles water_a_0 → water_a_1 → water_a_2 → water_a_3
+```
+
+All tiles on the same clock stay perfectly in sync — just like Neo Geo auto-animation.

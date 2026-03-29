@@ -6,8 +6,8 @@ return function()
   local dlg = Dialog("PIXL Atlas Pack")
   dlg:file{
     id = "pax_file",
-    label = "PAX file",
-    filetypes = { "pax" },
+    label = "PAX / PAX-L file",
+    filetypes = { "pax", "paxl" },
     open = true,
   }
   dlg:number{
@@ -43,9 +43,16 @@ return function()
   local pax_path = dlg.data.pax_file
   if not pax_path or pax_path == "" then return end
 
+  -- Expand .paxl to temp .pax if needed
+  local cli_pax, cleanup = cli.ensure_pax(pax_path)
+  if not cli_pax then
+    app.alert(cleanup)
+    return
+  end
+
   local atlas_png = img.tmp(".png")
   local args = {
-    "atlas", pax_path,
+    "atlas", cli_pax,
     "-o", atlas_png,
     "--columns", tostring(dlg.data.columns or 8),
     "--padding", tostring(dlg.data.padding or 1),
@@ -82,4 +89,5 @@ return function()
   -- Cleanup
   if atlas_png then os.remove(atlas_png) end
   if map_json then os.remove(map_json) end
+  cleanup()
 end

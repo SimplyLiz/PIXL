@@ -1,0 +1,85 @@
+# Developer Tools — Overview & FAQ
+
+PIXL has three developer interfaces. They all work with the same `.pax` files and the same engine — they're just different ways to talk to it.
+
+## Which tool do I use?
+
+| I want to... | Use |
+|---|---|
+| Draw tiles visually, preview animations, paint maps | [PIXL Studio](./Studio) |
+| Render, validate, export from the terminal or a script | [CLI](./CLI-Reference) |
+| Let an AI assistant create and refine tiles | [MCP server](./MCP-Tools) |
+| Build a custom tool or integration | [HTTP API](./HTTP-API) |
+
+You can mix and match. Edit in Studio, validate in the CLI, generate with the MCP server — they all read and write the same `.pax` file.
+
+## What is a .pax file?
+
+Your project file. It's a plain text file (TOML format) containing your palettes, tiles, sprites, animations, composites, and settings. Every PIXL tool takes a `.pax` file as input.
+
+**Create one:**
+
+```bash
+pixl new dark_fantasy -o my_tileset.pax    # from a template
+```
+
+Or open Studio and click **New Project**. Or write one by hand — it's just text.
+
+See [Getting Started](./Getting-Started) for a full walkthrough, or [PAX Format](./PAX-Format) for the specification.
+
+## How do the tools relate?
+
+All four interfaces sit on top of the same Rust engine and read the same `.pax` files:
+
+<ArchDiagram />
+
+Edit in Studio, validate in the CLI, generate with the MCP server — they all work with the same file and produce the same results.
+
+## Common questions
+
+### Do I need an API key?
+
+Only for AI sprite generation (`pixl_generate_sprite` / `pixl generate-sprite`). Set `OPENAI_API_KEY` in your environment. Everything else — drawing, rendering, validation, export, WFC maps — works without any API keys.
+
+### Where do my files live?
+
+Wherever you put them. `.pax` files are local text files on your disk. No cloud, no accounts, no sync. Back them up with Git like code.
+
+### Can I use PIXL without Studio?
+
+Yes. The CLI does everything Studio does (and more). Studio is for visual editing — if you prefer terminals, you never need to open it.
+
+### Can I use PIXL without the CLI?
+
+Yes. Studio bundles the engine. You can create, edit, generate, and export entirely through the visual editor and its AI chat panel.
+
+### Can I embed PIXL in my own tool?
+
+Yes. The Rust engine is a library (`pixl-core` + `pixl-render`):
+
+```bash
+cargo add pixl-core pixl-render
+```
+
+Parse `.pax` files, render tiles, run WFC — all from your own Rust code. Or use the HTTP API from any language.
+
+### What game engines are supported?
+
+Export to **Tiled** (.tmx), **Godot** (TileMap), **Unity** (tile palette), **TexturePacker** (JSON Hash — works with 48+ engines), and **GB Studio**. See [Export Formats](./Export-Formats).
+
+### What image formats can I import?
+
+PNG, JPG, BMP, GIF, WebP, TIFF, TGA. The `pixl convert` command handles AI-generated "pixel art" images that need to be downsampled and palette-quantized into real pixel art.
+
+### How does the AI know about pixel art?
+
+PIXL ships with a curated [knowledge base](./Knowledge-Base) covering color theory, dithering, shading, tiling rules, retro hardware constraints, and more. The AI pulls relevant technique knowledge for each generation request. You can also [train a LoRA model](./LoRA-Training) on your own art style.
+
+### What's the difference between MCP and HTTP API?
+
+Same engine, different transport:
+
+- **MCP** — stdio, designed for AI assistants (Claude Code, etc.)
+- **HTTP** — REST endpoints, designed for Studio and custom integrations
+
+Both expose the same 28 tools. Use MCP for AI workflows, HTTP for everything else.

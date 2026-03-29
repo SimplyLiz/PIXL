@@ -55,4 +55,46 @@ function M.run(args)
   return nil, output, code
 end
 
+-- Execute a pixl command with stdin piped from a file.
+-- Returns (ok: bool, output: string, exit_code: number).
+function M.exec_stdin(args, stdin_path)
+  seq = seq + 1
+  local tmp = app.fs.joinPath(app.fs.tempPath, "pixl_out_" .. os.clock() .. "_" .. seq .. ".txt")
+  local cmd = M.build_cmd(args) .. " < " .. quote(stdin_path) .. " > " .. quote(tmp) .. " 2>&1"
+
+  local ok, _, code = os.execute(cmd)
+  code = code or 0
+
+  local output = ""
+  local f = io.open(tmp, "r")
+  if f then
+    output = f:read("*a") or ""
+    f:close()
+    os.remove(tmp)
+  end
+
+  return ok and (code == 0), output, code
+end
+
+-- If path is a .paxl file, expand it to a temporary .pax file.
+-- Returns (pax_path, cleanup_fn).  For .pax inputs, cleanup is a no-op.
+function M.ensure_pax(path)
+  if not path:match("%.paxl$") then
+    return path, function() end
+  end
+  seq = seq + 1
+  local tmp_pax = app.fs.joinPath(app.fs.tempPath, "pixl_expanded_" .. os.clock() .. "_" .. seq .. ".pax")
+  local ok, output, code = M.exec_stdin({ "expand" }, path)
+  if not ok then
+    return nil, "pixl expand failed:\n" .. (output or "exit code " .. code)
+  end
+  local f = io.open(tmp_pax, "w")
+  if not f then
+    return nil, "cannot write temp file"
+  end
+  f:write(output)
+  f:close()
+  return tmp_pax, function() os.remove(tmp_pax) end
+end
+
 return M

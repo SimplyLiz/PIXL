@@ -406,6 +406,23 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
           },
           child: Listener(
             onPointerSignal: (event) => _handleScroll(event, cs),
+            onPointerPanZoomUpdate: (event) {
+              // Trackpad two-finger pan
+              setState(() {
+                _panOffset += event.panDelta;
+              });
+              // Trackpad pinch-to-zoom
+              if (event.scale != 1.0) {
+                _pinchAccum += (event.scale - 1.0);
+                if (_pinchAccum > 0.1) {
+                  ref.read(canvasProvider.notifier).zoomIn();
+                  _pinchAccum = 0.0;
+                } else if (_pinchAccum < -0.1) {
+                  ref.read(canvasProvider.notifier).zoomOut();
+                  _pinchAccum = 0.0;
+                }
+              }
+            },
             child: MouseRegion(
               cursor: _spaceHeld
                   ? SystemMouseCursors.grab

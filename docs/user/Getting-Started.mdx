@@ -1,0 +1,161 @@
+# Getting Started
+
+## What is PIXL?
+
+PIXL is a pixel art toolchain. You create tilesets — collections of small pixel art images (tiles) — and PIXL helps you draw them, generate them with AI, assemble them into maps, and export them to your game engine.
+
+Everything revolves around one file: a `.pax` file.
+
+## What is a .pax file?
+
+A `.pax` file is your project. It's a plain text file that contains everything:
+
+<FeatureGrid>
+  <Feature title="Palettes">
+    Your color definitions — each character maps to one color
+  </Feature>
+  <Feature title="Tiles">
+    Your pixel art, written as character grids (one char = one pixel)
+  </Feature>
+  <Feature title="Sprites">
+    Animated tile sequences with frame timing
+  </Feature>
+  <Feature title="Composites">
+    Larger characters assembled from smaller tile parts
+  </Feature>
+</FeatureGrid>
+
+Here's what one looks like:
+
+```toml
+[pax]
+version = "2.1"
+name = "my_game"
+theme = "dark_fantasy"
+
+[palette.dungeon]
+"." = "#00000000"    # transparent
+"#" = "#2a1f3d"      # dark wall
+"+" = "#4a3a6d"      # lit surface
+"h" = "#8070a8"      # highlight
+
+[tile.wall]
+palette = "dungeon"
+size = "16x16"
+grid = '''
+################
+#++++++++++++++#
+#+#++#++#++#+++#
+#++++++++++++++#
+#+h++++++++++h+#
+#++++++++++++++#
+################
+'''
+```
+
+That's a real, working tileset. You can render it, validate it, export it.
+
+## Three ways to create a .pax file
+
+### 1. From a template (fastest)
+
+```bash
+pixl new dark_fantasy -o my_tileset.pax
+```
+
+Available templates: `dark_fantasy`, `light_fantasy`, `sci_fi`, `nature`, `gameboy`, `nes`.
+
+### 2. In PIXL Studio (visual)
+
+Open Studio, click **New Project**, pick a theme and canvas size. Studio creates the file and you start drawing immediately.
+
+### 3. By hand (full control)
+
+Create a `.pax` text file in any editor. Start with the example above and add tiles. See [PAX Format](./PAX-Format) for the full spec.
+
+## Install
+
+### PIXL Studio (recommended)
+
+The desktop app bundles everything — editor, engine, AI tools. No separate installs.
+
+**Download:** [GitHub Releases](https://github.com/SimplyLiz/PIXL/releases/latest)
+
+On macOS with Homebrew:
+
+```bash
+brew install SimplyLiz/pixl/pixl-studio
+```
+
+### CLI only
+
+**Download binaries:** [GitHub Releases](https://github.com/SimplyLiz/PIXL/releases/latest) (macOS, Linux, Windows)
+
+Or install via Cargo:
+
+```bash
+cargo install pixl
+```
+
+## Your first workflow
+
+Once you have a `.pax` file:
+
+### Check your work
+
+```bash
+pixl validate my_tileset.pax
+```
+
+### See what you made
+
+```bash
+pixl render my_tileset.pax --tile wall --scale 8 --out wall.png
+```
+
+### Check art quality
+
+```bash
+pixl critique my_tileset.pax --tile wall
+```
+
+### Generate a sprite with AI
+
+```bash
+pixl generate-sprite my_tileset.pax \
+  --prompt "a wizard with a purple hat" \
+  --name wizard \
+  --out wizard.png
+```
+
+<Callout type="info">
+  AI sprite generation requires `OPENAI_API_KEY` in your environment. Everything else works without any API keys.
+</Callout>
+
+### Build a map from your tiles
+
+```bash
+pixl narrate my_tileset.pax --width 12 --height 8 --out map.png
+```
+
+### Export to your game engine
+
+```bash
+pixl atlas my_tileset.pax --out atlas.png --map atlas.json
+pixl export my_tileset.pax --format tiled --out ./export/
+```
+
+## Using with AI assistants
+
+```bash
+pixl mcp --file my_tileset.pax
+```
+
+Then ask Claude to create tiles, critique your art, generate sprites, or build maps — all through natural conversation.
+
+## Next steps
+
+- [PAX Format](./PAX-Format) — the full file format specification
+- [Drawing & Painting](./Studio-Drawing) — Studio's pixel editing tools
+- [Sprite Generation](./Sprite-Generation) — how AI generation works
+- [CLI Reference](./CLI-Reference) — every command explained

@@ -78,6 +78,9 @@ class StyleNotifier extends StateNotifier<StyleState> {
   void setDithering(Dithering d) => state = state.copyWith(dithering: d);
   void setOutline(OutlineStyle o) => state = state.copyWith(outline: o);
   void setMood(Mood m) => state = state.copyWith(mood: m);
+
+  /// Restore full style state (used by tab manager on tab switch).
+  void restore(StyleState s) => state = s;
 }
 
 final styleProvider = StateNotifierProvider<StyleNotifier, StyleState>(

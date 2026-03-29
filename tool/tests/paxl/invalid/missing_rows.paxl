@@ -1,0 +1,6 @@
+@pax test 2.1 L1
+@pal p
+  . #00000000  # #ffffff
+@tile wall 4x4[4] e=solid obstacle
+  ####
+  ####

@@ -15,7 +15,7 @@ function init(plugin)
   -- Import PAX tiles into Aseprite
   plugin:newCommand{
     id = "PixlImport",
-    title = "Import PAX...",
+    title = "Import PAX / PAX-L...",
     group = group,
     onenabled = function() return true end,
     onclick = function()
@@ -27,7 +27,7 @@ function init(plugin)
   -- Export current sprite to PAX tile
   plugin:newCommand{
     id = "PixlExport",
-    title = "Export to PAX...",
+    title = "Export to PAX / PAX-L...",
     group = group,
     onenabled = function() return app.sprite ~= nil end,
     onclick = function()
@@ -80,6 +80,30 @@ function init(plugin)
     onenabled = function() return true end,
     onclick = function()
       local cmd = dofile(plugin.path .. "/commands/convert.lua")
+      cmd()
+    end,
+  }
+
+  -- Compact PAX to PAX-L
+  plugin:newCommand{
+    id = "PixlCompact",
+    title = "Compact to PAX-L...",
+    group = group,
+    onenabled = function() return true end,
+    onclick = function()
+      local cmd = dofile(plugin.path .. "/commands/compact.lua")
+      cmd()
+    end,
+  }
+
+  -- Expand PAX-L to PAX
+  plugin:newCommand{
+    id = "PixlExpand",
+    title = "Expand PAX-L...",
+    group = group,
+    onenabled = function() return true end,
+    onclick = function()
+      local cmd = dofile(plugin.path .. "/commands/expand.lua")
       cmd()
     end,
   }

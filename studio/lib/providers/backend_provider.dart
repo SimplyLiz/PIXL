@@ -413,6 +413,45 @@ class BackendNotifier extends StateNotifier<BackendState> {
     if (resp.containsKey('error')) return null;
     return resp['source'] as String?;
   }
+
+  /// Get .pax source in compact PAX-L format (~40% fewer tokens).
+  Future<String?> getPaxlSource() async {
+    final resp = await _backend.getFilePaxl();
+    if (resp.containsKey('error')) return null;
+    return resp['paxl_source'] as String?;
+  }
+
+  /// Rate a tile aesthetically (1-5 on readability, appeal, consistency).
+  Future<Map<String, dynamic>?> rateTile(String name) async {
+    final resp = await _backend.rateTile(name);
+    if (resp.containsKey('error')) return null;
+    return resp;
+  }
+
+  /// Check if the tileset is sub-complete (WFC contradiction-free).
+  Future<Map<String, dynamic>?> checkSubcomplete() async {
+    final resp = await _backend.checkSubcomplete();
+    if (resp.containsKey('error')) return null;
+    return resp;
+  }
+
+  /// Generate a complete Wang tileset for terrain transitions.
+  Future<Map<String, dynamic>?> generateWang({
+    required String terrainA,
+    required String terrainB,
+    String method = 'dual_grid',
+    int size = 16,
+  }) async {
+    final resp = await _backend.generateWang(
+      terrainA: terrainA,
+      terrainB: terrainB,
+      method: method,
+      size: size,
+    );
+    if (resp.containsKey('error')) return null;
+    await refreshTiles();
+    return resp;
+  }
 }
 
 final backendProvider =

@@ -18,6 +18,8 @@ enum _ExportFormat {
       'Pack all tiles into a single atlas sheet.'),
   pax('PAX Source', Icons.code, _FormatCategory.data,
       'Save the raw PAX source for later editing.'),
+  paxl('PAX-L Compact', Icons.compress, _FormatCategory.data,
+      'Compact PAX-L format — ~40% fewer tokens for LLM context.'),
   tiled('Tiled', Icons.map, _FormatCategory.engine,
       'TMX tilemap + tileset for the Tiled editor.'),
   godot('Godot', Icons.videogame_asset, _FormatCategory.engine,
@@ -82,25 +84,12 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
   @override
   void initState() {
     super.initState();
-    final cs = ref.read(canvasProvider);
-    _scaleLog = _defaultScaleIndex(cs.width).toDouble();
-  }
-
-  int _defaultScaleIndex(int canvasSize) {
-    if (canvasSize <= 8) return 5;  // 32x → 256
-    if (canvasSize <= 16) return 4; // 16x → 256
-    if (canvasSize <= 32) return 3; // 8x  → 256
-    return 2;                       // 4x
+    _scaleLog = 0; // default 1x — native resolution
   }
 
   int get _scale => _scaleStops[_scaleLog.round().clamp(0, _scaleStops.length - 1)];
 
-  int get _defaultScale {
-    final cs = ref.read(canvasProvider);
-    return _scaleStops[_defaultScaleIndex(cs.width)];
-  }
-
-  bool get _isDefaultScale => _scale == _defaultScale;
+  bool get _isDefaultScale => _scale == 1;
 
   /// Auto-select appropriate filter based on scale direction.
   _ScaleFilter get _suggestedFilter {
@@ -127,6 +116,7 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
       child: Container(
         width: 420,
         padding: const EdgeInsets.all(24),
+        child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -165,36 +155,38 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
               selected: _format,
               onChanged: (f) => setState(() => _format = f),
             ),
-            const SizedBox(height: 6),
 
-            // ── Format description ──
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 150),
-              child: Container(
-                key: ValueKey(_format),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Row(
-                  children: [
-                    Icon(_format.icon, size: 13, color: theme.colorScheme.primary),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _format.description,
-                        style: theme.textTheme.bodySmall!.copyWith(fontSize: 10),
+            // ── Format description (non-PNG formats) ──
+            if (_format != _ExportFormat.png) ...[
+              const SizedBox(height: 6),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 150),
+                child: Container(
+                  key: ValueKey(_format),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(_format.icon, size: 13, color: theme.colorScheme.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _format.description,
+                          style: theme.textTheme.bodySmall!.copyWith(fontSize: 10),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
+            ],
 
             // ── PNG options ──
             if (_format == _ExportFormat.png) ...[
-              const SizedBox(height: 18),
+              const SizedBox(height: 14),
               const _SectionLabel('SCALE'),
               const SizedBox(height: 6),
 
@@ -219,7 +211,6 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
                         divisions: _scaleStops.length - 1,
                         onChanged: (v) => setState(() {
                           _scaleLog = v;
-                          // Auto-switch filter when scale changes significantly
                           if (_filter == _ScaleFilter.nearest && _scale < ref.read(canvasProvider).width) {
                             _filter = _ScaleFilter.lanczos3;
                           }
@@ -230,6 +221,32 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
                   Text('32x', style: theme.textTheme.bodySmall!.copyWith(fontSize: 9)),
                 ],
               ),
+
+              // Format description — below slider
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 150),
+                child: Container(
+                  key: ValueKey(_format),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(_format.icon, size: 13, color: theme.colorScheme.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _format.description,
+                          style: theme.textTheme.bodySmall!.copyWith(fontSize: 10),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
 
               // Output info
               Container(
@@ -258,13 +275,19 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
 
               // ── Scaling algorithm (shown when non-default scale) ──
               if (!_isDefaultScale) ...[
-                const SizedBox(height: 14),
-                const _SectionLabel('SCALING ALGORITHM'),
-                const SizedBox(height: 6),
-                _FilterPicker(
-                  selected: _filter,
-                  suggested: _suggestedFilter,
-                  onChanged: (f) => setState(() => _filter = f),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    const _SectionLabel('ALGORITHM'),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _FilterDropdown(
+                        selected: _filter,
+                        suggested: _suggestedFilter,
+                        onChanged: (f) => setState(() => _filter = f),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ],
@@ -301,6 +324,7 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
             ),
           ],
         ),
+        ),
       ),
     );
   }
@@ -310,6 +334,7 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
       _ExportFormat.png => 'Export PNG',
       _ExportFormat.atlas => 'Export Atlas',
       _ExportFormat.pax => 'Save PAX',
+      _ExportFormat.paxl => 'Save PAX-L',
       _ExportFormat.tiled => 'Export for Tiled',
       _ExportFormat.godot => 'Export for Godot',
       _ExportFormat.unity => 'Export for Unity',
@@ -358,6 +383,22 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
           } else {
             messenger.showSnackBar(const SnackBar(
               content: Text('No PAX source available (engine not connected?)'),
+            ));
+          }
+          break;
+
+        case _ExportFormat.paxl:
+          final paxlSource = await ref.read(backendProvider.notifier).getPaxlSource();
+          if (paxlSource != null) {
+            final ok = await ExportService.savePaxSource(paxlSource, extension: 'paxl');
+            messenger.showSnackBar(SnackBar(
+              content: Text(ok ? 'PAX-L compact saved' : 'Save cancelled'),
+              duration: const Duration(seconds: 2),
+            ));
+            if (ok) nav.pop();
+          } else {
+            messenger.showSnackBar(const SnackBar(
+              content: Text('No PAX-L source available (engine not connected?)'),
             ));
           }
           break;
@@ -551,10 +592,9 @@ class _FormatTileState extends State<_FormatTile> {
   }
 }
 
-/// Scaling algorithm picker — shows all filters with descriptions and
-/// highlights the recommended one for the current scale direction.
-class _FilterPicker extends StatelessWidget {
-  const _FilterPicker({
+/// Compact popup-menu-based algorithm picker styled to match PIXL Studio.
+class _FilterDropdown extends StatelessWidget {
+  const _FilterDropdown({
     required this.selected,
     required this.suggested,
     required this.onChanged,
@@ -566,79 +606,95 @@ class _FilterPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isSuggested = selected == suggested;
 
-    return Column(
-      children: _ScaleFilter.values.map((f) {
-        final isSelected = f == selected;
-        final isSuggested = f == suggested;
-
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 4),
-          child: InkWell(
-            onTap: () => onChanged(f),
-            borderRadius: BorderRadius.circular(6),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 120),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? theme.colorScheme.primary.withValues(alpha: 0.12)
-                    : null,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                  color: isSelected ? theme.colorScheme.primary : theme.dividerColor,
-                  width: isSelected ? 1.5 : 1,
-                ),
+    return PopupMenuButton<_ScaleFilter>(
+      onSelected: onChanged,
+      offset: const Offset(0, 34),
+      color: StudioTheme.codeBg,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: theme.dividerColor),
+      ),
+      itemBuilder: (_) => _ScaleFilter.values.map((f) {
+        final sel = f == selected;
+        final sug = f == suggested;
+        return PopupMenuItem(
+          value: f,
+          height: 42,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            children: [
+              Icon(
+                sel ? Icons.check : null,
+                size: 13,
+                color: theme.colorScheme.primary,
               ),
-              child: Row(
-                children: [
-                  Icon(
-                    isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                    size: 14,
-                    color: isSelected ? theme.colorScheme.primary : theme.dividerColor,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              const SizedBox(width: 6),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
                       children: [
-                        Row(
-                          children: [
-                            Text(f.label, style: theme.textTheme.bodySmall!.copyWith(
-                              fontSize: 11,
-                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                              color: isSelected ? theme.colorScheme.primary : null,
-                            )),
-                            if (isSuggested) ...[
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                decoration: BoxDecoration(
-                                  color: StudioTheme.success.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(3),
-                                ),
-                                child: Text('recommended', style: TextStyle(
-                                  fontSize: 8,
-                                  fontWeight: FontWeight.w600,
-                                  color: StudioTheme.success,
-                                )),
-                              ),
-                            ],
-                          ],
-                        ),
-                        const SizedBox(height: 1),
-                        Text(f.hint, style: theme.textTheme.bodySmall!.copyWith(
-                          fontSize: 9,
+                        Text(f.label, style: theme.textTheme.bodySmall!.copyWith(
+                          fontSize: 11,
+                          fontWeight: sel ? FontWeight.w700 : FontWeight.w500,
+                          color: sel ? theme.colorScheme.primary : null,
                         )),
+                        if (sug) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: StudioTheme.success.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                            child: Text('rec', style: TextStyle(
+                              fontSize: 7, fontWeight: FontWeight.w700, color: StudioTheme.success,
+                            )),
+                          ),
+                        ],
                       ],
                     ),
-                  ),
-                ],
+                    Text(f.hint, style: theme.textTheme.bodySmall!.copyWith(fontSize: 9)),
+                  ],
+                ),
               ),
-            ),
+            ],
           ),
         );
       }).toList(),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: theme.dividerColor),
+        ),
+        child: Row(
+          children: [
+            Text(selected.label, style: theme.textTheme.bodySmall!.copyWith(
+              fontSize: 11, fontWeight: FontWeight.w500,
+            )),
+            if (isSuggested) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(
+                  color: StudioTheme.success.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+                child: Text('rec', style: TextStyle(
+                  fontSize: 7, fontWeight: FontWeight.w700, color: StudioTheme.success,
+                )),
+              ),
+            ],
+            const Spacer(),
+            Icon(Icons.unfold_more, size: 14, color: theme.textTheme.bodySmall?.color),
+          ],
+        ),
+      ),
     );
   }
 }

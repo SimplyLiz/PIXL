@@ -109,6 +109,10 @@ mod tests {
             grid: grid.map(|s| s.to_string()),
             rle: None,
             layout: None,
+            fill: None,
+            fill_size: None,
+            delta: None,
+            patches: vec![],
         }
     }
 

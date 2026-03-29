@@ -1,0 +1,161 @@
+# PAX Format
+
+PAX (Pixel Art eXchange) is a plain text file format for pixel art. It uses TOML syntax with character grids — every pixel is a single character mapped to a color in a palette.
+
+## Why plain text?
+
+- **Readable** — open any `.pax` file in a text editor and see exactly what's there
+- **Diffable** — Git shows which pixels changed, line by line
+- **No lock-in** — it's TOML, an open standard. Your art is never trapped
+- **AI-writable** — LLMs can generate valid `.pax` files directly
+
+## File structure
+
+A `.pax` file contains sections for palettes, themes, tiles, sprites, animations, and more:
+
+```toml
+[pax]
+version = "2.1"
+name = "my_tileset"
+theme = "dark_fantasy"
+
+[palette.dungeon]
+"." = "#00000000"    # transparent
+"#" = "#2a1f3d"      # dark wall
+"+" = "#4a3a6d"      # lit surface
+"h" = "#8070a8"      # highlight
+
+[tile.wall]
+palette = "dungeon"
+size = "16x16"
+grid = '''
+################
+#++++++++++++++#
+#+#++#++#++#+++#
+#++++++++++++++#
+################
+'''
+```
+
+## Palettes
+
+Each character maps to a hex color with alpha:
+
+```toml
+[palette.forest]
+"." = "#00000000"    # transparent
+"#" = "#1a3a1a"      # dark trunk
+"g" = "#2d5a27"      # dark leaf
+"G" = "#4a8c3f"      # light leaf
+```
+
+Up to 94 single-character symbols per palette. For larger palettes (17-48 colors), use `[palette_ext]` with two-character symbols.
+
+## Tile sizes
+
+Supported sizes: 8x8, 16x16, 24x24, 32x32, 48x48, 64x64. Tiles can also use non-square dimensions.
+
+## Encoding options
+
+<FeatureGrid>
+  <Feature title="Grid">Raw character matrix — best for tiles up to 16x16. Each character is one pixel. Supports `=N` row references for duplicate rows.</Feature>
+  <Feature title="RLE">Run-length encoded (`"5# 3+ 2."`) — saves space for larger tiles with uniform regions. Also supports `=N` row references.</Feature>
+  <Feature title="Compose">Assemble from reusable stamps (`"@brick @mortar"`) — build complex tiles from smaller parts. Works at any tile size.</Feature>
+  <Feature title="Fill">Repeat a small pattern to fill the tile (`4x4` pattern → `16x16` tile) — ideal for water, grass, brick textures.</Feature>
+  <Feature title="Delta">Inherit from a base tile and override specific pixels — for tile variants that differ by only a few pixels.</Feature>
+  <Feature title="Palette ext">Two-character symbols for palettes with 17-48 colors — when single chars aren't enough.</Feature>
+</FeatureGrid>
+
+## Row references (PAX 2.1)
+
+Tiles with repeating rows can use `=N` to reference an earlier row instead of writing it again:
+
+```toml
+grid = '''
+################
+#++++++++++++++#
+=1
+=2
+'''
+```
+
+`=1` means "same as row 1", `=2` means "same as row 2" (1-indexed). References cannot chain — each `=N` must point to a literal row.
+
+## Pattern fill (PAX 2.1)
+
+For tiles that are repeating textures, define a small pattern and tile it:
+
+```toml
+[tile.water_surface]
+encoding  = "fill"
+fill_size = "4x4"
+fill = '''
+~~h~
+~~~~
+~h~~
+~~~~
+'''
+```
+
+The 4x4 pattern tiles to fill the full 16x16 tile. Tile dimensions must be exact multiples of the pattern size.
+
+## Delta tiles (PAX 2.1)
+
+Create tile variants by inheriting a base tile and patching specific pixels:
+
+```toml
+[tile.floor_cracked]
+delta = "floor_stone"
+patches = [
+  { x = 4, y = 1, sym = "s" },
+  { x = 5, y = 2, sym = "s" },
+]
+```
+
+Best for variants that differ by fewer than ~12 pixels. Edge classes must be declared explicitly (not inherited from the base).
+
+## Style latent (PAX 2.1)
+
+An optional `[style.*]` section stores an 8-point statistical fingerprint extracted from your tiles:
+
+```toml
+[style.dark_fantasy]
+light_direction = 0.15
+shadow_ratio    = 0.35
+palette_entropy = 2.1
+```
+
+Used by AI tools to maintain visual consistency when generating new tiles. Computed by `pixl style FILE` or `pixl_learn_style` in MCP.
+
+## PAX-L (compact wire format)
+
+PAX-L is a token-efficient representation of PAX data, designed for LLM context windows. It's not a file format — it's what the MCP server sends to the AI and what the AI sends back.
+
+```
+@pax dungeon_tileset 2.1 L1
+@theme dark_fantasy dungeon s2 c16 p16 tl
+@pal dungeon
+  . #00000000  # #2a1f3d  + #4a3a6d  h #8070a8
+
+@tile wall 16x16[16] e=solid obstacle
+  ################
+  #++++++++++++++#
+  =1
+  =2
+```
+
+PAX-L reduces context tokens by ~40% through compact `@` directives, row references, default omission, and single-palette optimization. Use `pixl compact FILE` to see the PAX-L output of any `.pax` file.
+
+## Everything in one file
+
+<Callout type="info">A single `.pax` file can hold your entire game's art — palettes, tiles, sprites, animations, maps, backdrops, and export config. No folder hierarchies, no asset databases. One text file.</Callout>
+
+- Palettes and palette swaps
+- Tiles with edge classes for WFC
+- Sprite animations (frame-by-frame, delta, linked, mirrored)
+- Color cycling effects
+- Composite character sprites
+- Tilemap layouts with layers
+- Backdrop scenes with parallax
+- Style latent fingerprints
+- Export configuration

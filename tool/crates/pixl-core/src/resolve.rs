@@ -13,7 +13,7 @@ use thiserror::Error;
 pub enum ResolveError {
     #[error("tile has no size and no template")]
     NoSize,
-    #[error("tile has no pixel data (grid/rle/layout) and no template")]
+    #[error("tile has no pixel data (grid/rle/layout/fill/delta) and no template")]
     NoPixelData,
     #[error("template '{0}' not found")]
     TemplateNotFound(String),
@@ -29,6 +29,45 @@ pub enum ResolveError {
     Symmetry(#[from] symmetry::SymmetryError),
     #[error("size parse error: {0}")]
     Size(String),
+    #[error("delta base tile '{0}' not found")]
+    DeltaBaseNotFound(String),
+    #[error("delta chain: '{0}' is itself a delta tile")]
+    DeltaChain(String),
+    #[error("fill: pattern {fw}x{fh} doesn't evenly divide tile {tw}x{th}")]
+    FillDimensionMismatch { fw: u32, fh: u32, tw: u32, th: u32 },
+    #[error("patch at ({x},{y}) out of bounds for {w}x{h} tile")]
+    PatchOutOfBounds { x: u32, y: u32, w: u32, h: u32 },
+    #[error("patch symbol is empty")]
+    PatchEmptySymbol,
+}
+
+/// Tile a small pattern grid to fill a larger area.
+pub fn expand_fill(
+    pattern: &[Vec<char>],
+    pattern_w: u32,
+    pattern_h: u32,
+    tile_w: u32,
+    tile_h: u32,
+) -> Result<Vec<Vec<char>>, ResolveError> {
+    if tile_w % pattern_w != 0 || tile_h % pattern_h != 0 {
+        return Err(ResolveError::FillDimensionMismatch {
+            fw: pattern_w,
+            fh: pattern_h,
+            tw: tile_w,
+            th: tile_h,
+        });
+    }
+    let mut grid = Vec::with_capacity(tile_h as usize);
+    for y in 0..tile_h as usize {
+        let src_y = y % pattern_h as usize;
+        let mut row = Vec::with_capacity(tile_w as usize);
+        for x in 0..tile_w as usize {
+            let src_x = x % pattern_w as usize;
+            row.push(pattern[src_y][src_x]);
+        }
+        grid.push(row);
+    }
+    Ok(grid)
 }
 
 /// Rotation suffixes and the number of 90° CW rotations they represent.
@@ -98,6 +137,36 @@ pub fn resolve_tile_grid(
         }
     };
 
+    // PAX 2.1: handle delta tiles — resolve base grid, apply patches
+    if let Some(ref delta_base) = tile_raw.delta {
+        let base_tile = tiles
+            .get(delta_base.as_str())
+            .ok_or_else(|| ResolveError::DeltaBaseNotFound(delta_base.clone()))?;
+        // Reject delta chains
+        if base_tile.delta.is_some() {
+            return Err(ResolveError::DeltaChain(delta_base.clone()));
+        }
+        let (mut base_grid, w, h) = resolve_tile_grid(delta_base, tiles, palettes, stamps)?;
+        // Apply patches on the fully expanded grid
+        for patch in &tile_raw.patches {
+            if patch.x >= w || patch.y >= h {
+                return Err(ResolveError::PatchOutOfBounds {
+                    x: patch.x,
+                    y: patch.y,
+                    w,
+                    h,
+                });
+            }
+            let sym = patch
+                .sym
+                .chars()
+                .next()
+                .ok_or(ResolveError::PatchEmptySymbol)?;
+            base_grid[patch.y as usize][patch.x as usize] = sym;
+        }
+        return Ok((base_grid, w, h));
+    }
+
     // Handle template tiles
     let effective = if let Some(ref template_name) = tile_raw.template {
         tiles
@@ -141,6 +210,15 @@ pub fn resolve_tile_grid(
         rle::parse_rle(rle_str, grid_w, grid_h, palette)?
     } else if let Some(ref layout_str) = effective.layout {
         compose::resolve_compose(layout_str, stamps, w, h, '.')?
+    } else if let Some(ref fill_str) = effective.fill {
+        // PAX 2.1: pattern fill encoding
+        let fill_size_str = effective
+            .fill_size
+            .as_deref()
+            .ok_or_else(|| ResolveError::Size("fill requires fill_size".into()))?;
+        let (fw, fh) = parse_size(fill_size_str).map_err(ResolveError::Size)?;
+        let pattern = grid::parse_grid(fill_str, fw, fh, palette)?;
+        expand_fill(&pattern, fw, fh, w, h)?
     } else {
         return Err(ResolveError::NoPixelData);
     };
@@ -210,6 +288,10 @@ mod tests {
             grid: Some(grid.to_string()),
             rle: None,
             layout: None,
+            fill: None,
+            fill_size: None,
+            delta: None,
+            patches: vec![],
         }
     }
 
@@ -283,5 +365,132 @@ mod tests {
         assert_eq!(grid[1], vec!['#', '+', '+', '#']);
         assert_eq!(grid[2], vec!['#', '+', '+', '#']);
         assert_eq!(grid[3], vec!['#', '#', '#', '#']);
+    }
+
+    #[test]
+    fn resolve_fill_tile() {
+        // 2x2 pattern tiled into 4x4
+        let mut tile = make_tile("4x4", "");
+        tile.grid = None;
+        tile.fill = Some("#+\n+#".to_string());
+        tile.fill_size = Some("2x2".to_string());
+
+        let mut tiles = HashMap::new();
+        tiles.insert("checker".to_string(), tile);
+        let mut palettes = HashMap::new();
+        palettes.insert("test".to_string(), test_palette());
+
+        let (grid, w, h) =
+            resolve_tile_grid("checker", &tiles, &palettes, &HashMap::new()).unwrap();
+        assert_eq!(w, 4);
+        assert_eq!(h, 4);
+        assert_eq!(grid[0], vec!['#', '+', '#', '+']);
+        assert_eq!(grid[1], vec!['+', '#', '+', '#']);
+        assert_eq!(grid[2], vec!['#', '+', '#', '+']);
+        assert_eq!(grid[3], vec!['+', '#', '+', '#']);
+    }
+
+    #[test]
+    fn resolve_fill_bad_dimensions() {
+        // 3x3 pattern into 4x4 → doesn't divide evenly
+        let mut tile = make_tile("4x4", "");
+        tile.grid = None;
+        tile.fill = Some("#+#\n+#.\n#+#".to_string());
+        tile.fill_size = Some("3x3".to_string());
+
+        let mut tiles = HashMap::new();
+        tiles.insert("bad".to_string(), tile);
+        let mut palettes = HashMap::new();
+        palettes.insert("test".to_string(), test_palette());
+
+        let err = resolve_tile_grid("bad", &tiles, &palettes, &HashMap::new()).unwrap_err();
+        assert!(matches!(err, ResolveError::FillDimensionMismatch { .. }));
+    }
+
+    #[test]
+    fn resolve_delta_tile() {
+        use crate::types::PatchRaw;
+
+        let mut tiles = HashMap::new();
+        tiles.insert("base".to_string(), make_tile("4x2", "####\n++++"));
+
+        let mut delta_tile = make_tile("4x2", "");
+        delta_tile.grid = None;
+        delta_tile.delta = Some("base".to_string());
+        delta_tile.patches = vec![
+            PatchRaw {
+                x: 1,
+                y: 0,
+                sym: "+".to_string(),
+            },
+            PatchRaw {
+                x: 2,
+                y: 1,
+                sym: "#".to_string(),
+            },
+        ];
+        tiles.insert("variant".to_string(), delta_tile);
+
+        let mut palettes = HashMap::new();
+        palettes.insert("test".to_string(), test_palette());
+
+        let (grid, _, _) =
+            resolve_tile_grid("variant", &tiles, &palettes, &HashMap::new()).unwrap();
+        assert_eq!(grid[0], vec!['#', '+', '#', '#']); // patch at (1,0)
+        assert_eq!(grid[1], vec!['+', '+', '#', '+']); // patch at (2,1)
+    }
+
+    #[test]
+    fn resolve_delta_chain_rejected() {
+        use crate::types::PatchRaw;
+
+        let mut tiles = HashMap::new();
+        tiles.insert("base".to_string(), make_tile("4x2", "####\n++++"));
+
+        let mut delta1 = make_tile("4x2", "");
+        delta1.grid = None;
+        delta1.delta = Some("base".to_string());
+        delta1.patches = vec![PatchRaw {
+            x: 0,
+            y: 0,
+            sym: "+".to_string(),
+        }];
+        tiles.insert("d1".to_string(), delta1);
+
+        let mut delta2 = make_tile("4x2", "");
+        delta2.grid = None;
+        delta2.delta = Some("d1".to_string()); // chain!
+        delta2.patches = vec![];
+        tiles.insert("d2".to_string(), delta2);
+
+        let mut palettes = HashMap::new();
+        palettes.insert("test".to_string(), test_palette());
+
+        let err = resolve_tile_grid("d2", &tiles, &palettes, &HashMap::new()).unwrap_err();
+        assert!(matches!(err, ResolveError::DeltaChain(_)));
+    }
+
+    #[test]
+    fn resolve_delta_patch_out_of_bounds() {
+        use crate::types::PatchRaw;
+
+        let mut tiles = HashMap::new();
+        tiles.insert("base".to_string(), make_tile("4x2", "####\n++++"));
+
+        let mut delta_tile = make_tile("4x2", "");
+        delta_tile.grid = None;
+        delta_tile.delta = Some("base".to_string());
+        delta_tile.patches = vec![PatchRaw {
+            x: 10,
+            y: 0,
+            sym: "+".to_string(),
+        }];
+        tiles.insert("bad".to_string(), delta_tile);
+
+        let mut palettes = HashMap::new();
+        palettes.insert("test".to_string(), test_palette());
+
+        let err = resolve_tile_grid("bad", &tiles, &palettes, &HashMap::new()).unwrap_err();
+        assert!(matches!(err, ResolveError::PatchOutOfBounds { .. }));
     }
 }

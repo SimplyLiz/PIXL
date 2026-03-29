@@ -1,8 +1,17 @@
-# PAX 2.0 — Pixel Art eXchange Format
+# PAX 2.1 — Pixel Art eXchange Format
 
-**Version:** 2.0
+**Version:** 2.1
 **Status:** Authoritative specification
-**Supersedes:** All prior PIXL/PAX planning documents
+**Supersedes:** PAX 2.0 and all prior PIXL/PAX planning documents
+
+### 2.1 Changelog (from 2.0)
+
+- **Row references** (`=N`) in grid and RLE encoding (Section 8.3, 8.4)
+- **Pattern fill** encoding for repeating textures (Section 8.6)
+- **Compose at any size** — removed 33px minimum (Section 8.1, 8.5)
+- **Delta tiles** — grid inheritance with pixel patches (Section 8.10)
+- **Style latent** as optional file-level `[style.*]` section (Section 3.5)
+- `version = "2.1"` accepted alongside `"2.0"` (all 2.0 files are valid 2.1)
 
 ---
 
@@ -38,6 +47,7 @@ A `.pax` file is UTF-8 text with TOML syntax. Multi-line literal strings
 ```
 [pax]                         Header + version
 [theme.<name>]                Semantic style layer
+[style.<name>]                Style latent fingerprint (PAX 2.1, optional)
 [palette.<name>]              Named indexed color tables
 [palette_ext.<name>]          Extended palettes (17-48 colors, multi-char symbols)
 [palette_swap.<name>]         Palette substitution sets
@@ -61,7 +71,7 @@ A `.pax` file is UTF-8 text with TOML syntax. Multi-line literal strings
 
 ```toml
 [pax]
-version       = "2.0"
+version       = "2.1"       # "2.0" also accepted (all 2.0 files valid)
 name          = "dungeon_hero"
 author        = "claude"
 created       = "2026-03-22T12:00:00Z"
@@ -146,6 +156,45 @@ palette = "ice"               # override palette, inherit everything else
 Child themes override only specified fields. Role mappings, constraints, scale,
 and canvas are inherited from the parent. Circular `extends` chains are a parse
 error.
+
+---
+
+## 3.5 Style Latent (PAX 2.1)
+
+An optional statistical fingerprint extracted from reference tiles. Computed by
+`pixl_learn_style` / `StyleLatent::extract()`. Informational only — does not
+affect rendering.
+
+```toml
+[style.dark_fantasy]
+light_direction = 0.15       # highlight position bias (0.0=top-left, 1.0=bottom-right)
+run_length_mean = 3.2        # avg same-symbol run length in rows
+shadow_ratio    = 0.35       # fraction of darkest palette pixels
+palette_breadth = 8.0        # avg distinct symbols per tile
+pixel_density   = 0.62       # fraction of non-void pixels
+palette_entropy = 2.1        # Shannon entropy of symbol distribution
+hue_bias        = 270.0      # dominant hue in degrees (OKLab)
+luminance_mean  = 0.38       # mean luminance of non-void pixels (0.0-1.0)
+sample_count    = 12         # number of reference tiles used
+```
+
+**Usage:** The MCP server includes style data in LLM context so new tiles can
+be checked against the ambient aesthetic. `pixl_check_style(name)` scores a
+tile against the session latent (0-1).
+
+**Validation:** All values must be finite numbers. `sample_count` must be a
+positive integer. Other properties have the following valid ranges:
+
+| Property | Range |
+|---|---|
+| `light_direction` | 0.0-1.0 |
+| `run_length_mean` | 1.0-64.0 |
+| `shadow_ratio` | 0.0-1.0 |
+| `palette_breadth` | 1.0-94.0 |
+| `pixel_density` | 0.0-1.0 |
+| `palette_entropy` | 0.0-7.0 |
+| `hue_bias` | 0.0-360.0 |
+| `luminance_mean` | 0.0-1.0 |
 
 ---
 
@@ -306,23 +355,29 @@ All stamps in a compose layout row must have identical heights.
 
 ## 8. Tile Definition
 
-### 8.1 Three-Tier Encoding
+### 8.1 Encoding Types
 
-| Grid Size | LLM Accuracy | Encoding  | What LLM Writes          |
-|-----------|-------------|-----------|---------------------------|
-| <= 16x16  | High (85-95%) | `grid`  | Raw character grid        |
-| 17-32     | Moderate     | `rle`    | Run-length rows           |
-| 33-64     | Low (<40%)   | `compose`| Named stamp placement     |
-| > 64      | N/A          | tilemap  | Tile references only      |
+| Encoding | What LLM Writes | Best For |
+|----------|-----------------|----------|
+| `grid` | Raw character grid | Any size (≤16 best) |
+| `rle` | Run-length rows | 17-32px, long runs |
+| `compose` | Named stamp placement | Any size (reusable blocks) |
+| `fill` | Small pattern block, tiled | Repeating textures |
+| `delta` | Base tile + pixel patches | Tile variants (< 10 changes) |
+| tilemap | Tile references only | > 64px scenes |
+
+**PAX 2.1:** `compose` is now valid at any tile size, including 8×8 and
+16×16. The previous 33px minimum is removed — compose with stamps is often
+more reliable than raw grid for LLM authoring at any scale.
 
 With symmetry, effective grid size halves or quarters:
-- `symmetry = "quad"` on 32x32 -> LLM writes 16x16 (high accuracy)
+- `symmetry = "quad"` on 32x32 → LLM writes 16x16 (high accuracy)
 
 ### 8.2 Common Tile Fields
 
-**TOML ordering constraint:** The `grid`/`rle`/`layout` field MUST appear
-before any subtable headers (like `[tile.X.semantic]`). TOML subtable headers
-capture all subsequent keys until the next header — a `grid` after
+**TOML ordering constraint:** The `grid`/`rle`/`layout`/`fill` field MUST
+appear before any subtable headers (like `[tile.X.semantic]`). TOML subtable
+headers capture all subsequent keys until the next header — a `grid` after
 `[tile.X.semantic]` ends up inside `semantic`, not the tile. Use inline table
 syntax for `semantic` to avoid this: `semantic = { affordance = "...", ... }`.
 
@@ -330,12 +385,13 @@ syntax for `semantic` to avoid this: `semantic = { affordance = "...", ... }`.
 [tile.wall_solid]
 palette       = "dungeon"
 size          = "16x16"
-encoding      = "grid"           # "grid" | "rle" | "compose"
+encoding      = "grid"           # "grid" | "rle" | "compose" | "fill" | "delta"
 symmetry      = "none"           # "none" | "horizontal" | "vertical" | "quad"
 palette_swaps = ["frozen"]
 cycles        = []
-template      = "wall_base"      # inherit grid from named tile (Section 8.7)
-auto_rotate   = "none"           # "none" | "4way" | "flip" | "8way" (Section 8.8)
+template      = "wall_base"      # inherit grid from named tile (Section 8.8)
+delta         = "wall_stone"     # inherit grid + apply patches (Section 8.10, PAX 2.1)
+auto_rotate   = "none"           # "none" | "4way" | "flip" | "8way" (Section 8.9)
 
 edge_class    = { n = "solid", e = "solid", s = "solid", w = "solid" }
 corner_class  = { ne = "wall", se = "wall", sw = "wall", nw = "wall" }
@@ -385,6 +441,29 @@ Multi-line literal TOML string. Each character is a palette symbol.
 - `vertical`: grid = top half (H/2). Full = grid + reverse(grid)
 - `quad`: grid = top-left quadrant (W/2 x H/2). Expand H then V.
 
+**Row references (PAX 2.1):** A grid line consisting of `=N` (where N is a
+1-indexed row number) means "this row is identical to row N." Useful for
+tiles with repeating row patterns (brick walls, water textures).
+
+```
+grid = '''
+################    ← row 1
+##++##++##++####    ← row 2
+#+++++++++++++##    ← row 3
+################    ← row 4
+=1                  ← row 5 = copy of row 1
+=2                  ← row 6 = copy of row 2
+=3                  ← row 7 = copy of row 3
+=4                  ← row 8 = copy of row 4
+'''
+```
+
+Rules:
+- `=N` must reference a literal row, not another `=N` (no chains)
+- N must be between 1 and the current row number (no forward references)
+- Row references count toward the declared height
+- References are expanded before dimensional validation
+
 ### 8.4 RLE Encoding
 
 ```toml
@@ -406,6 +485,10 @@ rle = '''
 
 **Parser:** Split tokens by whitespace. Leading digits = count (default 1).
 Remaining char = symbol. Sum of counts must equal row width.
+
+**Row references (PAX 2.1):** Same `=N` syntax as grid encoding. The
+referenced row's expanded pixel content is copied. Same chain/forward-ref
+rules apply.
 
 ### 8.5 Compose Encoding
 
@@ -443,7 +526,38 @@ The compose resolver validates that row widths sum to `tile_width` and row
 heights sum to `tile_height`, with actionable errors including row number and
 expected vs actual pixel counts.
 
-### 8.6 Edge System
+### 8.6 Pattern Fill Encoding (PAX 2.1)
+
+For tiles that are pure repeating texture (water, grass, sand):
+
+```toml
+[tile.water_surface]
+palette   = "dungeon"
+size      = "16x16"
+encoding  = "fill"
+fill_size = "4x4"
+
+fill = '''
+~~h~
+~~~~
+~h~~
+~~~~
+'''
+```
+
+- `fill_size = "WxH"` declares the pattern dimensions
+- `fill` is the pattern grid (same parsing rules as `grid` encoding)
+- Tile dimensions must be exact multiples of pattern dimensions
+- The engine tiles the pattern to fill the declared tile size
+- Symmetry expansion applies AFTER fill expansion
+- Row references (`=N`) are valid within the pattern grid
+
+**Validation:**
+- `fill` and `fill_size` must both be present (error if one missing)
+- Pattern dimensions must evenly divide tile dimensions
+- All symbols must exist in the referenced palette
+
+### 8.7 Edge System
 
 **Edge classes** (LLM-specified, relaxed matching):
 ```toml
@@ -503,7 +617,7 @@ When `collision = "polygon"`, the `collision_points` field provides the polygon
 vertices as `[[x1,y1], [x2,y2], ...]` in tile-local pixel coordinates. Points
 are in clockwise winding order.
 
-### 8.7 Tile Templates
+### 8.8 Tile Templates
 
 Inherit pixel data from another tile, override only palette. For biome
 variants without grid duplication.
@@ -524,7 +638,7 @@ edge_class = { n = "ice_solid", e = "ice_solid", s = "ice_solid", w = "ice_solid
 # not stone floors. Inherited edge_class from base is a fallback, not default.
 ```
 
-### 8.8 Tile Rotation
+### 8.9 Tile Rotation
 
 Auto-generate rotated/reflected variants for WFC.
 
@@ -573,6 +687,48 @@ auto_rotate_weight = "source_only"  # default
 
 `source_only` is default because a north-facing wall cap should appear
 frequently on the north edge, not equally in all directions.
+
+### 8.10 Delta Tiles (PAX 2.1)
+
+Delta tiles inherit their pixel grid from a base tile and apply pixel-level
+patches. For tile variants that differ by only a few pixels (moss on stone,
+cracks in floor).
+
+```toml
+[tile.floor_stone]
+palette    = "dungeon"
+size       = "16x16"
+edge_class = { n = "floor", e = "floor", s = "floor", w = "floor" }
+grid = '''...'''
+
+[tile.floor_cracked]
+palette    = "dungeon"
+delta      = "floor_stone"
+edge_class = { n = "floor", e = "floor", s = "floor", w = "floor" }
+patches    = [
+  { x = 4, y = 1, sym = "s" },
+  { x = 5, y = 2, sym = "s" },
+  { x = 3, y = 3, sym = "s" },
+]
+```
+
+**Rules:**
+- `delta` names the base tile. The base must be defined in the same file.
+- `patches` is an array of `{ x, y, sym }` pixel overrides (0-indexed).
+- Coordinates refer to the **fully expanded** grid of the base tile (after
+  symmetry, compose, or template resolution). `+4,3` always means pixel at
+  column 4, row 3 of the final rendered grid.
+- All patches must be within tile dimensions.
+- Palette must match the base tile (or explicitly override with `palette`).
+- Delta chains are forbidden — the base tile cannot itself be a delta tile.
+- `size` can be omitted (inherited from base).
+- `edge_class` MUST be declared explicitly (not inherited from base — same
+  rule as templates, PAX 2.0 errata E-6).
+- `sym` must be a single character matching a palette symbol.
+
+**When to use delta vs template:** Templates inherit grid and change palette.
+Delta inherits grid and changes specific pixels. Use templates for biome
+recoloring; use delta for structural variants within the same palette.
 
 ---
 
@@ -1097,6 +1253,37 @@ visually.
 
 Reference: [Boris the Brave - Classification of Tilesets](https://www.boristhebrave.com/2021/11/14/classification-of-tilesets/)
 
+### 13.3 Wang Tileset Generation (PAX 2.1)
+
+`pixl_generate_wang` creates a complete transition tileset between two terrain
+types in a single call. All generated tiles have correct edge classes for WFC.
+
+```
+pixl_generate_wang({
+  terrain_a: "grass",
+  terrain_b: "water",
+  method: "dual_grid",  // or "blob_47"
+  size: 16,
+  sym_a: "+",
+  sym_b: "~",
+  sym_border: "#"
+})
+```
+
+**Blob 47:** 8-bit neighbor bitmask → 47 unique visual cases after corner
+cleanup. Best for dungeon walls and cave systems. Corner bits only count when
+both adjacent cardinal neighbors are present.
+
+**Dual grid:** 5 tile types × rotations = 15 tiles. Best for top-down terrain
+transitions (grass/sand/water). Tiles represent corner ownership (which terrain
+fills each quadrant of the tile).
+
+Generated tiles include:
+- Correct `edge_class` based on neighbor presence (terrain_a or terrain_b)
+- Grid with transition border pixels at terrain boundaries
+- Tags: `wang`, `transition_<terrain_b>`, `<terrain_a>`
+- Default affordance: `walkable`, target_layer: `terrain`
+
 ---
 
 ## 14. Display Algorithms
@@ -1201,6 +1388,29 @@ Vertical runs:
 
 Validation error with specific mismatch if caps don't match middle
 
+### Row References (PAX 2.1)
+- `=N` must reference a literal row (1 ≤ N < current row index)
+- Forward references are errors
+- Chained references (`=N` → another `=M`) are errors
+
+### Pattern Fill (PAX 2.1)
+- `fill` and `fill_size` must both be present
+- Pattern width must evenly divide tile width
+- Pattern height must evenly divide tile height
+- All symbols in the pattern must exist in the palette
+
+### Delta Tiles (PAX 2.1)
+- `delta` base tile must exist in the same file
+- Base tile must not itself be a delta tile (no chains)
+- All patch coordinates must be within tile dimensions
+- Patch `sym` must be a single character in the palette
+- `edge_class` must be declared (not inherited)
+
+### Style Latent (PAX 2.1)
+- All values must be finite numbers
+- `sample_count` must be a positive integer
+- Properties must be within documented ranges (see Section 3.5)
+
 ### Edges (`--check-edges`)
 - Every tile has at least one compatible neighbor per direction
 - Warning, not error, if isolated
@@ -1224,8 +1434,15 @@ The LLM MUST examine palette symbols before writing any grid.
 
 - **8x8:** Write full grid directly.
 - **16x16:** Use `symmetry = "quad"` for symmetric tiles. For asymmetric,
-  write zone-by-zone (NW, NE, SW, SE as 8x8 quadrants).
+  write zone-by-zone (NW, NE, SW, SE as 8x8 quadrants). Compose with
+  stamps is also valid at 16x16 (PAX 2.1).
 - **32x32:** Always use compose mode. Never attempt raw 32x32.
+- **Repeating textures:** Use `fill` encoding with a small pattern (e.g.,
+  4x4 tiled to 16x16). Reduces pixel decisions from 256 to 16.
+- **Tile variants:** Use `delta` encoding when a tile differs from an
+  existing tile by < 10 pixels. Write only the patches.
+- **Repeating rows:** Use `=N` row references when rows repeat within a
+  tile (e.g., brick walls with alternating mortar rows).
 - Never introduce symbols not in the session palette.
 - Shadow role bottom-right of structure. Highlight role top-left of surfaces.
 
@@ -1319,8 +1536,14 @@ Severity: ERROR (auto-reject) / WARNING (refine) / INFO (ok).
   palette breadth, pixel density, entropy, hue bias, luminance). Stored in
   session state for subsequent scoring.
 - `pixl_check_style(name)` -> score a tile against the session latent (0-1)
+- `pixl_rate_tile(name, criteria?)` -> aesthetic rating (1-5) on readability,
+  appeal, consistency. Returns per-axis scores, overall rating, and suggested
+  WFC weight. Use after generating multiple variants to rank them.
 
 **Validation & Generation:**
+- `pixl_generate_wang(terrain_a, terrain_b, method?, size?)` -> generates a
+  complete Wang tileset (dual_grid: 15 tiles, blob_47: 47 tiles) with correct
+  edge classes. All tiles inserted into the session automatically.
 - `pixl_validate(check_edges?)` -> errors, warnings, stats
 - `pixl_narrate_map(width, height, seed?, rules[])` -> rendered map PNG +
   tile name grid from spatial predicates. Rules: "border:wall_solid",
@@ -1500,6 +1723,14 @@ prompt templates.
 | **Procedural Stamps** | DONE | `pixl generate-stamps` — 8 pattern types |
 | **HTTP API** | DONE | `pixl serve` — 20 REST endpoints via axum |
 | **Blueprint System** | DONE | `pixl blueprint` / `pixl_get_blueprint` — anatomy landmarks |
+| **Row References** | DONE | PAX 2.1 — `=N` in grid/RLE encoding |
+| **Pattern Fill** | DONE | PAX 2.1 — `fill` encoding for repeating textures |
+| **Delta Tiles** | DONE | PAX 2.1 — grid inheritance with pixel patches |
+| **Style Latent Section** | DONE | PAX 2.1 — `[style.*]` TOML section, persistent |
+| **Compose Any Size** | DONE | PAX 2.1 — compose valid at 8x8, 16x16 (was 33px min) |
+| **Sub-Completeness** | DONE | `pixl check --subcomplete` — guarantees contradiction-free WFC (N-WFC) |
+| **Wang Tilesets** | DONE | `pixl_generate_wang` — blob-47 (47 tiles) or dual-grid (15 tiles) terrain transitions |
+| **Aesthetic Rating** | DONE | `pixl_rate_tile` — 1-5 scoring on readability/appeal/consistency + WFC weight suggestion |
 
 ### Future (Not Yet Implemented)
 
@@ -1525,11 +1756,14 @@ moss density, color jitter.
 ### What PAX enables
 
 - Complete game art as version-controlled text
-- LLM-authored pixel art within reliability zone via three-tier encoding
+- LLM-authored pixel art via multi-encoding system (grid, RLE, compose, fill, delta)
+- Row references and pattern fill for token-efficient tile authoring (PAX 2.1)
+- Delta tiles for low-cost tile variants (PAX 2.1)
 - Palette swaps and color cycling as first-class features
 - Semantic WFC producing game-sensible maps
 - SELF-REFINE vision loop for iterative quality improvement
 - Blueprint-guided character sprites with correct anatomy placement
+- Style latent fingerprinting for aesthetic consistency (PAX 2.1)
 
 ### What PAX cannot do in V1
 
@@ -1544,6 +1778,13 @@ WFC contradiction rate with semantic constraints on sparse tilesets (<15 tiles
 + strict rules + path requirements). The practical response: more tile variety,
 fewer `forbids` rules, sparse constraint zones. WFC with strong constraints on
 small tilesets is NP-hard in the general case.
+
+**Sub-completeness (PAX 2.1):** `pixl check --subcomplete` verifies that for
+every edge class on each direction, at least one tile has that class on the
+opposite side. If sub-complete, WFC propagation is mathematically guaranteed
+contradiction-free without backtracking (Nie et al., N-WFC, IEEE Transactions
+on Games, 2024). When verified, `subcomplete = true` is set in `[wfc_rules]`
+and the WFC solver can skip retry logic entirely.
 
 ## 21. Tile Design Guide — Edge Rules for Seamless Tiling
 

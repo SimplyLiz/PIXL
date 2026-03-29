@@ -1,0 +1,365 @@
+[pax]
+version = "2.0"
+name    = "dungeon_tileset"
+author  = "claude"
+created = "2026-03-22T12:00:00Z"
+theme   = "dark_fantasy"
+
+# --- Theme ---
+
+[theme.dark_fantasy]
+palette          = "dungeon"
+scale            = 2
+canvas           = 16
+max_palette_size = 16
+light_source     = "top-left"
+
+[theme.dark_fantasy.roles]
+void   = "."
+bg     = "#"
+fg     = "+"
+accent = "o"
+danger = "r"
+shadow = "s"
+life   = "g"
+hi     = "h"
+bone   = "w"
+
+[theme.dark_fantasy.constraints]
+fg_brighter_than_bg         = true
+shadow_darker_than_bg       = true
+accent_hue_distinct_from_bg = true
+max_colors_per_tile         = 16
+
+# --- Palette ---
+# Reworked for contrast: s(L8) → #(L18) → +(L32) → h(L48) → w(L88)
+# Light source: top-left
+
+[palette.dungeon]
+"." = "#00000000"
+"s" = "#12091f"
+"#" = "#2a1f3d"
+"+" = "#5a4878"
+"h" = "#8070a8"
+"w" = "#d8d0e8"
+"~" = "#1a3a5c"
+"g" = "#2d5a27"
+"G" = "#4a8a3a"
+"o" = "#c8a035"
+"r" = "#8b1a1a"
+
+# --- Palette Swaps ---
+
+[palette_swap.frozen]
+base    = "dungeon"
+partial = true
+map     = { "#" = "#2a3f6d", "+" = "#5a7aad", "h" = "#90b0d8", "~" = "#e8f0ff" }
+
+# --- Color Cycles ---
+
+[cycle.water_shimmer]
+palette   = "dungeon"
+symbols   = ["~", "h"]
+direction = "ping-pong"
+fps       = 6
+
+# --- Stamps ---
+
+[stamp.brick_nw_4x4]
+palette = "dungeon"
+size    = "4x4"
+grid    = '''
+h+++
+++++
+s##h
+####
+'''
+
+[stamp.brick_ne_4x4]
+palette = "dungeon"
+size    = "4x4"
+grid    = '''
++++h
+++++
+h##s
+####
+'''
+
+[stamp.stone_flat_4x4]
+palette = "dungeon"
+size    = "4x4"
+grid    = '''
+h+++
+++++
++++s
+++++
+'''
+
+[stamp.shadow_base_4x4]
+palette = "dungeon"
+size    = "4x4"
+grid    = '''
+ssss
+s##s
+s##s
+ssss
+'''
+
+# --- Tiles ---
+# Light source: top-left. h = highlight (top/left edges), s = shadow (bottom/right).
+# Bricks: running bond pattern. Mortar = #(dark). Brick face = +(mid) with h highlight top edge.
+# Floor: irregular flagstones with mortar lines (#), highlight on top-left stone edges.
+
+[tile.wall_solid]
+palette    = "dungeon"
+size       = "16x16"
+edge_class = { n = "solid", e = "solid", s = "solid", w = "solid" }
+tags       = ["wall", "interior"]
+weight     = 0.4
+semantic   = { affordance = "obstacle", collision = "full", tags = { light_blocks = true, biome = "dungeon" } }
+grid = '''
+#h++++s#h++++s##
+#++++++#++++++##
+#++++++#+++++s##
+#s++++s#s++++###
+################
+##h++++s#h+++++s
+##++++++#++++++#
+##++++++#++++++#
+##s++++s#s++++s#
+################
+#h++++s#h++++s##
+#++++++#++++++##
+#++++++#+++++s##
+#s++++s#s++++###
+################
+##h++++s#h+++++s
+'''
+
+[tile.floor_stone]
+palette    = "dungeon"
+size       = "16x16"
+edge_class = { n = "floor", e = "floor", s = "floor", w = "floor" }
+tags       = ["floor", "interior"]
+weight     = 3.0
+semantic   = { affordance = "walkable", collision = "none", tags = { biome = "dungeon" } }
+grid = '''
+h++++++s#h+++++s
+++++++++#++++++#
++++++++s#+++++++
+################
+h++s#h+++++++++s
++++##+++++++++++
++++##+++++++++++
+++s##s+++++++++s
+################
+h+++++++s#h++++s
+++++++++++++++++
+++++++++++++++++
+s++++++s#s++++++
+################
+h+++s#h++++++++s
+++++##+++++++++#
+'''
+
+[tile.floor_moss]
+palette    = "dungeon"
+size       = "16x16"
+edge_class = { n = "floor", e = "floor", s = "floor", w = "floor" }
+tags       = ["floor", "interior", "organic"]
+weight     = 1.0
+semantic   = { affordance = "walkable", collision = "none", tags = { moisture = "high", biome = "dungeon" } }
+grid = '''
+h++++++s#h+g+++s
++++gG+++#++gG++#
+++gGG++s#++G++++
+################
+h++s#h++++gG+++s
++++##+++++gGG+++
++++##++++++Gg+++
+++s##s+++++++g+s
+################
+h++gG+++s#h++++s
+++gGGg++++++++++
++++Gg+++++++gG++
+s++++++s#s++gGGs
+################
+h+++s#h+++++gG+s
+++++##+++++++G+#
+'''
+
+[tile.wall_floor_n]
+palette     = "dungeon"
+size        = "16x16"
+auto_rotate = "4way"
+edge_class  = { n = "solid", e = "solid", s = "floor", w = "solid" }
+tags        = ["transition", "wall_base"]
+weight      = 2.0
+semantic    = { affordance = "obstacle", collision = "full", tags = { biome = "dungeon" } }
+grid = '''
+#h++++s#h++++s##
+#++++++#++++++##
+#++++++#+++++s##
+#s++++s#s++++###
+################
+##h++++s#h+++++s
+##++++++#++++++#
+##++++++#++++++#
+##s++++s#s++++s#
+###hsshss#######
+h++++++s#h+++++s
+++++++++#++++++#
++++++++s#+++++++
+s++++++s#s++++++
+h+++s#h++++++++s
+++++##+++++++++#
+'''
+
+# Template tile — inherits grid from wall_solid, uses frozen palette
+[tile.wall_ice]
+template      = "wall_solid"
+palette       = "dungeon"
+palette_swaps = ["frozen"]
+
+# --- Corner tile with auto-rotation ---
+# NE corner: wall fills top-right, floor fills bottom-left
+# Diagonal uses dithered edge with h/s for depth
+
+[tile.wall_corner_ne]
+palette     = "dungeon"
+size        = "16x16"
+auto_rotate = "4way"
+edge_class  = { n = "solid", e = "solid", s = "floor", w = "floor" }
+tags        = ["wall", "corner"]
+weight      = 1.5
+semantic    = { affordance = "obstacle", collision = "full", tags = { biome = "dungeon" } }
+grid = '''
+################
+################
+################
+################
+################
+################
+#############shs
+###########sh+++
+#########sh+++++
+########h++++++s
+######h+++++++s#
+####h+++++++s###
+##h+++++++s#####
+h+++++++s#h++++s
++++++++s#++++++#
+++++++s##+++++++
+'''
+
+# --- Floor variant: cracked stone ---
+
+[tile.floor_cracked]
+palette    = "dungeon"
+size       = "16x16"
+edge_class = { n = "floor", e = "floor", s = "floor", w = "floor" }
+tags       = ["floor", "interior", "damaged"]
+weight     = 1.2
+semantic   = { affordance = "walkable", collision = "none", tags = { biome = "dungeon", condition = "damaged" } }
+grid = '''
+h++++++s#h+++++s
+++++s+++#++++++#
++++ss++s#+++++++
+##s#s###########
+h++s#h+s+++++++s
++++##++s++++++++
++++##+++s+++++++
+++s##s++++s++++s
+################
+h+++s++++s#h+++s
+++s++++s++++++s+
+++++s+++++++s+++
+s+++++ss#ss+++++
+################
+h+++s#h+s++++++s
+++++##++s++++++#
+'''
+
+# --- Door tile: passage through wall ---
+
+[tile.door_ns]
+palette     = "dungeon"
+size        = "16x16"
+auto_rotate = "4way"
+edge_class  = { n = "floor", e = "solid", s = "floor", w = "solid" }
+tags        = ["door", "passage"]
+weight      = 0.8
+semantic    = { affordance = "walkable", collision = "none", tags = { biome = "dungeon" } }
+grid = '''
+h++++++s########
++++++++s########
++++++++s########
+s++++++s########
+########h++++++s
+########++++++++
+########++++++++
+########s++++++s
+########h++++++s
+########++++++++
+########++++++++
+########s++++++s
+h++++++s########
++++++++s########
++++++++s########
+s++++++s########
+'''
+
+# --- Water tile with cycling ---
+
+[tile.water_surface]
+palette    = "dungeon"
+size       = "16x16"
+edge_class = { n = "water", e = "water", s = "water", w = "water" }
+cycles     = ["water_shimmer"]
+tags       = ["water"]
+weight     = 0.05
+semantic   = { affordance = "hazard", collision = "full", tags = { depth = "shallow", biome = "dungeon" } }
+grid = '''
+~~h~~h~~~~h~~h~~
+~~~~~~~~~~~~~~~~
+~~~~h~~h~~~~h~~h
+~~~~~~~~~~~~~~~~
+h~~h~~~~h~~h~~~~
+~~~~~~~~~~~~~~~~
+~~h~~h~~~~h~~h~~
+~~~~~~~~~~~~~~~~
+~~~~h~~h~~~~h~~h
+~~~~~~~~~~~~~~~~
+h~~h~~~~h~~h~~~~
+~~~~~~~~~~~~~~~~
+~~h~~h~~~~h~~h~~
+~~~~~~~~~~~~~~~~
+~~~~h~~h~~~~h~~h
+~~~~~~~~~~~~~~~~
+'''
+
+# --- WFC Rules ---
+
+[wfc_rules]
+forbids = [
+    "affordance:obstacle forbids affordance:hazard adjacent",
+]
+require_boost = 3.0
+requires = [
+    "affordance:walkable requires affordance:obstacle adjacent_any",
+    "affordance:hazard requires affordance:walkable adjacent_any",
+]
+
+[wfc_rules.variant_groups]
+stone_floor = ["floor_stone", "floor_moss", "floor_cracked"]
+
+# --- Atlas ---
+
+[atlas]
+format     = "texturepacker"
+padding    = 1
+scale      = 2
+columns    = 8
+include    = ["wall_*", "floor_*", "water_*", "door_*"]
+output     = "dungeon_atlas.png"
+map_output = "dungeon_atlas.json"

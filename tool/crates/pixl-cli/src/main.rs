@@ -80,6 +80,10 @@ enum Commands {
         /// Auto-generate missing edge classes from grid content
         #[arg(long)]
         fix: bool,
+
+        /// Check sub-completeness (guarantees contradiction-free WFC)
+        #[arg(long)]
+        subcomplete: bool,
     },
 
     /// Render a tile to PNG
@@ -510,6 +514,213 @@ enum Commands {
         training: Option<PathBuf>,
     },
 
+    /// Scan reference images and extract quality patches for ML training
+    Scan {
+        /// Input image or directory of images (sprite sheets, tilesets, etc.)
+        input: PathBuf,
+
+        /// Output directory for patches and manifest
+        #[arg(long, short, alias = "output", default_value = "pixl_scan")]
+        out: PathBuf,
+
+        /// Patch size in pixels (default: 16)
+        #[arg(long, default_value = "16")]
+        patch_size: u32,
+
+        /// Sliding window stride (default: same as patch_size)
+        #[arg(long)]
+        stride: Option<u32>,
+
+        /// Minimum unique colors to keep a patch (default: 2)
+        #[arg(long, default_value = "2")]
+        min_colors: usize,
+
+        /// Maximum background pixel ratio (default: 0.85)
+        #[arg(long, default_value = "0.85")]
+        max_bg: f64,
+
+        /// Native tile size for grid-based tilesets (e.g., 32 for DCSS tiles)
+        #[arg(long)]
+        tile_size: Option<u32>,
+
+        /// Save extracted patches as individual PNGs
+        #[arg(long, default_value = "true")]
+        save_patches: bool,
+
+        /// Generate a contact sheet preview of the first 64 patches
+        #[arg(long)]
+        preview: bool,
+    },
+
+    /// Prepare training data from scanned patches
+    Prepare {
+        /// Path to scan output directory (containing scan_manifest.json)
+        scan_dir: PathBuf,
+
+        /// Output directory for training data (JSONL files)
+        #[arg(long, short, alias = "output", default_value = "pixl_training")]
+        out: PathBuf,
+
+        /// Style tag for labels (e.g. "my-game", "retro-rpg")
+        #[arg(long, default_value = "custom")]
+        style: String,
+
+        /// Augmentation level: 4 = rotations only, 8 = + flips
+        #[arg(long, default_value = "4")]
+        aug: u8,
+
+        /// Enable warm/cool/dark color shift augmentation
+        #[arg(long)]
+        color_aug: bool,
+
+        /// Max samples per stratification bin
+        #[arg(long, default_value = "150")]
+        max_per_bin: usize,
+
+        /// Max palette colors per category
+        #[arg(long, default_value = "10")]
+        max_colors: usize,
+    },
+
+    /// Train a LoRA adapter on prepared data
+    Train {
+        /// Path to training data directory (containing train.jsonl)
+        data_dir: PathBuf,
+
+        /// Output adapter directory
+        #[arg(long, default_value = "pixl_adapter")]
+        adapter: PathBuf,
+
+        /// Base model ID
+        #[arg(long, default_value = "mlx-community/Qwen2.5-3B-Instruct-4bit")]
+        model: String,
+
+        /// Number of training epochs
+        #[arg(long, default_value = "3")]
+        epochs: usize,
+
+        /// Learning rate
+        #[arg(long, default_value = "0.00002")]
+        lr: f64,
+
+        /// Number of LoRA layers
+        #[arg(long, default_value = "16")]
+        layers: usize,
+
+        /// Resume training from existing adapter
+        #[arg(long)]
+        resume: bool,
+
+        /// Merge multiple data directories (comma-separated names, e.g. "eotb_optimal,matched")
+        #[arg(long)]
+        sources: Option<String>,
+
+        /// Exclude specific datasets from merge
+        #[arg(long)]
+        exclude: Option<String>,
+    },
+
+    /// Compare two adapters side by side — generate the same tile with each
+    Compare {
+        /// .pax file for palette
+        file: PathBuf,
+
+        /// Prompt for generation
+        #[arg(long)]
+        prompt: String,
+
+        /// First adapter path
+        #[arg(long)]
+        adapter_a: PathBuf,
+
+        /// Second adapter path
+        #[arg(long)]
+        adapter_b: PathBuf,
+
+        /// Output comparison image
+        #[arg(long, short, alias = "output", default_value = "comparison.png")]
+        out: PathBuf,
+
+        /// Base model ID
+        #[arg(long, default_value = "mlx-community/Qwen2.5-3B-Instruct-4bit")]
+        model: String,
+    },
+
+    /// Blend two style latents and show the result
+    BlendStyle {
+        /// First .pax file (style A)
+        file_a: PathBuf,
+
+        /// Second .pax file (style B)
+        file_b: PathBuf,
+
+        /// Blend factor: 0.0 = pure A, 1.0 = pure B (default: 0.5)
+        #[arg(long, default_value = "0.5")]
+        blend: f64,
+    },
+
+    /// List available LoRA adapters
+    Adapters {
+        /// Directory to scan for adapters (default: training/adapters/)
+        #[arg(long)]
+        dir: Option<PathBuf>,
+    },
+
+    /// List available training datasets
+    Datasets {
+        /// Directory to scan (default: training/)
+        #[arg(long)]
+        dir: Option<PathBuf>,
+    },
+
+    /// Retrain adapter from feedback — export accepted tiles, prepare, and train
+    Retrain {
+        /// Path to .pax file (source of feedback + tiles)
+        file: PathBuf,
+
+        /// Output adapter directory
+        #[arg(long, default_value = "training/adapters/retrained")]
+        adapter: PathBuf,
+
+        /// Style tag
+        #[arg(long, default_value = "retrained")]
+        style: String,
+
+        /// Training epochs
+        #[arg(long, default_value = "5")]
+        epochs: usize,
+    },
+
+    /// Generate a coherent set of tiles (e.g., wall variants at multiple distances)
+    GenerateSet {
+        /// .pax file for palette context
+        file: PathBuf,
+
+        /// Set type: walls, enemies, items, floors
+        #[arg(long, default_value = "walls")]
+        set_type: String,
+
+        /// Theme name for palette selection
+        #[arg(long, default_value = "dark_fantasy")]
+        theme: String,
+
+        /// Number of variants to generate
+        #[arg(long, default_value = "3")]
+        count: usize,
+
+        /// Output directory for generated assets
+        #[arg(long, short, alias = "output", default_value = "pixl_generated")]
+        out: PathBuf,
+
+        /// LoRA adapter path
+        #[arg(long)]
+        adapter: Option<PathBuf>,
+
+        /// Base model ID
+        #[arg(long, default_value = "mlx-community/Qwen2.5-3B-Instruct-4bit")]
+        model: String,
+    },
+
     /// Start the MCP server (stdio transport)
     Mcp {
         /// Optional: pre-load a .pax file
@@ -550,6 +761,31 @@ enum Commands {
         /// Port for the mlx_lm inference sidecar (default: 8099)
         #[arg(long, default_value = "8099")]
         inference_port: u16,
+    },
+
+    /// Convert a .pax file to PAX-L compact format (stdout)
+    Compact {
+        /// Path to the .pax file
+        file: PathBuf,
+
+        /// Disable auto-stamp extraction
+        #[arg(long)]
+        no_stamps: bool,
+
+        /// Disable =N row references
+        #[arg(long)]
+        no_row_refs: bool,
+
+        /// Disable @fill pattern detection
+        #[arg(long)]
+        no_fill: bool,
+    },
+
+    /// Convert PAX-L from stdin to .pax TOML format (stdout)
+    Expand {
+        /// Strict parsing mode (reject structural errors)
+        #[arg(long)]
+        strict: bool,
     },
 }
 
@@ -616,9 +852,15 @@ fn main() {
                 cmd_completeness(&file);
             }
         }
-        Commands::Check { file, fix } => {
+        Commands::Check {
+            file,
+            fix,
+            subcomplete,
+        } => {
             if fix {
                 cmd_check_fix(&file);
+            } else if subcomplete {
+                cmd_subcomplete(&file);
             } else {
                 cmd_validate(&file, true, false, false);
             }
@@ -818,6 +1060,92 @@ fn main() {
             let inf = build_inference_config(model, adapter, inference_port);
             cmd_serve(port, file.as_deref(), inf);
         }
+        Commands::Scan {
+            input,
+            out,
+            patch_size,
+            stride,
+            min_colors,
+            max_bg,
+            tile_size,
+            save_patches,
+            preview,
+        } => {
+            cmd_scan(&input, &out, patch_size, stride, min_colors, max_bg, tile_size, save_patches, preview);
+        }
+        Commands::Prepare {
+            scan_dir,
+            out,
+            style,
+            aug,
+            color_aug,
+            max_per_bin,
+            max_colors,
+        } => {
+            cmd_prepare(&scan_dir, &out, &style, aug, color_aug, max_per_bin, max_colors);
+        }
+        Commands::Train {
+            data_dir,
+            adapter,
+            model,
+            epochs,
+            lr,
+            layers,
+            resume,
+            sources,
+            exclude,
+        } => {
+            cmd_train(&data_dir, &adapter, &model, epochs, lr, layers, resume, sources.as_deref(), exclude.as_deref());
+        }
+        Commands::Compare {
+            file,
+            prompt,
+            adapter_a,
+            adapter_b,
+            out,
+            model,
+        } => {
+            cmd_compare(&file, &prompt, &adapter_a, &adapter_b, &out, &model);
+        }
+        Commands::BlendStyle { file_a, file_b, blend } => {
+            cmd_blend_style(&file_a, &file_b, blend);
+        }
+        Commands::Adapters { dir } => {
+            cmd_adapters(dir.as_deref());
+        }
+        Commands::Datasets { dir } => {
+            cmd_datasets(dir.as_deref());
+        }
+        Commands::Retrain {
+            file,
+            adapter,
+            style,
+            epochs,
+        } => {
+            cmd_retrain(&file, &adapter, &style, epochs);
+        }
+        Commands::GenerateSet {
+            file,
+            set_type,
+            theme,
+            count,
+            out,
+            adapter,
+            model,
+        } => {
+            cmd_generate_set(&file, &set_type, &theme, count, &out, adapter.as_deref(), &model);
+        }
+        Commands::Compact {
+            file,
+            no_stamps: _,
+            no_row_refs,
+            no_fill,
+        } => {
+            cmd_compact(&file, no_row_refs, no_fill);
+        }
+        Commands::Expand { strict } => {
+            cmd_expand(strict);
+        }
     }
 }
 
@@ -836,6 +1164,74 @@ fn build_inference_config(
         port: inference_port,
         ..Default::default()
     })
+}
+
+fn cmd_subcomplete(file: &PathBuf) {
+    let source = std::fs::read_to_string(file).unwrap_or_else(|e| {
+        eprintln!("Error reading {}: {}", file.display(), e);
+        std::process::exit(1);
+    });
+    let pax = pixl_core::parser::parse_pax(&source).unwrap_or_else(|e| {
+        eprintln!("Parse error: {}", e);
+        std::process::exit(1);
+    });
+    let report = pixl_core::completeness::check_subcomplete(&pax);
+    println!("{}", report.summary);
+    if !report.is_subcomplete {
+        std::process::exit(1);
+    }
+}
+
+fn cmd_compact(file: &PathBuf, no_row_refs: bool, no_fill: bool) {
+    let source = std::fs::read_to_string(file).unwrap_or_else(|e| {
+        eprintln!("Error reading {}: {}", file.display(), e);
+        std::process::exit(1);
+    });
+    let pax = pixl_core::parser::parse_pax(&source).unwrap_or_else(|e| {
+        eprintln!("Parse error: {}", e);
+        std::process::exit(1);
+    });
+    let config = pixl_core::paxl::PaxlConfig {
+        row_refs: !no_row_refs,
+        fill_detect: !no_fill,
+        ..Default::default()
+    };
+    match pixl_core::paxl::to_paxl(&pax, &config) {
+        Ok(paxl) => print!("{}", paxl),
+        Err(e) => {
+            eprintln!("Serialization error: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn cmd_expand(strict: bool) {
+    use std::io::Read;
+    let mut input = String::new();
+    std::io::stdin()
+        .read_to_string(&mut input)
+        .unwrap_or_else(|e| {
+            eprintln!("Error reading stdin: {}", e);
+            std::process::exit(1);
+        });
+    match pixl_core::paxl::from_paxl(&input, strict) {
+        Ok((pax_file, warnings)) => {
+            for w in &warnings {
+                eprintln!("warning: {}", w);
+            }
+            match toml::to_string_pretty(&pax_file) {
+                Ok(toml_str) => print!("{}", toml_str),
+                Err(e) => {
+                    eprintln!("TOML serialization error: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("Parse error: {}", e);
+            std::process::exit(1);
+        }
+    }
 }
 
 #[tokio::main]
@@ -3837,3 +4233,1279 @@ fn cmd_blueprint(size: &str, model: &str) {
         }
     }
 }
+
+fn cmd_scan(
+    input: &PathBuf,
+    out: &PathBuf,
+    patch_size: u32,
+    stride: Option<u32>,
+    min_colors: usize,
+    max_bg: f64,
+    tile_size: Option<u32>,
+    save_patches: bool,
+    preview: bool,
+) {
+    use pixl_render::scan::{self, ScanConfig};
+
+    let config = ScanConfig {
+        patch_size,
+        stride: stride.unwrap_or(patch_size),
+        min_colors,
+        max_bg_ratio: max_bg,
+        native_tile_size: tile_size,
+        ..Default::default()
+    };
+
+    println!("Scanning {}...", input.display());
+    println!("  Patch size: {}x{}", patch_size, patch_size);
+    println!("  Stride: {}", config.stride);
+    println!();
+
+    let manifest = if input.is_dir() {
+        match scan::scan_directory(input, &config) {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("error: {e}");
+                process::exit(1);
+            }
+        }
+    } else {
+        match scan::scan_image(input, &config) {
+            Ok(result) => scan::ScanManifest {
+                patch_size: config.patch_size,
+                stride: config.stride,
+                sources: vec![result],
+                total_patches_raw: 0,   // filled below
+                total_patches_quality: 0,
+                total_filtered: 0,
+                categories: std::collections::HashMap::new(),
+            },
+            Err(e) => {
+                eprintln!("error: {e}");
+                process::exit(1);
+            }
+        }
+    };
+
+    // Print results
+    let total_raw: usize = manifest.sources.iter().map(|s| s.total_patches).sum();
+    let total_quality: usize = manifest.sources.iter().map(|s| s.quality_patches).sum();
+    let filtered = total_raw - total_quality;
+
+    println!("Results:");
+    for src in &manifest.sources {
+        println!(
+            "  {} ({}x{}): {} patches ({} quality)",
+            src.source.file_name().unwrap_or_default().to_string_lossy(),
+            src.source_size.0,
+            src.source_size.1,
+            src.total_patches,
+            src.quality_patches,
+        );
+    }
+    println!();
+    println!("  Total raw:      {}", total_raw);
+    println!("  Quality passed: {}", total_quality);
+    println!(
+        "  Filtered out:   {} ({:.0}%)",
+        filtered,
+        if total_raw > 0 { filtered as f64 / total_raw as f64 * 100.0 } else { 0.0 }
+    );
+
+    // Category breakdown
+    let mut categories = std::collections::HashMap::new();
+    for src in &manifest.sources {
+        for patch in &src.patches {
+            *categories.entry(patch.category.clone()).or_insert(0usize) += 1;
+        }
+    }
+    if !categories.is_empty() {
+        println!();
+        println!("  Categories:");
+        let mut cats: Vec<_> = categories.into_iter().collect();
+        cats.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
+        for (cat, count) in &cats {
+            println!("    {}: {}", cat, count);
+        }
+    }
+
+    // Save patches and manifest
+    if save_patches && total_quality > 0 {
+        println!();
+        println!("Saving to {}...", out.display());
+
+        // Load source images for patch extraction
+        let mut source_images = vec![];
+        for src in &manifest.sources {
+            if let Ok(img) = image::open(&src.source) {
+                source_images.push((src.source.clone(), img.to_rgba8()));
+            }
+        }
+
+        if let Err(e) = scan::save_scan(&manifest, &source_images, out) {
+            eprintln!("error saving scan: {e}");
+            process::exit(1);
+        }
+        println!("  Saved {} patches to {}/patches/", total_quality, out.display());
+        println!("  Manifest: {}/scan_manifest.json", out.display());
+    }
+
+    // Generate contact sheet preview
+    if preview && total_quality > 0 {
+        let patches_dir = out.join("patches");
+        let mut patch_files: Vec<_> = std::fs::read_dir(&patches_dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter(|e| e.path().extension().map_or(false, |ext| ext == "png"))
+            .map(|e| e.path())
+            .collect();
+        patch_files.sort();
+        patch_files.truncate(64); // max 64 patches in preview
+
+        let cols = 8u32;
+        let rows = ((patch_files.len() as u32 + cols - 1) / cols).max(1);
+        let ps = patch_size;
+        let gap = 2u32;
+        let sheet_w = cols * (ps + gap) + gap;
+        let sheet_h = rows * (ps + gap) + gap;
+
+        let mut sheet = image::RgbaImage::from_pixel(sheet_w, sheet_h, image::Rgba([40, 40, 40, 255]));
+
+        for (i, path) in patch_files.iter().enumerate() {
+            if let Ok(img) = image::open(path) {
+                let rgba = img.to_rgba8();
+                let col = (i as u32) % cols;
+                let row = (i as u32) / cols;
+                let x_off = gap + col * (ps + gap);
+                let y_off = gap + row * (ps + gap);
+                image::imageops::overlay(&mut sheet, &rgba, x_off as i64, y_off as i64);
+            }
+        }
+
+        let preview_path = out.join("preview.png");
+        // Scale up 4x for visibility
+        let scaled = image::imageops::resize(&sheet, sheet_w * 4, sheet_h * 4, image::imageops::FilterType::Nearest);
+        match scaled.save(&preview_path) {
+            Ok(()) => println!("  Preview: {}", preview_path.display()),
+            Err(e) => eprintln!("  warning: failed to save preview: {e}"),
+        }
+    }
+
+    // Print next steps
+    println!();
+    println!("Next: prepare training data with:");
+    println!("  pixl prepare {} --out training/data_custom", out.display());
+}
+
+fn cmd_prepare(
+    scan_dir: &PathBuf,
+    out: &PathBuf,
+    style: &str,
+    aug: u8,
+    color_aug: bool,
+    max_per_bin: usize,
+    max_colors: usize,
+) {
+    use pixl_core::prepare::*;
+    use std::collections::HashMap;
+
+    let manifest_path = scan_dir.join("scan_manifest.json");
+    let patches_dir = scan_dir.join("patches");
+
+    if !manifest_path.exists() {
+        eprintln!("error: no scan_manifest.json in {}", scan_dir.display());
+        eprintln!("Run: pixl scan <images> --out {}", scan_dir.display());
+        process::exit(1);
+    }
+
+    // Load manifest
+    let manifest_json = match std::fs::read_to_string(&manifest_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: cannot read manifest: {e}");
+            process::exit(1);
+        }
+    };
+    let manifest: pixl_render::scan::ScanManifest =
+        serde_json::from_str(&manifest_json).unwrap_or_else(|e| {
+            eprintln!("error: invalid manifest: {e}");
+            process::exit(1);
+        });
+
+    let patch_size = manifest.patch_size as usize;
+    println!("Preparing training data from {}", scan_dir.display());
+    println!("  Style tag: {style}");
+    println!("  Augmentation: {}x geo{}", aug, if color_aug { " + 3x color" } else { "" });
+    println!("  Stratification: max {} per bin", max_per_bin);
+    println!();
+
+    // Group patches by category for per-category palette extraction
+    let mut category_patches: HashMap<String, Vec<pixl_render::scan::PatchInfo>> = HashMap::new();
+    for source in &manifest.sources {
+        for patch in &source.patches {
+            category_patches
+                .entry(patch.category.clone())
+                .or_default()
+                .push(patch.clone());
+        }
+    }
+
+    // Extract palettes per category
+    println!("Extracting palettes...");
+    let mut category_palettes: HashMap<String, Vec<(char, [u8; 3])>> = HashMap::new();
+    let symbol_pool = ".#+=~gorhwsABCDE";
+
+    for (category, patches) in &category_patches {
+        let mut all_pixels: Vec<Vec<u8>> = vec![];
+        for patch_info in patches {
+            let patch_path = patches_dir.join(&patch_info.filename);
+            if let Ok(img) = image::open(&patch_path) {
+                all_pixels.push(img.to_rgba8().into_raw());
+            }
+        }
+        let pixel_refs: Vec<&[u8]> = all_pixels.iter().map(|v| v.as_slice()).collect();
+        let palette = extract_palette_from_pixels(&pixel_refs, max_colors, symbol_pool);
+        println!("  {}: {} colors from {} patches", category, palette.len(), patches.len());
+        category_palettes.insert(category.clone(), palette);
+    }
+
+    // Quantize + augment + label
+    println!("\nQuantizing and augmenting...");
+    let mut all_samples: Vec<(TrainingSample, GridFeatures)> = vec![];
+    let color_shifts: Vec<&str> = if color_aug {
+        vec!["", "warm", "cool", "dark"]
+    } else {
+        vec![""]
+    };
+
+    for (category, patches) in &category_patches {
+        let palette = match category_palettes.get(category) {
+            Some(p) if !p.is_empty() => p,
+            _ => continue,
+        };
+
+        let mut cat_count = 0;
+        for patch_info in patches {
+            let patch_path = patches_dir.join(&patch_info.filename);
+            let img = match image::open(&patch_path) {
+                Ok(i) => i.to_rgba8(),
+                Err(_) => continue,
+            };
+
+            let pixels = img.into_raw();
+            let grid = quantize_to_grid(&pixels, patch_size, patch_size, palette);
+
+            // Check non-void density
+            let non_void: usize = grid.iter().flat_map(|r| r.iter()).filter(|&&c| c != '.').count();
+            if non_void < patch_size * patch_size / 20 {
+                continue;
+            }
+
+            let features = compute_features(&grid);
+
+            for &color_shift in &color_shifts {
+                let shifted_palette = if color_shift.is_empty() {
+                    palette.clone()
+                } else {
+                    shift_palette(palette, color_shift)
+                };
+                let pal_desc = palette_to_desc(&shifted_palette);
+
+                for (aug_grid, aug_tag) in augment_grid(&grid, aug) {
+                    let label = make_label(&features, style, category, aug_tag, color_shift);
+                    let grid_str = grid_to_string(&aug_grid);
+                    let sample = make_sample(&pal_desc, &label, &grid_str);
+                    all_samples.push((sample, features.clone()));
+                    cat_count += 1;
+                }
+            }
+        }
+        println!("  {}: {} training pairs", category, cat_count);
+    }
+
+    println!("\n  Total before stratification: {}", all_samples.len());
+
+    // Stratify (auto-selects 3×3 or 5×5 bins based on coverage)
+    let (stratified, bins_filled) = stratified_sample(all_samples, max_per_bin, 42);
+    println!("  After stratification: {} ({} bins filled)", stratified.len(), bins_filled);
+
+    // Split: 90/5/5
+    let n = stratified.len();
+    let train_end = (n as f64 * 0.9) as usize;
+    let valid_end = (n as f64 * 0.95) as usize;
+
+    let train = &stratified[..train_end];
+    let valid = &stratified[train_end..valid_end];
+    let test = &stratified[valid_end..];
+
+    // Write
+    std::fs::create_dir_all(out).unwrap_or_else(|e| {
+        eprintln!("error: cannot create {}: {e}", out.display());
+        process::exit(1);
+    });
+
+    write_jsonl(train, &out.join("train.jsonl")).unwrap_or_else(|e| {
+        eprintln!("error: {e}");
+        process::exit(1);
+    });
+    write_jsonl(valid, &out.join("valid.jsonl")).unwrap_or_else(|e| {
+        eprintln!("error: {e}");
+        process::exit(1);
+    });
+    write_jsonl(test, &out.join("test.jsonl")).unwrap_or_else(|e| {
+        eprintln!("error: {e}");
+        process::exit(1);
+    });
+
+    println!("\n  train: {} samples", train.len());
+    println!("  valid: {} samples", valid.len());
+    println!("  test:  {} samples", test.len());
+    println!("\n  Output: {}", out.display());
+
+    // Training time estimate
+    let iters_3ep = train.len() * 3;
+    let iters_5ep = train.len() * 5;
+    println!("\n  Estimated training time (M4 Pro, ~2 it/sec):");
+    println!("    3 epochs: {} iters -> ~{} min", iters_3ep, iters_3ep / 2 / 60);
+    println!("    5 epochs: {} iters -> ~{} min", iters_5ep, iters_5ep / 2 / 60);
+
+    println!("\nNext: train with:");
+    println!("  pixl train {} --adapter training/adapters/{}", out.display(), style);
+}
+
+/// Discover all `data_*` directories under a base path that contain `train.jsonl`.
+fn discover_datasets(base: &std::path::Path) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(base) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_dir() {
+                let name = p.file_name().unwrap_or_default().to_string_lossy();
+                if name.starts_with("data_") && p.join("train.jsonl").exists() {
+                    dirs.push(p);
+                }
+            }
+        }
+    }
+    dirs.sort();
+    dirs
+}
+
+/// Extract the suffix after `data_` from a dataset directory name.
+fn dataset_suffix(dir: &std::path::Path) -> String {
+    dir.file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .strip_prefix("data_")
+        .unwrap_or("")
+        .to_string()
+}
+
+/// Merge multiple `train.jsonl` files, deduplicating by exact line content.
+/// Returns the temp directory path and merged sample count.
+fn merge_datasets(dirs: &[PathBuf]) -> (PathBuf, usize) {
+    use std::collections::HashSet;
+    use std::io::Write;
+
+    let merged_dir = std::env::temp_dir().join("pixl_merged_data");
+    let _ = std::fs::remove_dir_all(&merged_dir);
+    std::fs::create_dir_all(&merged_dir).unwrap_or_else(|e| {
+        eprintln!("error: cannot create temp merge dir: {e}");
+        process::exit(1);
+    });
+
+    let mut seen = HashSet::new();
+    let mut train_out = std::fs::File::create(merged_dir.join("train.jsonl")).unwrap();
+    let mut valid_out = std::fs::File::create(merged_dir.join("valid.jsonl")).unwrap();
+    let mut test_out = std::fs::File::create(merged_dir.join("test.jsonl")).unwrap();
+
+    let mut total = 0usize;
+
+    for dir in dirs {
+        // Merge train.jsonl (deduplicate)
+        if let Ok(content) = std::fs::read_to_string(dir.join("train.jsonl")) {
+            for line in content.lines().filter(|l| !l.is_empty()) {
+                if seen.insert(line.to_string()) {
+                    writeln!(train_out, "{}", line).unwrap();
+                    total += 1;
+                }
+            }
+        }
+        // Merge valid.jsonl (deduplicate)
+        if let Ok(content) = std::fs::read_to_string(dir.join("valid.jsonl")) {
+            for line in content.lines().filter(|l| !l.is_empty()) {
+                if seen.insert(line.to_string()) {
+                    writeln!(valid_out, "{}", line).unwrap();
+                }
+            }
+        }
+        // Merge test.jsonl (deduplicate)
+        if let Ok(content) = std::fs::read_to_string(dir.join("test.jsonl")) {
+            for line in content.lines().filter(|l| !l.is_empty()) {
+                if seen.insert(line.to_string()) {
+                    writeln!(test_out, "{}", line).unwrap();
+                }
+            }
+        }
+    }
+
+    (merged_dir, total)
+}
+
+fn cmd_train(
+    data_dir: &PathBuf,
+    adapter: &PathBuf,
+    model: &str,
+    epochs: usize,
+    lr: f64,
+    layers: usize,
+    resume: bool,
+    sources: Option<&str>,
+    exclude: Option<&str>,
+) {
+    // Resolve the effective data directory — either merged from --sources/--exclude or the given data_dir
+    let (effective_dir, _cleanup) = if sources.is_some() || exclude.is_some() {
+        // Find the base training directory: parent of data_dir, or data_dir itself if it looks like a training root
+        let base = if data_dir.join("train.jsonl").exists() {
+            data_dir.parent().unwrap_or(data_dir).to_path_buf()
+        } else {
+            data_dir.to_path_buf()
+        };
+
+        let all_datasets = discover_datasets(&base);
+        if all_datasets.is_empty() {
+            eprintln!("error: no data_* directories with train.jsonl found in {}", base.display());
+            process::exit(1);
+        }
+
+        let selected: Vec<PathBuf> = if let Some(src) = sources {
+            let names: Vec<&str> = src.split(',').map(|s| s.trim()).collect();
+            all_datasets.iter()
+                .filter(|d| names.contains(&dataset_suffix(d).as_str()))
+                .cloned()
+                .collect()
+        } else {
+            // --exclude only: start with all datasets
+            all_datasets.clone()
+        };
+
+        let selected: Vec<PathBuf> = if let Some(excl) = exclude {
+            let excl_names: Vec<&str> = excl.split(',').map(|s| s.trim()).collect();
+            selected.into_iter()
+                .filter(|d| !excl_names.contains(&dataset_suffix(d).as_str()))
+                .collect()
+        } else {
+            selected
+        };
+
+        if selected.is_empty() {
+            eprintln!("error: no datasets matched the given --sources/--exclude filters");
+            eprintln!("\nAvailable datasets:");
+            for d in &all_datasets {
+                eprintln!("  {}", dataset_suffix(d));
+            }
+            process::exit(1);
+        }
+
+        println!("Merging {} datasets:", selected.len());
+        for d in &selected {
+            let suffix = dataset_suffix(d);
+            let count = std::fs::read_to_string(d.join("train.jsonl"))
+                .unwrap_or_default()
+                .lines()
+                .filter(|l| !l.is_empty())
+                .count();
+            println!("  {} ({} samples)", suffix, count);
+        }
+        println!();
+
+        let (merged, total) = merge_datasets(&selected);
+        println!("Merged: {} unique train samples (duplicates removed)\n", total);
+        (merged, true)
+    } else {
+        (data_dir.clone(), false)
+    };
+
+    let train_path = effective_dir.join("train.jsonl");
+    if !train_path.exists() {
+        eprintln!("error: no train.jsonl in {}", effective_dir.display());
+        eprintln!("Run: pixl prepare <scan_dir> --out {}", effective_dir.display());
+        process::exit(1);
+    }
+
+    // Count training samples
+    let train_count = std::fs::read_to_string(&train_path)
+        .unwrap_or_default()
+        .lines()
+        .filter(|l| !l.is_empty())
+        .count();
+
+    let iters = train_count * epochs;
+    let est_min = iters / 2 / 60;
+
+    println!("PIXL LoRA Training");
+    println!("==================");
+    println!("  Model:   {model}");
+    println!("  Data:    {train_count} train samples");
+    println!("  Epochs:  {epochs}");
+    println!("  Iters:   {iters}");
+    println!("  Est:     ~{est_min} min on M4 Pro");
+    println!("  Adapter: {}", adapter.display());
+    if resume {
+        println!("  Resuming from existing adapter");
+    }
+    println!();
+
+    // Find Python with mlx-lm
+    let python = pixl_mcp::inference::find_python_with_mlx();
+
+    println!("Using Python: {}", python);
+    println!();
+
+    std::fs::create_dir_all(adapter).unwrap_or_else(|e| {
+        eprintln!("error: cannot create adapter dir: {e}");
+        process::exit(1);
+    });
+
+    let mut cmd = std::process::Command::new(&python);
+    cmd.args(["-m", "mlx_lm", "lora"])
+        .arg("--model").arg(model)
+        .arg("--train")
+        .arg("--data").arg(&effective_dir)
+        .arg("--adapter-path").arg(adapter)
+        .arg("--fine-tune-type").arg("lora")
+        .arg("--num-layers").arg(layers.to_string())
+        .arg("--batch-size").arg("1")
+        .arg("--learning-rate").arg(format!("{lr}"))
+        .arg("--iters").arg(iters.to_string())
+        .arg("--val-batches").arg("25")
+        .arg("--steps-per-eval").arg("500")
+        .arg("--save-every").arg("2000")
+        .arg("--max-seq-length").arg("512")
+        .arg("--seed").arg("42");
+
+    if resume {
+        let adapter_file = adapter.join("adapters.safetensors");
+        if adapter_file.exists() {
+            cmd.arg("--resume-adapter-file").arg(&adapter_file);
+        }
+    }
+
+    let status = cmd
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
+        .status()
+        .unwrap_or_else(|e| {
+            eprintln!("error: failed to start training: {e}");
+            process::exit(1);
+        });
+
+    if status.success() {
+        // Write adapter metadata
+        let meta = serde_json::json!({
+            "model": model,
+            "data_dir": data_dir.display().to_string(),
+            "train_samples": train_count,
+            "epochs": epochs,
+            "learning_rate": lr,
+            "lora_layers": layers,
+        });
+        let _ = std::fs::write(
+            adapter.join("style_adapter.json"),
+            serde_json::to_string_pretty(&meta).unwrap_or_default(),
+        );
+
+        println!("\nTraining complete!");
+        println!("Adapter: {}", adapter.display());
+        println!("\nTo use:");
+        println!("  pixl serve --model {} --adapter {}", model, adapter.display());
+    } else {
+        eprintln!("\nTraining failed with exit code: {:?}", status.code());
+        process::exit(status.code().unwrap_or(1));
+    }
+}
+
+fn cmd_retrain(file: &PathBuf, adapter: &PathBuf, style: &str, epochs: usize) {
+    println!("PIXL Retrain — feedback → data → adapter");
+    println!("==========================================\n");
+
+    // Step 1: Load the pax file and export feedback as training data
+    let (pax_file, palettes) = load_pax(file);
+
+    let palette_name = pax_file.tile.values()
+        .next()
+        .map(|t| t.palette.as_str())
+        .unwrap_or("");
+    let palette = match palettes.get(palette_name) {
+        Some(p) => p,
+        None => {
+            eprintln!("error: no palette found in {}", file.display());
+            process::exit(1);
+        }
+    };
+
+    // Collect all tile grids as training pairs
+    let mut grids: Vec<(String, Vec<Vec<char>>)> = Vec::new();
+    for (name, tile_raw) in &pax_file.tile {
+        if tile_raw.template.is_some() {
+            continue;
+        }
+        let size_str = tile_raw.size.as_deref().unwrap_or("16x16");
+        let (w, h) = match pixl_core::types::parse_size(size_str) {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+        if let Some(ref grid_str) = tile_raw.grid {
+            if let Ok(grid) = pixl_core::grid::parse_grid(grid_str, w, h, palette) {
+                grids.push((name.clone(), grid));
+            }
+        }
+    }
+
+    if grids.is_empty() {
+        eprintln!("error: no tiles with grids found in {}", file.display());
+        process::exit(1);
+    }
+
+    println!("  Source: {} ({} tiles)", file.display(), grids.len());
+
+    // Step 2: Write training pairs directly as JSONL
+    let data_dir = adapter.parent()
+        .unwrap_or(std::path::Path::new("."))
+        .join(format!("data_{}", style));
+    std::fs::create_dir_all(&data_dir).unwrap_or_else(|e| {
+        eprintln!("error: cannot create {}: {e}", data_dir.display());
+        process::exit(1);
+    });
+
+    let system_prompt = "You are a pixel art tile generator. Given a description, output a PAX-format character grid.\nRules:\n- Use only the symbols from the palette provided\n- Each row must be exactly the specified width\n- Total rows must equal the specified height\n- '.' means transparent/void\n- Output ONLY the grid, no explanation";
+
+    let palette_desc: String = palette.symbols.iter()
+        .map(|(sym, rgba)| format!("'{}'=({},{},{})", sym, rgba.r, rgba.g, rgba.b))
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    let mut samples = Vec::new();
+    let rotation_labels = ["orig", "r90", "r180", "r270"];
+    for (name, grid) in &grids {
+        let features = pixl_core::prepare::compute_features(grid);
+        let mut rotated = grid.clone();
+        for &rot_label in &rotation_labels {
+            let grid_str = pixl_core::prepare::grid_to_string(&rotated);
+            let label = pixl_core::prepare::make_label(&features, style, &name, rot_label, "");
+            let sample = pixl_core::prepare::make_sample(&palette_desc, &label, &grid_str);
+            samples.push(sample);
+            rotated = pixl_core::prepare::rotate_90(&rotated);
+        }
+    }
+
+    // Shuffle and split
+    pixl_core::prepare::fisher_yates_shuffle_pub(&mut samples, 42);
+    let n = samples.len();
+    let train_end = (n as f64 * 0.9) as usize;
+    let valid_end = (n as f64 * 0.95) as usize;
+
+    let train = &samples[..train_end];
+    let valid = &samples[train_end..valid_end];
+    let test = &samples[valid_end..];
+
+    pixl_core::prepare::write_jsonl(train, &data_dir.join("train.jsonl")).unwrap();
+    pixl_core::prepare::write_jsonl(valid, &data_dir.join("valid.jsonl")).unwrap();
+    pixl_core::prepare::write_jsonl(test, &data_dir.join("test.jsonl")).unwrap();
+
+    println!("  Data: {} train, {} valid, {} test", train.len(), valid.len(), test.len());
+    println!("  Output: {}\n", data_dir.display());
+
+    // Step 3: Train
+    cmd_train(&data_dir, adapter, "mlx-community/Qwen2.5-3B-Instruct-4bit", epochs, 0.00002, 16, false, None, None);
+}
+
+fn cmd_generate_set(
+    file: &PathBuf,
+    set_type: &str,
+    theme: &str,
+    count: usize,
+    out: &PathBuf,
+    adapter: Option<&std::path::Path>,
+    model: &str,
+) {
+    println!("PIXL Generate Set");
+    println!("=================\n");
+    println!("  Type:    {}", set_type);
+    println!("  Theme:   {}", theme);
+    println!("  Count:   {}", count);
+    println!("  Output:  {}", out.display());
+
+    // Load palette from pax file
+    let (pax_file, palettes) = load_pax(file);
+    let palette_name = pax_file.tile.values()
+        .next()
+        .map(|t| t.palette.as_str())
+        .unwrap_or("");
+    let palette = match palettes.get(palette_name) {
+        Some(p) => p,
+        None => {
+            eprintln!("error: no palette found");
+            process::exit(1);
+        }
+    };
+
+    // Build palette description
+    let palette_desc: String = palette.symbols.iter()
+        .map(|(sym, rgba)| format!("'{}'=({},{},{})", sym, rgba.r, rgba.g, rgba.b))
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    // Descriptions per set type
+    let descriptions: Vec<String> = match set_type {
+        "walls" => (0..count).map(|i| {
+            let variants = [
+                "stone wall with brick pattern and mortar lines",
+                "rough hewn wall with deep shadow cracks",
+                "smooth wall with carved decorative detail",
+                "weathered wall with exposed stone layers",
+                "reinforced wall with metal bracket accents",
+                "ancient wall with moss and water stains",
+            ];
+            format!("{} {}", theme, variants[i % variants.len()])
+        }).collect(),
+        "floors" => (0..count).map(|i| {
+            let variants = [
+                "stone floor with tile pattern",
+                "cobblestone floor with worn surface",
+                "smooth flagstone floor",
+            ];
+            format!("{} {}", theme, variants[i % variants.len()])
+        }).collect(),
+        "enemies" => (0..count).map(|i| {
+            let variants = [
+                "front-facing enemy creature",
+                "armored enemy warrior",
+                "robed magic-user enemy",
+                "undead skeleton enemy",
+                "small imp creature",
+            ];
+            format!("{} {}", theme, variants[i % variants.len()])
+        }).collect(),
+        "items" => (0..count).map(|i| {
+            let variants = [
+                "treasure chest icon",
+                "potion bottle icon",
+                "sword weapon icon",
+                "shield armor icon",
+                "key item icon",
+                "scroll magic item",
+            ];
+            format!("{} {}", theme, variants[i % variants.len()])
+        }).collect(),
+        _ => (0..count).map(|i| format!("{} tile variant {}", theme, i + 1)).collect(),
+    };
+
+    std::fs::create_dir_all(out).unwrap_or_else(|e| {
+        eprintln!("error: cannot create {}: {e}", out.display());
+        process::exit(1);
+    });
+
+    let system_prompt = "You are a pixel art tile generator. Given a description, output a PAX-format character grid.\nRules:\n- Use only the symbols from the palette provided\n- Each row must be exactly the specified width\n- Total rows must equal the specified height\n- '.' means transparent/void\n- Output ONLY the grid, no explanation";
+
+    // Start inference server
+    let adapter_path = adapter
+        .map(|a| PathBuf::from(a))
+        .or_else(|| std::env::var("PIXL_ADAPTER").ok().map(PathBuf::from));
+
+    let inf_config = pixl_mcp::inference::InferenceConfig {
+        model: model.to_string(),
+        adapter_path,
+        port: 8099,
+        ..Default::default()
+    };
+    let mut server = pixl_mcp::inference::InferenceServer::new(inf_config);
+
+    println!("\n  Starting inference server...");
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        if let Err(e) = server.ensure_running().await {
+            eprintln!("error: cannot start inference server: {e}");
+            process::exit(1);
+        }
+
+        println!("  Generating {} {}...\n", count, set_type);
+
+        let mut generated = 0;
+        for (i, desc) in descriptions.iter().enumerate() {
+            let user_prompt = format!(
+                "Palette: {}\nstyle:{}, type:{}, density:solid, detail:complex, colors:rich",
+                palette_desc, theme, desc
+            );
+
+            // Rejection sampling: retry up to 5 times
+            let mut best_grid = String::new();
+            let mut best_unique = 0usize;
+
+            for _attempt in 0..5 {
+                let raw = match server.generate(system_prompt, &user_prompt).await {
+                    Ok(r) => r,
+                    Err(e) => {
+                        eprintln!("  warning: generation failed for '{}': {e}", desc);
+                        break;
+                    }
+                };
+
+                // Extract grid lines
+                let mut grid_lines = Vec::new();
+                for line in raw.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.is_empty() || trimmed.starts_with("```") {
+                        continue;
+                    }
+                    if trimmed.len() >= 8 {
+                        grid_lines.push(&trimmed[..trimmed.len().min(16)]);
+                    }
+                    if grid_lines.len() >= 16 {
+                        break;
+                    }
+                }
+
+                let grid_str = grid_lines.join("\n");
+                let unique: std::collections::HashSet<char> = grid_str
+                    .chars()
+                    .filter(|c| !c.is_whitespace() && *c != '.')
+                    .collect();
+
+                if unique.len() > best_unique {
+                    best_unique = unique.len();
+                    best_grid = grid_str;
+                }
+                if unique.len() >= 3 {
+                    break;
+                }
+            }
+
+            if best_grid.is_empty() {
+                eprintln!("  [{}/{count}] SKIP: {} (no valid grid)", i + 1, desc);
+                continue;
+            }
+
+            // Parse and normalize grid (pad short rows, truncate long rows)
+            let mut grid: Vec<Vec<char>> = best_grid
+                .lines()
+                .map(|l| l.chars().collect())
+                .collect();
+
+            if grid.is_empty() { continue; }
+
+            let target_w = grid.iter().map(|r| r.len()).max().unwrap_or(16).min(16);
+            for row in &mut grid {
+                row.truncate(target_w);
+                while row.len() < target_w {
+                    row.push('.');
+                }
+            }
+            // Pad to 16 rows if needed
+            while grid.len() < 16 {
+                grid.push(vec!['.'; target_w]);
+            }
+            grid.truncate(16);
+
+            let img = pixl_render::renderer::render_grid(&grid, palette, 8);
+            let out_path = out.join(format!("{}_{:03}.png", set_type, i));
+            match img.save(&out_path) {
+                Ok(()) => {
+                    println!("  [{}/{count}] {} ({} colors)", i + 1, out_path.display(), best_unique);
+                    generated += 1;
+                }
+                Err(e) => eprintln!("  warning: failed to save {}: {e}", out_path.display()),
+            }
+
+            // Also save the grid as a .txt for reference
+            let txt_path = out.join(format!("{}_{:03}.txt", set_type, i));
+            let _ = std::fs::write(&txt_path, &best_grid);
+        }
+
+        println!("\nGenerated {generated}/{count} {} to {}", set_type, out.display());
+    });
+}
+
+fn cmd_datasets(dir: Option<&std::path::Path>) {
+    let cwd = std::env::current_dir().unwrap_or_default();
+
+    // Determine base directories to scan
+    let mut search_dirs = vec![];
+    if let Some(d) = dir {
+        search_dirs.push(d.to_path_buf());
+    }
+
+    for candidate in &["training", "../training"] {
+        let p = cwd.join(candidate);
+        if p.exists() && p.is_dir() {
+            search_dirs.push(p);
+        }
+    }
+
+    if search_dirs.is_empty() {
+        println!("No training directories found.");
+        println!("Specify one with: pixl datasets --dir path/to/training/");
+        return;
+    }
+
+    println!("PIXL Training Datasets");
+    println!("======================\n");
+
+    let mut total_samples = 0usize;
+    let mut total_datasets = 0usize;
+
+    // Column widths
+    let w_name = 24;
+    let w_samples = 10;
+    let w_style = 16;
+    let w_source = 30;
+
+    println!(
+        "  {:<w_name$}  {:>w_samples$}  {:<w_style$}  {}",
+        "Name", "Samples", "Style", "Source"
+    );
+    println!(
+        "  {:<w_name$}  {:>w_samples$}  {:<w_style$}  {}",
+        "-".repeat(w_name), "-".repeat(w_samples), "-".repeat(w_style), "-".repeat(w_source)
+    );
+
+    for base in &search_dirs {
+        let datasets = discover_datasets(base);
+        for dataset_dir in datasets {
+            let suffix = dataset_suffix(&dataset_dir);
+            let train_path = dataset_dir.join("train.jsonl");
+            let sample_count = std::fs::read_to_string(&train_path)
+                .unwrap_or_default()
+                .lines()
+                .filter(|l| !l.is_empty())
+                .count();
+
+            // Try to read dataset_info.json for metadata
+            let mut style_tag = String::from("-");
+            let mut source_info = String::from("-");
+            let info_path = dataset_dir.join("dataset_info.json");
+            if info_path.exists() {
+                if let Ok(content) = std::fs::read_to_string(&info_path) {
+                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                        if let Some(s) = json.get("style").and_then(|v| v.as_str()) {
+                            style_tag = s.to_string();
+                        }
+                        if let Some(s) = json.get("source").and_then(|v| v.as_str()) {
+                            source_info = s.to_string();
+                        }
+                        // Also check for sources array
+                        if source_info == "-" {
+                            if let Some(arr) = json.get("sources").and_then(|v| v.as_array()) {
+                                let names: Vec<&str> = arr.iter()
+                                    .filter_map(|v| v.as_str())
+                                    .collect();
+                                if !names.is_empty() {
+                                    source_info = names.join(", ");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Truncate source info if too long
+            if source_info.len() > w_source {
+                source_info = format!("{}...", &source_info[..w_source - 3]);
+            }
+
+            println!(
+                "  {:<w_name$}  {:>w_samples$}  {:<w_style$}  {}",
+                suffix, sample_count, style_tag, source_info
+            );
+
+            total_samples += sample_count;
+            total_datasets += 1;
+        }
+    }
+
+    println!(
+        "\n  {} dataset(s), {} total train samples\n",
+        total_datasets, total_samples
+    );
+
+    if total_datasets > 0 {
+        println!("Usage:");
+        println!("  pixl train training/data_NAME --adapter training/adapters/my-style");
+        println!("  pixl train training/ --sources eotb_optimal,matched --adapter my-adapter");
+    } else {
+        println!("No datasets found. Create one with:");
+        println!("  pixl scan my_sprites/ --out my_scan");
+        println!("  pixl prepare my_scan/ --out training/data_custom --style my-game");
+    }
+}
+
+fn cmd_adapters(dir: Option<&std::path::Path>) {
+    // Scan default locations + provided dir
+    let mut search_dirs = vec![];
+    if let Some(d) = dir {
+        search_dirs.push(d.to_path_buf());
+    }
+
+    // Common adapter locations relative to cwd
+    let cwd = std::env::current_dir().unwrap_or_default();
+    for candidate in &[
+        "training/adapters",
+        "adapters",
+        "../training/adapters",
+    ] {
+        let p = cwd.join(candidate);
+        if p.exists() {
+            search_dirs.push(p);
+        }
+    }
+
+    if search_dirs.is_empty() {
+        println!("No adapter directories found.");
+        println!("Specify one with: pixl adapters --dir path/to/adapters/");
+        return;
+    }
+
+    let mut found = 0;
+    for search_dir in &search_dirs {
+        let adapters = pixl_mcp::adapters::list_adapters(search_dir);
+        if adapters.is_empty() {
+            continue;
+        }
+
+        println!("Adapters in {}:", search_dir.display());
+        println!();
+
+        for a in &adapters {
+            found += 1;
+            println!("  {} {}", if found == 1 { "→" } else { " " }, a.name);
+            println!("    Path: {}", a.path.display());
+            if let Some(ref model) = a.model {
+                println!("    Model: {model}");
+            }
+            if let Some(samples) = a.train_samples {
+                print!("    Trained on: {samples} samples");
+                if let Some(epochs) = a.epochs {
+                    print!(", {epochs} epochs");
+                }
+                println!();
+            }
+            if let Some(ref created) = a.created {
+                println!("    Created: {created}");
+            }
+            println!();
+        }
+    }
+
+    if found == 0 {
+        println!("No adapters found.");
+        println!("\nTrain one with:");
+        println!("  pixl scan my_sprites/ --out my_scan");
+        println!("  pixl prepare my_scan/ --out my_data --style my-game");
+        println!("  pixl train my_data --adapter training/adapters/my-game");
+    } else {
+        println!("{found} adapter(s) found.");
+        println!("\nTo use an adapter:");
+        println!("  pixl serve --adapter training/adapters/NAME --file project.pax");
+    }
+}
+
+fn cmd_compare(
+    file: &PathBuf,
+    prompt: &str,
+    adapter_a: &PathBuf,
+    adapter_b: &PathBuf,
+    out: &PathBuf,
+    model: &str,
+) {
+    use image::{ImageBuffer, Rgb, RgbaImage};
+
+    println!("PIXL Adapter Comparison");
+    println!("=======================\n");
+    println!("  Prompt:    {prompt}");
+    println!("  Adapter A: {}", adapter_a.display());
+    println!("  Adapter B: {}", adapter_b.display());
+    println!("  Output:    {}", out.display());
+
+    let (pax_file, palettes) = load_pax(file);
+    let palette_name = pax_file.tile.values()
+        .next()
+        .map(|t| t.palette.as_str())
+        .unwrap_or("");
+    let palette = match palettes.get(palette_name) {
+        Some(p) => p,
+        None => {
+            eprintln!("error: no palette found");
+            process::exit(1);
+        }
+    };
+
+    let palette_desc: String = palette.symbols.iter()
+        .map(|(sym, rgba)| format!("'{}'=({},{},{})", sym, rgba.r, rgba.g, rgba.b))
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    let system_prompt = "You are a pixel art tile generator. Given a description, output a PAX-format character grid.\nRules:\n- Use only the symbols from the palette provided\n- Each row must be exactly the specified width\n- Total rows must equal the specified height\n- '.' means transparent/void\n- Output ONLY the grid, no explanation";
+
+    let user_prompt = format!(
+        "Palette: {}\n{}, density:solid, detail:complex, colors:rich",
+        palette_desc, prompt
+    );
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+
+    let generate_with_adapter = |adapter_path: &PathBuf, label: &str| -> Option<RgbaImage> {
+        println!("\n  Generating with {label}...");
+
+        let inf_config = pixl_mcp::inference::InferenceConfig {
+            model: model.to_string(),
+            adapter_path: Some(adapter_path.clone()),
+            port: 8099,
+            ..Default::default()
+        };
+        let mut server = pixl_mcp::inference::InferenceServer::new(inf_config);
+
+        rt.block_on(async {
+            if let Err(e) = server.ensure_running().await {
+                eprintln!("    error: {e}");
+                return None;
+            }
+
+            // Rejection sampling
+            let mut best_grid = String::new();
+            let mut best_unique = 0;
+            for _ in 0..5 {
+                let raw = match server.generate(system_prompt, &user_prompt).await {
+                    Ok(r) => r,
+                    Err(e) => { eprintln!("    error: {e}"); break; }
+                };
+
+                let mut lines = Vec::new();
+                for l in raw.lines() {
+                    let t = l.trim();
+                    if !t.is_empty() && !t.starts_with("```") && t.len() >= 8 {
+                        lines.push(&t[..t.len().min(16)]);
+                    }
+                    if lines.len() >= 16 { break; }
+                }
+                let grid_str = lines.join("\n");
+                let unique: std::collections::HashSet<char> = grid_str
+                    .chars().filter(|c| !c.is_whitespace() && *c != '.').collect();
+
+                if unique.len() > best_unique {
+                    best_unique = unique.len();
+                    best_grid = grid_str;
+                }
+                if unique.len() >= 3 { break; }
+            }
+
+            server.stop();
+
+            if best_grid.is_empty() { return None; }
+
+            let grid: Vec<Vec<char>> = best_grid.lines()
+                .map(|l| l.chars().collect()).collect();
+
+            println!("    {} colors", best_unique);
+            Some(pixl_render::renderer::render_grid(&grid, palette, 8))
+        })
+    };
+
+    let img_a = generate_with_adapter(adapter_a, "Adapter A");
+    let img_b = generate_with_adapter(adapter_b, "Adapter B");
+
+    // Stitch side by side with a gap
+    let gap = 8u32;
+    let tile_w = 16 * 8; // 128px at 8x scale
+    let tile_h = 16 * 8;
+    let label_h = 20u32;
+    let total_w = tile_w * 2 + gap;
+    let total_h = tile_h + label_h;
+
+    let mut combined: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::from_pixel(
+        total_w, total_h, Rgb([30, 30, 30])
+    );
+
+    // Paste tiles
+    if let Some(ref img) = img_a {
+        for y in 0..img.height().min(tile_h) {
+            for x in 0..img.width().min(tile_w) {
+                let p = img.get_pixel(x, y);
+                combined.put_pixel(x, y + label_h, Rgb([p[0], p[1], p[2]]));
+            }
+        }
+    }
+    if let Some(ref img) = img_b {
+        let x_off = tile_w + gap;
+        for y in 0..img.height().min(tile_h) {
+            for x in 0..img.width().min(tile_w) {
+                let p = img.get_pixel(x, y);
+                combined.put_pixel(x + x_off, y + label_h, Rgb([p[0], p[1], p[2]]));
+            }
+        }
+    }
+
+    // Save
+    if let Some(parent) = out.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    match combined.save(out) {
+        Ok(()) => println!("\n  Comparison saved: {}", out.display()),
+        Err(e) => eprintln!("\n  error saving: {e}"),
+    }
+}
+
+fn cmd_blend_style(file_a: &PathBuf, file_b: &PathBuf, blend: f64) {
+    println!("PIXL Style Blend");
+    println!("================\n");
+
+    // Extract style latent from each file
+    let extract_latent = |file: &PathBuf| -> pixl_core::style::StyleLatent {
+        let (pax_file, palettes) = load_pax(file);
+        let palette_name = pax_file.tile.values()
+            .next()
+            .map(|t| t.palette.as_str())
+            .unwrap_or("");
+        let palette = match palettes.get(palette_name) {
+            Some(p) => p,
+            None => {
+                eprintln!("error: no palette in {}", file.display());
+                process::exit(1);
+            }
+        };
+
+        let mut grids: Vec<Vec<Vec<char>>> = Vec::new();
+        for (_, tile_raw) in &pax_file.tile {
+            if tile_raw.template.is_some() { continue; }
+            let size_str = tile_raw.size.as_deref().unwrap_or("16x16");
+            let (w, h) = match pixl_core::types::parse_size(size_str) {
+                Ok(s) => s,
+                Err(_) => continue,
+            };
+            if let Some(ref grid_str) = tile_raw.grid {
+                if let Ok(grid) = pixl_core::grid::parse_grid(grid_str, w, h, palette) {
+                    grids.push(grid);
+                }
+            }
+        }
+        let refs: Vec<&Vec<Vec<char>>> = grids.iter().collect();
+        pixl_core::style::StyleLatent::extract(&refs, palette, '.')
+    };
+
+    let latent_a = extract_latent(file_a);
+    let latent_b = extract_latent(file_b);
+
+    println!("Style A ({} tiles):", latent_a.sample_count);
+    println!("{}\n", latent_a.describe());
+    println!("Style B ({} tiles):", latent_b.sample_count);
+    println!("{}\n", latent_b.describe());
+
+    let distance = latent_a.distance(&latent_b);
+    println!("Distance: {:.3} (0=identical, 1=very different)\n", distance);
+
+    let blended = latent_a.blend(&latent_b, blend);
+    println!("Blended ({:.0}% A, {:.0}% B):", (1.0 - blend) * 100.0, blend * 100.0);
+    println!("{}", blended.describe());
+}
+

@@ -332,6 +332,21 @@ class _TilemapViewportState extends ConsumerState<TilemapViewport>
           },
           child: Listener(
             onPointerSignal: _handleScroll,
+            onPointerPanZoomUpdate: (event) {
+              setState(() {
+                _panOffset += event.panDelta;
+              });
+              if (event.scale != 1.0) {
+                _pinchAccum += (event.scale - 1.0);
+                if (_pinchAccum > 0.1) {
+                  ref.read(tilemapProvider.notifier).zoomIn();
+                  _pinchAccum = 0.0;
+                } else if (_pinchAccum < -0.1) {
+                  ref.read(tilemapProvider.notifier).zoomOut();
+                  _pinchAccum = 0.0;
+                }
+              }
+            },
             child: MouseRegion(
               cursor: _cursorForTool(ts.activeTool),
               onHover: (event) {

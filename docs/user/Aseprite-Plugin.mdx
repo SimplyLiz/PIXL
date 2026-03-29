@@ -1,6 +1,6 @@
 # Aseprite Plugin
 
-The PIXL Aseprite plugin brings the full power of the `pixl` engine into Aseprite — import and export PAX tiles, critique pixel art quality, pack atlases, convert images, and validate tilesets without leaving the editor.
+The PIXL Aseprite plugin brings the full power of the `pixl` engine into Aseprite — import and export PAX and PAX-L tiles, compact and expand between formats, critique pixel art quality, pack atlases, convert images, and validate tilesets without leaving the editor.
 
 <Callout type="info">The plugin requires the `pixl` CLI. Install it first — see [Getting Started](./Getting-Started) — then configure the binary path in **PIXL Settings** inside Aseprite if it's not on your PATH.</Callout>
 
@@ -22,34 +22,36 @@ cd plugins/aseprite
 
 All commands are accessible from **Sprite > PIXL** in the Aseprite menu bar.
 
-### Import PAX
+### Import PAX / PAX-L
 
-Import tiles from a `.pax` file into Aseprite. Pick individual tiles or import the entire tileset as an atlas sprite sheet.
+Import tiles from a `.pax` or `.paxl` file into Aseprite. Pick individual tiles or import the entire tileset as an atlas sprite sheet.
 
 | Option | Description |
 |--------|-------------|
-| PAX file | The `.pax` tileset to import from |
+| PAX / PAX-L file | The `.pax` or `.paxl` tileset to import from |
 | Preview scale | Pixel scale multiplier (1 = native, 4 = 4x zoom) |
 | Import as sprite sheet | Pack all tiles into a single atlas instead of separate sprites |
 
 After scanning, a tile picker lets you select which tiles to import. Each tile opens as a separate Aseprite sprite — or as one combined sheet in atlas mode.
 
-### Export to PAX
+When importing from a `.paxl` file, the plugin automatically expands it to PAX via `pixl expand` before rendering. The PAXL scanner reads tile names directly from `@tile` directives without needing the expansion step.
 
-Export the active Aseprite sprite as a PAX tile. The plugin saves the sprite to a temp PNG, runs `pixl import` to quantize it against a palette, and appends the tile block to your `.pax` file.
+### Export to PAX / PAX-L
+
+Export the active Aseprite sprite as a PAX tile. The plugin saves the sprite to a temp PNG, runs `pixl import` to quantize it against a palette, and appends the tile block to your target file.
 
 | Option | Description |
 |--------|-------------|
-| Tile name | The `[tile.NAME]` identifier in PAX |
-| Append to .pax | Target file to append the tile block to |
-| Palette name | Which palette from the PAX file to quantize against |
+| Tile name | The `[tile.NAME]` identifier in PAX, or the `@tile NAME` directive in PAX-L |
+| Append to .pax / .paxl | Target file to append the tile block to |
+| Palette name | Which palette from the file to quantize against |
 | Enable dithering | Use Bayer dithering during quantization |
 
-If no target PAX file is given, the plugin runs `pixl convert` for a standalone pixel art conversion.
+When the target is a `.paxl` file, the exported tile is written as a PAX-L `@tile` directive. When the target is `.pax`, it's written as a TOML `[tile.NAME]` block. If no target file is given, the plugin runs `pixl convert` for a standalone pixel art conversion.
 
 ### Render Tile
 
-Render any tile from a `.pax` file as a preview in Aseprite. Useful for checking tiles at different scales or with a pixel grid overlay.
+Render any tile from a `.pax` or `.paxl` file as a preview in Aseprite. Useful for checking tiles at different scales or with a pixel grid overlay.
 
 | Option | Description |
 |--------|-------------|
@@ -62,7 +64,7 @@ Run PIXL's structural quality analysis on a tile. The critique checks outline co
 
 ### Pack Atlas
 
-Generate a sprite sheet atlas from an entire PAX tileset, with optional JSON metadata (TexturePacker format).
+Generate a sprite sheet atlas from an entire PAX or PAX-L tileset, with optional JSON metadata (TexturePacker format).
 
 | Option | Description |
 |--------|-------------|
@@ -81,9 +83,31 @@ Convert any image — a file on disk or the active Aseprite sprite — into true
 | Max colors | Maximum palette size |
 | Preview scale | Upscale factor for the output preview |
 
+### Compact to PAX-L
+
+Convert a `.pax` file to the compact PAX-L wire format. PAX-L is a line-oriented, sigil-based encoding optimized for LLM context windows, offering ~40-70% token savings over TOML.
+
+| Option | Description |
+|--------|-------------|
+| PAX file | The `.pax` file to compact |
+| Disable auto-stamp extraction | Skip BPE-inspired 4x4 stamp discovery |
+| Disable row references | Skip `=N` duplicate row deduplication |
+| Disable fill detection | Skip repeating texture pattern detection |
+| Save as .paxl | Output file path (leave empty to preview size) |
+
+### Expand PAX-L
+
+Convert a `.paxl` file back to standard `.pax` TOML format. Useful when you need to hand-edit a file or feed it to tools that only understand TOML.
+
+| Option | Description |
+|--------|-------------|
+| PAX-L file | The `.paxl` file to expand |
+| Strict parsing | Reject structural errors instead of auto-fixing (lenient mode pads missing rows, ignores unknown symbols) |
+| Save as .pax | Output file path (leave empty to preview size) |
+
 ### Validate PAX
 
-Run validation on a `.pax` file and display the report. Checks include:
+Run validation on a `.pax` or `.paxl` file and display the report. Checks include:
 
 - **Edge compatibility** — do tile edges match for seamless tiling?
 - **Quality analysis** — per-tile structural quality metrics
@@ -119,12 +143,14 @@ plugins/aseprite/
 │   ├── pax_scan.lua      # Lightweight PAX scanner (extract tile/palette names)
 │   └── image.lua         # Temp file helpers, palette conversion
 └── commands/
-    ├── import_pax.lua    # Import PAX → Aseprite
-    ├── export_pax.lua    # Export Aseprite → PAX
+    ├── import_pax.lua    # Import PAX / PAX-L → Aseprite
+    ├── export_pax.lua    # Export Aseprite → PAX / PAX-L
     ├── render.lua        # Render tile preview
     ├── critique.lua      # Structural quality analysis
     ├── atlas.lua         # Pack sprite sheet atlas
     ├── convert.lua       # Image → pixel art conversion
+    ├── compact.lua       # PAX → PAX-L conversion
+    ├── expand.lua        # PAX-L → PAX conversion
     ├── validate.lua      # PAX validation report
     └── settings.lua      # Configure pixl binary path
 ```

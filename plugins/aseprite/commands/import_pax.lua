@@ -4,12 +4,12 @@ local scan = dofile(plugin.path .. "/lib/pax_scan.lua")
 local img = dofile(plugin.path .. "/lib/image.lua")
 
 return function()
-  -- Step 1: Pick a .pax file
+  -- Step 1: Pick a .pax or .paxl file
   local dlg = Dialog("Import PAX")
   dlg:file{
     id = "pax_file",
-    label = "PAX file",
-    filetypes = { "pax" },
+    label = "PAX / PAX-L file",
+    filetypes = { "pax", "paxl" },
     open = true,
   }
   dlg:number{
@@ -33,12 +33,19 @@ return function()
   local scale = math.max(1, dlg.data.scale or 1)
 
   if not pax_path or pax_path == "" then
-    app.alert("Please select a .pax file.")
+    app.alert("Please select a .pax or .paxl file.")
+    return
+  end
+
+  -- Expand .paxl to temp .pax if needed
+  local cli_pax, cleanup = cli.ensure_pax(pax_path)
+  if not cli_pax then
+    app.alert(cleanup)
     return
   end
 
   -- Step 2: Scan the file for tiles
-  local info, err = scan.scan(pax_path)
+  local info, err = scan.scan_auto(pax_path)
   if not info then
     app.alert("Scan failed: " .. (err or "unknown error"))
     return
@@ -89,7 +96,7 @@ return function()
     local map_json = img.tmp(".json")
 
     local ok, output = cli.exec({
-      "atlas", pax_path,
+      "atlas", cli_pax,
       "-o", atlas_png,
       "--map", map_json,
       "--scale", tostring(scale),
@@ -104,6 +111,7 @@ return function()
 
     os.remove(atlas_png)
     os.remove(map_json)
+    cleanup()
     return
   end
 
@@ -113,7 +121,7 @@ return function()
     local out_path = img.tmp(".png")
 
     local ok, output = cli.exec({
-      "render", pax_path,
+      "render", cli_pax,
       "--tile", name,
       "--scale", tostring(scale),
       "-o", out_path,
@@ -130,6 +138,8 @@ return function()
 
     os.remove(out_path)
   end
+
+  cleanup()
 
   app.alert("Imported " .. imported .. " of " .. #selected .. " tiles.")
 end

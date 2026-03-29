@@ -1,0 +1,199 @@
+# Style Scanner
+
+Scan any pixel art, train an AI on it, and generate new assets in that exact style. Your art, your model, your machine — nothing leaves your computer.
+
+## The idea
+
+You have reference art you love — sprites from a classic game, your own hand-drawn tiles, or a tileset you found online. You want to generate *more* art in that same style: matching palettes, matching texture patterns, matching pixel density.
+
+The Style Scanner makes this a three-step process:
+
+1. **Scan** — Drop your reference images. PIXL auto-slices sprite sheets, filters out junk, and classifies tiles by type.
+2. **Learn** — Train a LoRA adapter on the scanned art. Takes 30–60 minutes on Apple Silicon.
+3. **Generate** — Use the adapter to create new tiles, walls, enemies, items — whatever you scanned.
+
+## Quick start
+
+```bash
+# 1. Scan your reference art
+pixl scan my_sprites/ --out my_scan
+
+# 2. Prepare training data
+pixl prepare my_scan/ --out training/data_custom --palette project.pax
+
+# 3. Train (~30 min on M4 Pro)
+pixl train training/data_custom --adapter training/adapters/my-style
+
+# 4. Generate with your style
+pixl serve --adapter training/adapters/my-style --file project.pax
+```
+
+Then use `pixl_generate_tile` with any prompt — the AI produces tiles matching your reference art.
+
+## Scanning reference art
+
+### Supported formats
+
+PIXL scans PNG, JPG, BMP, GIF, and WebP images. You can provide:
+
+- **A single sprite sheet** — PIXL detects tile boundaries automatically
+- **A folder of images** — scanned recursively
+- **Individual tiles** — used directly
+
+### Smart detection
+
+PIXL automatically:
+
+- **Detects background colors** — cyan, magenta, and other key colors used in sprite sheets
+- **Finds tile boundaries** — by detecting gutter rows/columns of background color
+- **Filters low-quality patches** — removes empty, single-color, or featureless tiles
+- **Classifies tiles** — walls, floors, enemies, items, doors, etc.
+
+### Options
+
+```bash
+pixl scan sprites/ --out my_scan \
+  --patch-size 16 \     # Extract 16x16 patches (default)
+  --stride 8 \          # Overlap for more training data
+  --min-colors 2 \      # Require at least 2 colors
+  --max-bg 0.85 \       # Max 85% background pixels
+  --tile-size 32         # For grid tilesets (e.g., 32x32 tiles)
+```
+
+### What you get
+
+```
+my_scan/
+├── patches/              # Individual tiles as PNGs
+│   ├── wall_0000.png
+│   ├── floor_0001.png
+│   └── ...
+└── scan_manifest.json    # Metadata for every patch
+```
+
+You can browse the `patches/` folder to verify the quality before training. Delete any patches you don't want the AI to learn from.
+
+## Training
+
+### Prepare the data
+
+```bash
+pixl prepare my_scan/ --out training/data_custom --palette project.pax
+```
+
+This quantizes the scanned patches to your project's palette, augments the data (rotations, color shifts), and stratifies for uniform coverage. The output is ready for LoRA training.
+
+### Run training
+
+```bash
+pixl train training/data_custom --adapter training/adapters/my-style
+```
+
+Training runs entirely on your machine using MLX (Apple Silicon). No cloud GPU, no data upload.
+
+| Dataset size | Epochs | Approximate time (M4 Pro) |
+|---|---|---|
+| ~1,000 samples | 3 | ~25 min |
+| ~2,000 samples | 3 | ~50 min |
+| ~2,000 samples | 10 | ~2.7 hours |
+
+The adapter is a small file (~25 MB) that modifies the base model's behavior.
+
+### Resume training
+
+```bash
+# Continue with more epochs
+pixl train training/data_custom --adapter training/adapters/my-style --resume --epochs 5
+```
+
+## Generating with your style
+
+### From the CLI
+
+```bash
+pixl serve \
+  --model mlx-community/Qwen2.5-3B-Instruct-4bit \
+  --adapter training/adapters/my-style \
+  --file project.pax
+```
+
+### From PIXL Studio
+
+1. Go to Settings → LLM Provider → PIXL LoRA (On-Device)
+2. Set the adapter path to `training/adapters/my-style`
+3. Generate tiles from the Chat panel — they'll match your scanned style
+
+### From MCP (Claude Desktop)
+
+```bash
+pixl mcp \
+  --model mlx-community/Qwen2.5-3B-Instruct-4bit \
+  --adapter training/adapters/my-style \
+  --file project.pax
+```
+
+Then ask Claude to generate tiles — it uses your trained model automatically.
+
+## Tips
+
+### More data = better results
+
+The scanner extracts more patches with `--stride 8` (overlapping) vs the default non-overlapping. For a typical sprite sheet:
+
+- `--stride 16`: ~200 patches (fast training, less variety)
+- `--stride 8`: ~800 patches (better variety, longer training)
+
+### Mix sources
+
+You can scan multiple folders and combine the data. Drop all your reference art into one folder:
+
+```
+my_reference/
+├── classic_rpg_walls/
+├── character_sprites/
+└── item_icons/
+```
+
+### Curate before training
+
+After scanning, browse `patches/` and delete any tiles that:
+- Are incorrectly sliced (partial tiles, cut-off sprites)
+- Don't represent the style you want (UI elements, text, etc.)
+- Are duplicates
+
+Quality in = quality out.
+
+## Managing training data
+
+As you scan more reference art, datasets accumulate in `training/data_*` directories. Use `pixl datasets` to see what you have:
+
+```bash
+pixl datasets
+```
+
+This lists every dataset with its sample count, style tag, and source info.
+
+### Merging datasets
+
+To train on multiple datasets at once, use `--sources`:
+
+```bash
+pixl train training/ --sources eotb_optimal,matched --adapter training/adapters/combined
+```
+
+PIXL merges the selected `train.jsonl` files, deduplicates by exact content, and trains on the combined set. You can also exclude specific datasets:
+
+```bash
+pixl train training/ --exclude eotb_walls --adapter training/adapters/no-walls
+```
+
+### Iterate with feedback
+
+After generating tiles, accept the good ones and reject the bad ones using `pixl_record_feedback`. Then retrain with the feedback data:
+
+```bash
+pixl prepare my_scan/ --out training/data_v2 --palette project.pax --include-feedback
+pixl train training/data_v2 --adapter training/adapters/my-style-v2
+```
+
+Each version gets better because the model learns from your corrections.

@@ -7,6 +7,7 @@ class ChatMessage {
     required this.content,
     this.timestamp,
     this.isStatus = false,
+    this.previewImages = const [],
   });
 
   final String role; // 'user' or 'assistant'
@@ -15,6 +16,9 @@ class ChatMessage {
   /// Status messages (e.g. "Generating...") are shown in UI but excluded
   /// from the context window sent to Claude.
   final bool isStatus;
+  /// Inline tile preview images (base64 PNG) shown in the message bubble.
+  /// Each entry is (tileName, base64).
+  final List<({String name, String base64})> previewImages;
 }
 
 class ChatNotifier extends StateNotifier<List<ChatMessage>> {
@@ -44,7 +48,11 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
     ];
   }
 
-  void addAssistantMessage(String content, {bool isStatus = false}) {
+  void addAssistantMessage(
+    String content, {
+    bool isStatus = false,
+    List<({String name, String base64})> previewImages = const [],
+  }) {
     state = [
       ...state,
       ChatMessage(
@@ -52,12 +60,18 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
         content: content,
         timestamp: DateTime.now(),
         isStatus: isStatus,
+        previewImages: previewImages,
       ),
     ];
   }
 
   void clear() {
     state = [];
+  }
+
+  /// Restore messages from a saved tab state.
+  void restoreMessages(List<ChatMessage> messages) {
+    state = messages;
   }
 }
 

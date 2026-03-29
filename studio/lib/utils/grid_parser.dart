@@ -10,9 +10,9 @@ String? extractGrid(String response) {
   final paxMatch = paxGridRegex.firstMatch(response);
   if (paxMatch != null) {
     final block = paxMatch.group(1)!.trim();
-    final lines = block.split('\n').where((l) => l.trim().isNotEmpty).toList();
+    final lines = block.split('\n').where((l) => l.trim().isNotEmpty).map((l) => l.trim()).toList();
     if (lines.length >= 2) {
-      return lines.map((l) => l.trim()).join('\n');
+      return _normalizeRowWidths(lines).join('\n');
     }
   }
 
@@ -25,15 +25,15 @@ String? extractGrid(String response) {
     final innerPax = paxGridRegex.firstMatch(block);
     if (innerPax != null) {
       final inner = innerPax.group(1)!.trim();
-      final lines = inner.split('\n').where((l) => l.trim().isNotEmpty).toList();
+      final lines = inner.split('\n').where((l) => l.trim().isNotEmpty).map((l) => l.trim()).toList();
       if (lines.length >= 2) {
-        return lines.map((l) => l.trim()).join('\n');
+        return _normalizeRowWidths(lines).join('\n');
       }
     }
     // Otherwise treat the whole block as a grid if it looks like one
-    final lines = block.split('\n').where((l) => l.trim().isNotEmpty).toList();
+    final lines = block.split('\n').where((l) => l.trim().isNotEmpty).map((l) => l.trim()).toList();
     if (lines.length >= 2 && lines.every((l) => !l.contains(' = ') && l.trim().length >= 2)) {
-      return lines.map((l) => l.trim()).join('\n');
+      return _normalizeRowWidths(lines).join('\n');
     }
   }
 
@@ -86,10 +86,35 @@ String? extractGrid(String response) {
     for (var j = startIdx; j < startIdx + count; j++) {
       result.add(allLines[j].trim());
     }
-    return result.join('\n');
+    return _normalizeRowWidths(result).join('\n');
   }
 
   return null;
+}
+
+/// Normalize all rows to the same width (the most common width).
+/// Truncates longer rows from the right, discards rows that are too short.
+List<String> _normalizeRowWidths(List<String> rows) {
+  if (rows.isEmpty) return rows;
+  // Find the most common width (mode)
+  final widthCounts = <int, int>{};
+  for (final r in rows) {
+    widthCounts[r.length] = (widthCounts[r.length] ?? 0) + 1;
+  }
+  final targetWidth = widthCounts.entries
+      .reduce((a, b) => a.value >= b.value ? a : b)
+      .key;
+  final result = <String>[];
+  for (final r in rows) {
+    if (r.length == targetWidth) {
+      result.add(r);
+    } else if (r.length > targetWidth) {
+      // Truncate trailing extra symbols
+      result.add(r.substring(0, targetWidth));
+    }
+    // Skip rows that are too short — likely malformed
+  }
+  return result;
 }
 
 /// Check if a line looks like a grid row (symbol characters, no prose).
@@ -105,6 +130,15 @@ bool _isGridLine(String trimmed) {
   if (trimmed.contains(' ') || trimmed.startsWith('[') || trimmed.startsWith('"""')) return false;
   // Must be symbol characters only
   return true;
+}
+
+/// Ensure [name] is unique among [existingNames], appending _2, _3, etc.
+String uniqueTileName(String name, Set<String> existingNames) {
+  if (!existingNames.contains(name)) return name;
+  for (var i = 2;; i++) {
+    final candidate = '${name}_$i';
+    if (!existingNames.contains(candidate)) return candidate;
+  }
 }
 
 /// Generate a tile name from a user prompt.

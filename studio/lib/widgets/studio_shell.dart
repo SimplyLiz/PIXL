@@ -67,40 +67,40 @@ class _StudioShellState extends ConsumerState<StudioShell> {
 
     return Scaffold(
       body: Column(
-        children: [
-          const TopBar(),
-          const DocumentTabBar(),
-          Expanded(
-            child: Row(
-              children: [
-                const LeftSidebar(),
-                if (leftView == LeftPanelView.chat)
-                  const ChatPanel()
-                else
-                  const TilesPanel(),
-                const ToolStrip(),
-                Expanded(
-                  child: Column(
-                    children: [
-                      Expanded(
-                        child: switch (mode) {
-                          EditorMode.tilemap => const TilemapViewport(),
-                          EditorMode.backdrop => const BackdropViewport(),
-                          EditorMode.composite => const CompositeViewport(),
-                          _ => const CanvasViewport(),
-                        },
-                      ),
-                      const AnimationBar(),
-                    ],
+          children: [
+            const TopBar(),
+            const DocumentTabBar(),
+            Expanded(
+              child: Row(
+                children: [
+                  const LeftSidebar(),
+                  if (leftView == LeftPanelView.chat)
+                    const ChatPanel()
+                  else
+                    const TilesPanel(),
+                  const ToolStrip(),
+                  Expanded(
+                    child: Column(
+                      children: [
+                        Expanded(
+                          child: switch (mode) {
+                            EditorMode.tilemap => const TilemapViewport(),
+                            EditorMode.backdrop => const BackdropViewport(),
+                            EditorMode.composite => const CompositeViewport(),
+                            _ => const CanvasViewport(),
+                          },
+                        ),
+                        const AnimationBar(),
+                      ],
+                    ),
                   ),
-                ),
-                const ToolsPanel(),
-              ],
+                  const ToolsPanel(),
+                ],
+              ),
             ),
-          ),
-          const StatusBar(),
-        ],
-      ),
+            const StatusBar(),
+          ],
+        ),
     );
   }
 }

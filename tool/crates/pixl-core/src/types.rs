@@ -40,6 +40,9 @@ pub struct PaxFile {
     pub backdrop: HashMap<String, BackdropRaw>,
     #[serde(default)]
     pub composite: HashMap<String, CompositeRaw>,
+    // PAX 2.1: style latent section — optional statistical fingerprint
+    #[serde(default)]
+    pub style: HashMap<String, crate::style::StyleLatent>,
 }
 
 // ── Header ──────────────────────────────────────────────────────────
@@ -219,17 +222,35 @@ pub struct TileRaw {
     pub visual_height_extra: Option<u32>,
     #[serde(default)]
     pub semantic: Option<SemanticRaw>,
-    // Grid data — exactly one of these should be present (or template)
+    // Grid data — exactly one of these should be present (or template/delta)
     #[serde(default)]
     pub grid: Option<String>,
     #[serde(default)]
     pub rle: Option<String>,
     #[serde(default)]
     pub layout: Option<String>,
+    // PAX 2.1: pattern fill encoding — tiles the pattern to fill declared size
+    #[serde(default)]
+    pub fill: Option<String>,
+    #[serde(default)]
+    pub fill_size: Option<String>,
+    // PAX 2.1: delta encoding — inherit grid from base tile, apply pixel patches
+    #[serde(default)]
+    pub delta: Option<String>,
+    #[serde(default)]
+    pub patches: Vec<PatchRaw>,
 }
 
 fn default_weight() -> f64 {
     1.0
+}
+
+/// PAX 2.1: pixel override for delta tiles — `{ x, y, sym }`.
+#[derive(Debug, Deserialize, Clone, serde::Serialize)]
+pub struct PatchRaw {
+    pub x: u32,
+    pub y: u32,
+    pub sym: String,
 }
 
 #[derive(Debug, Deserialize, Clone, serde::Serialize)]
@@ -304,6 +325,8 @@ pub enum Encoding {
     Grid,
     Rle,
     Compose,
+    Fill,  // PAX 2.1: pattern tiling
+    Delta, // PAX 2.1: base tile + pixel patches
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -590,6 +613,10 @@ pub struct WfcRules {
     pub require_boost: f64,
     #[serde(default)]
     pub variant_groups: HashMap<String, Vec<String>>,
+    /// When true, the tileset has been verified as sub-complete by
+    /// `pixl check --subcomplete`. WFC can skip backtracking.
+    #[serde(default)]
+    pub subcomplete: bool,
 }
 
 fn default_boost() -> f64 {

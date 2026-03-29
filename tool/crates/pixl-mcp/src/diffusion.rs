@@ -48,12 +48,15 @@ pub async fn generate_image(
     size: &str,
 ) -> Result<Vec<u8>, String> {
     let pixel_prompt = format!(
-        "Pixel art sprite on a transparent background. \
-         Hard 1-pixel dark outline around the entire subject with NO glow, NO halo, NO bloom, NO soft edges. \
-         The outline must be crisp single pixels directly adjacent to transparent pixels. \
-         Limited color palette, completely flat shading, no anti-aliasing, no gradients, no sub-pixel blending. \
-         The subject should be centered and fill most of the frame. \
-         Style: 16-bit era SNES pixel art, game sprite. \
+        "Pixel art sprite on a completely transparent background (alpha checkerboard). \
+         Hard 1-pixel dark outline around the ENTIRE subject. The outline must be a single \
+         unbroken ring of dark pixels — no gaps, no glow, no halo, no soft edges, no bloom. \
+         Every outline pixel must be exactly 1 pixel wide and directly adjacent to transparent pixels. \
+         Strictly limited color palette (max 8-10 colors). Completely flat shading with NO gradients, \
+         NO anti-aliasing, NO sub-pixel blending, NO dithering. Each color area is a solid block. \
+         The subject must be perfectly centered and fill 70-85% of the canvas. \
+         NO background elements, NO ground plane, NO shadow on ground — subject only. \
+         Style: 16-bit era SNES/GBA pixel art game sprite, clean professional quality. \
          Subject: {}",
         prompt
     );
@@ -142,9 +145,17 @@ pub async fn generate_and_quantize(
     let import_result =
         pixl_render::import::import_reference(&img, target_width, target_height, palette, dither);
 
+    // Post-processing: enforce outlines
+    let grid = enforce_outline(&import_result.grid, palette, '.');
+    let grid_string = grid
+        .iter()
+        .map(|row| row.iter().collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n");
+
     Ok(GenerateResult {
-        grid: import_result.grid,
-        grid_string: import_result.grid_string,
+        grid,
+        grid_string,
         width: target_width,
         height: target_height,
         color_accuracy: import_result.color_accuracy,
@@ -207,9 +218,17 @@ pub async fn generate_with_auto_palette(
     let import_result =
         pixl_render::import::import_reference(&img, tw, th, &palette, dither);
 
+    // Post-processing: enforce outlines on boundary pixels
+    let grid = enforce_outline(&import_result.grid, &palette, '.');
+    let grid_string = grid
+        .iter()
+        .map(|row| row.iter().collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n");
+
     Ok(GenerateResult {
-        grid: import_result.grid,
-        grid_string: import_result.grid_string,
+        grid,
+        grid_string,
         width: tw,
         height: th,
         color_accuracy: import_result.color_accuracy,
@@ -221,6 +240,64 @@ pub async fn generate_with_auto_palette(
         detected_pixel_size: import_result.detected_pixel_size,
         native_resolution: import_result.native_resolution,
     })
+}
+
+/// Post-process a quantized grid to enforce dark outlines on boundary pixels.
+///
+/// Any non-void pixel adjacent to a void pixel gets replaced with the darkest
+/// non-void color in the palette (the "outline" color). This ensures clean
+/// silhouettes even when the AI-generated image has soft/missing edges.
+fn enforce_outline(
+    grid: &[Vec<char>],
+    palette: &pixl_core::types::Palette,
+    void_sym: char,
+) -> Vec<Vec<char>> {
+    if grid.is_empty() {
+        return grid.to_vec();
+    }
+    let h = grid.len();
+    let w = grid[0].len();
+
+    // Find the darkest non-void symbol
+    let darkest_sym = palette
+        .symbols
+        .iter()
+        .filter(|(sym, _)| **sym != void_sym)
+        .min_by_key(|(_, rgba)| {
+            (rgba.r as u32 + rgba.g as u32 + rgba.b as u32)
+        })
+        .map(|(sym, _)| *sym);
+
+    let darkest = match darkest_sym {
+        Some(s) => s,
+        None => return grid.to_vec(), // No non-void colors
+    };
+
+    let mut result = grid.to_vec();
+
+    for y in 0..h {
+        for x in 0..w {
+            if grid[y][x] == void_sym || grid[y][x] == darkest {
+                continue; // Skip void pixels and already-dark pixels
+            }
+            // Check if this pixel is on the boundary (adjacent to void)
+            let neighbors = [(0i32, -1i32), (0, 1), (-1, 0), (1, 0)];
+            let on_boundary = neighbors.iter().any(|&(dy, dx)| {
+                let ny = y as i32 + dy;
+                let nx = x as i32 + dx;
+                if ny < 0 || ny >= h as i32 || nx < 0 || nx >= w as i32 {
+                    true // Edge of canvas counts as void
+                } else {
+                    grid[ny as usize][nx as usize] == void_sym
+                }
+            });
+            if on_boundary {
+                result[y][x] = darkest;
+            }
+        }
+    }
+
+    result
 }
 
 /// Snap a pixel dimension to the nearest valid PAX canvas size.
