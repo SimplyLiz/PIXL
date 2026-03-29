@@ -65,16 +65,25 @@ class PixlPalette {
   PixlPalette withColor(int index, Color color) {
     final newColors = List<Color>.from(colors);
     newColors[index] = color;
-    return PixlPalette(name: name, colors: newColors);
+    return PixlPalette(
+      name: name, colors: newColors,
+      engineId: engineId, enginePalette: enginePalette,
+    );
   }
 
   PixlPalette addColor(Color color) {
-    return PixlPalette(name: name, colors: [...colors, color]);
+    return PixlPalette(
+      name: name, colors: [...colors, color],
+      engineId: engineId, enginePalette: enginePalette,
+    );
   }
 
   PixlPalette removeColorAt(int index) {
     final newColors = List<Color>.from(colors)..removeAt(index);
-    return PixlPalette(name: name, colors: newColors);
+    return PixlPalette(
+      name: name, colors: newColors,
+      engineId: engineId, enginePalette: enginePalette,
+    );
   }
 }
 
