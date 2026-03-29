@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/backend_provider.dart';
 import '../providers/claude_provider.dart';
+import '../providers/tab_provider.dart';
 import '../services/llm_provider.dart';
 import '../models/pixel_canvas.dart';
 import '../providers/tilemap_provider.dart';
@@ -14,6 +15,7 @@ import 'canvas/variant_strip.dart';
 import 'panels/chat_panel.dart';
 import 'panels/tool_strip.dart';
 import 'panels/tools_panel.dart';
+import 'document_tab_bar.dart';
 import 'status_bar.dart';
 import 'top_bar.dart';
 import 'training_dialog.dart';
@@ -32,6 +34,9 @@ class _StudioShellState extends ConsumerState<StudioShell> {
     super.initState();
     // Initialize LLM settings first, then connect backend with inference config
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Create the initial default tab.
+      ref.read(tabManagerProvider.notifier).newTab();
+
       final llmNotifier = ref.read(claudeProvider.notifier);
       await llmNotifier.init();
       final service = llmNotifier.service;
@@ -61,6 +66,7 @@ class _StudioShellState extends ConsumerState<StudioShell> {
       body: Column(
         children: [
           const TopBar(),
+          const DocumentTabBar(),
           Expanded(
             child: Row(
               children: [

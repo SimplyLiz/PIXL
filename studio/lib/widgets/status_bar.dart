@@ -64,7 +64,7 @@ class StatusBar extends ConsumerWidget {
           const Spacer(),
           _EngineIndicator(),
           _sep(),
-          Text('PIXL Studio v0.1', style: style),
+          Text('PIXL Studio v1.0', style: style),
         ],
       ),
     );
