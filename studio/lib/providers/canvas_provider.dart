@@ -77,6 +77,24 @@ class CanvasNotifier extends StateNotifier<CanvasState> {
   List<CanvasSnapshot> get undoStack => List.unmodifiable(_undoStack);
   List<CanvasSnapshot> get redoStack => List.unmodifiable(_redoStack);
 
+  /// Load animation frame pixels onto the canvas layers.
+  ///
+  /// Replaces all layer pixel data without changing layer structure.
+  /// Clears undo/redo (undo is per-frame).
+  void loadFramePixels(List<List<Color?>> layerPixels) {
+    if (layerPixels.length != state.layers.length) return;
+    final newLayers = <PixelLayer>[];
+    for (var i = 0; i < state.layers.length; i++) {
+      final layer = state.layers[i].deepCopy();
+      layer.pixels.clear();
+      layer.pixels.addAll(layerPixels[i]);
+      newLayers.add(layer);
+    }
+    _undoStack.clear();
+    _redoStack.clear();
+    state = state.copyWith(layers: newLayers);
+  }
+
   /// Restore full document state (used by tab manager on tab switch).
   void restoreDocument(CanvasState newState, List<CanvasSnapshot> undo, List<CanvasSnapshot> redo) {
     _undoStack

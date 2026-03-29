@@ -64,7 +64,7 @@ class _SpritePreviewDialogState extends ConsumerState<SpritePreviewDialog> {
       return;
     }
 
-    final gif = resp['gif'] as String?;
+    final gif = resp['gif_b64'] as String?;
     if (gif != null) {
       setState(() {
         _gifBytes = base64Decode(gif);

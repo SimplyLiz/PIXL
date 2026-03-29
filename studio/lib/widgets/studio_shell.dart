@@ -11,8 +11,10 @@ import 'canvas/backdrop_viewport.dart';
 import 'canvas/composite_viewport.dart';
 import 'canvas/canvas_viewport.dart';
 import 'canvas/tilemap_viewport.dart';
-import 'canvas/variant_strip.dart';
+import 'canvas/animation_bar.dart';
 import 'panels/chat_panel.dart';
+import 'panels/left_sidebar.dart';
+import 'panels/tiles_panel.dart';
 import 'panels/tool_strip.dart';
 import 'panels/tools_panel.dart';
 import 'document_tab_bar.dart';
@@ -61,6 +63,7 @@ class _StudioShellState extends ConsumerState<StudioShell> {
   @override
   Widget build(BuildContext context) {
     final mode = ref.watch(editorModeProvider);
+    final leftView = ref.watch(leftPanelViewProvider);
 
     return Scaffold(
       body: Column(
@@ -70,7 +73,11 @@ class _StudioShellState extends ConsumerState<StudioShell> {
           Expanded(
             child: Row(
               children: [
-                const ChatPanel(),
+                const LeftSidebar(),
+                if (leftView == LeftPanelView.chat)
+                  const ChatPanel()
+                else
+                  const TilesPanel(),
                 const ToolStrip(),
                 Expanded(
                   child: Column(
@@ -83,7 +90,7 @@ class _StudioShellState extends ConsumerState<StudioShell> {
                           _ => const CanvasViewport(),
                         },
                       ),
-                      const VariantStrip(),
+                      const AnimationBar(),
                     ],
                   ),
                 ),
