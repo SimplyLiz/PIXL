@@ -484,15 +484,31 @@ fn handle_check_edge_pair(state: &Mutex<McpState>, args: &Value) -> Value {
 
 fn handle_list_tiles(state: &Mutex<McpState>) -> Value {
     let st = state.lock().unwrap();
+    let empty_stamps = std::collections::HashMap::new();
 
     let tiles: Vec<Value> = st
         .file
         .tile
         .iter()
         .map(|(name, raw)| {
+            // Render a small preview — resolve templates/compose/symmetry first.
+            let preview = (|| -> Option<String> {
+                let palette = st.palettes.get(&raw.palette)?;
+                let (parsed, _w, _h) = pixl_core::resolve::resolve_tile_grid(
+                    name,
+                    &st.file.tile,
+                    &st.palettes,
+                    &empty_stamps,
+                )
+                .ok()?;
+                let img = renderer::render_grid(&parsed, palette, 4);
+                Some(renderer::png_to_base64(&renderer::encode_png(&img)))
+            })();
+
             json!({
                 "name": name,
                 "size": raw.size,
+                "preview": preview,
                 "edge_class": raw.edge_class.as_ref().map(|ec| json!({"n": ec.n, "e": ec.e, "s": ec.s, "w": ec.w})),
                 "tags": raw.tags,
                 "target_layer": raw.target_layer,
@@ -1321,9 +1337,16 @@ fn handle_generate_context(state: &Mutex<McpState>, args: &Value) -> Value {
         }
     }
 
+    // Resolve the palette name for tile creation.
+    let palette_name = st
+        .active_theme()
+        .and_then(|t| st.file.theme.get(t))
+        .map(|t| t.palette.as_str());
+
     json!({
         "system_prompt": system_prompt,
         "user_prompt": user_prompt,
+        "palette": palette_name,
         "palette_symbols": palette_text.trim(),
         "theme": st.active_theme(),
         "size": size_str,
@@ -1464,6 +1487,26 @@ fn handle_load_source(state: &Mutex<McpState>, args: &Value) -> Value {
             Ok(palettes) => {
                 let tile_count = file.tile.len();
                 let theme_count = file.theme.len();
+                let active_theme = file.pax.theme.clone();
+                let active_palette = active_theme
+                    .as_deref()
+                    .and_then(|t| file.theme.get(t))
+                    .map(|t| t.palette.clone());
+                // Return palette colors so the UI can sync its palette panel.
+                let palette_colors: Option<Vec<String>> = active_palette
+                    .as_deref()
+                    .and_then(|p| palettes.get(p))
+                    .map(|pal| {
+                        pal.symbols
+                            .iter()
+                            .map(|(_, rgba)| {
+                                format!(
+                                    "#{:02x}{:02x}{:02x}{:02x}",
+                                    rgba.r, rgba.g, rgba.b, rgba.a
+                                )
+                            })
+                            .collect()
+                    });
                 st.file = file;
                 st.palettes = palettes;
                 st.refinement_count.clear();
@@ -1472,6 +1515,9 @@ fn handle_load_source(state: &Mutex<McpState>, args: &Value) -> Value {
                     "ok": true,
                     "tiles": tile_count,
                     "themes": theme_count,
+                    "active_theme": active_theme,
+                    "active_palette": active_palette,
+                    "palette_colors": palette_colors,
                 })
             }
             Err(e) => json!({"ok": false, "error": format!("{}", e)}),
@@ -2107,10 +2153,83 @@ fn handle_export(state: &Mutex<McpState>, args: &Value) -> Value {
                     if let Err(e) = std::fs::write(&tsj_path, tsj_str) {
                         return json!({"ok": false, "error": format!("cannot write TSJ: {}", e)});
                     }
+                    // Export tilemaps with multi-layer object splitting
+                    let mut exported_files = vec![
+                        atlas_path.display().to_string(),
+                        tsj_path.display().to_string(),
+                    ];
+
+                    let object_defs: std::collections::HashMap<String, &pixl_core::types::ObjectRaw> =
+                        st.file.object.iter().map(|(k, v)| (k.clone(), v)).collect();
+
+                    for (tm_name, tilemap_raw) in &st.file.tilemap {
+                        let terrain_layer = tilemap_raw
+                            .layer
+                            .values()
+                            .filter(|l| l.grid.is_some())
+                            .min_by_key(|l| {
+                                let role_priority = match l.layer_role.as_deref() {
+                                    Some("platform") => 0,
+                                    Some("background") => 1,
+                                    _ => 2,
+                                };
+                                (role_priority, l.z_order)
+                            });
+                        let terrain_layer = match terrain_layer {
+                            Some(l) => l,
+                            None => continue,
+                        };
+
+                        let terrain_grid: Vec<Vec<usize>> = terrain_layer
+                            .grid
+                            .as_deref()
+                            .unwrap()
+                            .lines()
+                            .map(|l| l.trim())
+                            .filter(|l| !l.is_empty())
+                            .map(|line| {
+                                line.split_whitespace()
+                                    .map(|name| {
+                                        if name == "." {
+                                            return usize::MAX;
+                                        }
+                                        let base = name.split('!').next().unwrap_or(name);
+                                        let base = base.split(':').next().unwrap_or(base);
+                                        tile_names
+                                            .binary_search(&base.to_string())
+                                            .unwrap_or(usize::MAX)
+                                    })
+                                    .collect()
+                            })
+                            .collect();
+
+                        let placements: Vec<(String, u32, u32)> = tilemap_raw
+                            .objects
+                            .iter()
+                            .map(|p| (p.object.clone(), p.x, p.y))
+                            .collect();
+
+                        if let Ok(map) = pixl_export::tiled::generate_map_with_objects(
+                            &terrain_grid,
+                            &tile_names,
+                            &placements,
+                            &object_defs,
+                            tile_size.0,
+                            tile_size.1,
+                            "tileset.tsj",
+                        ) {
+                            let tmj_path = out_dir.join(format!("{}.tmj", tm_name));
+                            let tmj_str = serde_json::to_string_pretty(&map).unwrap_or_default();
+                            if std::fs::write(&tmj_path, &tmj_str).is_ok() {
+                                exported_files.push(tmj_path.display().to_string());
+                            }
+                        }
+                    }
+
                     json!({
                         "ok": true,
                         "format": "tiled",
-                        "files": [atlas_path.display().to_string(), tsj_path.display().to_string()],
+                        "files": exported_files,
                         "tile_count": tile_names.len(),
                     })
                 }
