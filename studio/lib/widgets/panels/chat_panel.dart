@@ -55,6 +55,17 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
   // Click-to-reference: selected tile for next message context
   TileInfo? _referencedTile;
 
+  // Track generating state for typing indicator scroll
+  bool _wasGenerating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(() {
+      if (mounted) setState(() {});
+    });
+  }
+
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
@@ -1486,21 +1497,41 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     final claude = ref.watch(claudeProvider);
     final isGenerating = claude.isGenerating;
 
+    // Scroll to bottom when typing indicator appears
+    if (isGenerating && !_wasGenerating) {
+      _scrollToBottom();
+    }
+    _wasGenerating = isGenerating;
+
     return Container(
       width: 260,
       decoration: StudioTheme.panelDecoration,
       child: Column(
         children: [
-          // Header
+          // ── Header ──
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            decoration: const BoxDecoration(
+              border: Border(bottom: StudioTheme.panelBorder),
+            ),
             child: Row(
               children: [
-                Icon(Icons.auto_awesome, size: 14, color: theme.colorScheme.primary),
+                Container(
+                  width: 18, height: 18,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        theme.colorScheme.primary.withValues(alpha: 0.3),
+                        theme.colorScheme.primary.withValues(alpha: 0.1),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Icon(Icons.auto_awesome, size: 11, color: theme.colorScheme.primary),
+                ),
                 const SizedBox(width: 6),
-                Text('AI EXPERT', style: theme.textTheme.titleSmall),
+                Text('AI EXPERT', style: theme.textTheme.titleSmall!.copyWith(fontSize: 10)),
                 const Spacer(),
-                // Connection indicators
                 _StatusDot(
                   color: backend.isConnected ? StudioTheme.success : StudioTheme.separatorColor,
                   tooltip: backend.isConnected ? 'Engine connected' : 'Engine offline',
@@ -1510,14 +1541,13 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
                   color: claude.hasApiKey ? StudioTheme.success : StudioTheme.warning,
                   tooltip: claude.hasApiKey ? 'API key set' : 'No API key',
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 _IconBtn(
                   icon: Icons.delete_outline,
                   onTap: () {
                     ref.read(chatProvider.notifier).clear();
                     setState(() {
                       _pendingTileName = null;
-                
                       _lastGenerationPrompt = null;
                     });
                   },
@@ -1526,67 +1556,32 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
               ],
             ),
           ),
-          const Divider(height: 1),
 
-          // Messages
+          // ── Messages ──
           Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.all(8),
-              itemCount: messages.length,
-              itemBuilder: (context, index) {
-                final msg = messages[index];
-                final isUser = msg.role == 'user';
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        isUser ? 'You' : 'PIXL',
-                        style: theme.textTheme.bodySmall!.copyWith(
-                          color: isUser ? theme.colorScheme.secondary : theme.colorScheme.primary,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      SelectionArea(
-                        child: MarkdownBody(
-                          data: msg.content,
-                          selectable: true,
-                          styleSheet: MarkdownStyleSheet(
-                            p: theme.textTheme.bodyMedium!.copyWith(fontSize: 12),
-                            code: theme.textTheme.bodyMedium!.copyWith(
-                              fontSize: 11,
-                              backgroundColor: StudioTheme.codeBg,
-                            ),
-                            codeblockDecoration: BoxDecoration(
-                              color: StudioTheme.codeBg,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                          ),
-                        ),
-                      ),
-                      // Inline tile preview cards
-                      if (msg.previewImages.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            for (final img in msg.previewImages)
-                              _buildTilePreviewCard(theme, img, msg.previewImages.length),
-                          ],
-                        ),
-                      ],
-                    ],
+            child: messages.isEmpty
+                ? _buildWelcomeState(theme, claude, backend)
+                : ListView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                    itemCount: messages.length + (isGenerating ? 1 : 0),
+                    itemBuilder: (context, index) {
+                      // Typing indicator as last item when generating
+                      if (index == messages.length) {
+                        return _buildTypingIndicator(theme);
+                      }
+                      final msg = messages[index];
+                      if (msg.isStatus) {
+                        return _buildStatusChip(theme, msg.content);
+                      }
+                      return msg.role == 'user'
+                          ? _buildUserBubble(theme, msg)
+                          : _buildAssistantBubble(theme, msg);
+                    },
                   ),
-                );
-              },
-            ),
           ),
 
-          // Variation strip — multiple alternatives to pick from
+          // ── Variation strip ──
           if (_variations.isNotEmpty || _isGeneratingVariations)
             Container(
               padding: const EdgeInsets.all(8),
@@ -1599,12 +1594,15 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
                 children: [
                   Row(
                     children: [
-                      Text('VARIATIONS', style: theme.textTheme.titleSmall),
+                      Text('VARIATIONS', style: theme.textTheme.titleSmall!.copyWith(fontSize: 9)),
                       if (_isGeneratingVariations) ...[
                         const SizedBox(width: 8),
-                        const SizedBox(
+                        SizedBox(
                           width: 10, height: 10,
-                          child: CircularProgressIndicator(strokeWidth: 1.5),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 1.5,
+                            color: theme.colorScheme.primary,
+                          ),
                         ),
                       ],
                     ],
@@ -1647,7 +1645,6 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
                           ),
                         ),
                       ],
-                      // Placeholder slots while generating
                       for (var i = _variations.length; i < 3 && _isGeneratingVariations; i++) ...[
                         if (i > 0 || _variations.isNotEmpty) const SizedBox(width: 6),
                         Container(
@@ -1657,10 +1654,13 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
                             border: Border.all(color: theme.dividerColor),
                             color: StudioTheme.codeBg,
                           ),
-                          child: const Center(
+                          child: Center(
                             child: SizedBox(
                               width: 14, height: 14,
-                              child: CircularProgressIndicator(strokeWidth: 1.5),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 1.5,
+                                color: theme.colorScheme.primary,
+                              ),
                             ),
                           ),
                         ),
@@ -1704,27 +1704,28 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
               ),
             ),
 
-          // Pending tile variation actions (compact, no duplicate preview)
+          // ── Pending tile bar (compact) ──
           if (_pendingTileName != null && _variations.isEmpty)
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              decoration: const BoxDecoration(
-                border: Border(top: StudioTheme.panelBorder),
-                color: StudioTheme.recessedBg,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              decoration: BoxDecoration(
+                border: const Border(top: StudioTheme.panelBorder),
+                color: theme.colorScheme.primary.withValues(alpha: 0.06),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.auto_awesome, size: 12, color: theme.colorScheme.primary),
-                  const SizedBox(width: 6),
-                  Text(
-                    _pendingTileName!,
-                    style: theme.textTheme.bodySmall!.copyWith(
-                      fontSize: 10,
-                      color: theme.colorScheme.primary,
+                  Icon(Icons.auto_awesome, size: 11, color: theme.colorScheme.primary),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      _pendingTileName!,
+                      style: theme.textTheme.bodySmall!.copyWith(
+                        fontSize: 9,
+                        color: theme.colorScheme.primary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    overflow: TextOverflow.ellipsis,
                   ),
-                  const Spacer(),
                   _SmallActionBtn(
                     icon: Icons.shuffle,
                     label: 'Vary',
@@ -1740,34 +1741,36 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
               ),
             ),
 
-          // Reference chip
+          // ── Reference chip ──
           if (_referencedTile != null)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: const BoxDecoration(
-                border: Border(top: StudioTheme.panelBorder),
-                color: StudioTheme.recessedBg,
+              decoration: BoxDecoration(
+                border: const Border(top: StudioTheme.panelBorder),
+                color: theme.colorScheme.primary.withValues(alpha: 0.06),
               ),
               child: Row(
                 children: [
                   if (_referencedTile!.previewBase64 != null)
                     Padding(
-                      padding: const EdgeInsets.only(right: 6),
+                      padding: const EdgeInsets.only(right: 5),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(2),
                         child: Image.memory(
                           base64Decode(_referencedTile!.previewBase64!),
-                          width: 20, height: 20,
+                          width: 18, height: 18,
                           filterQuality: FilterQuality.none,
                           fit: BoxFit.contain,
                         ),
                       ),
                     ),
+                  Icon(Icons.link, size: 10, color: theme.colorScheme.primary),
+                  const SizedBox(width: 4),
                   Expanded(
                     child: Text(
                       _referencedTile!.name,
                       style: theme.textTheme.bodySmall!.copyWith(
-                        fontSize: 10,
+                        fontSize: 9,
                         color: theme.colorScheme.primary,
                       ),
                       overflow: TextOverflow.ellipsis,
@@ -1776,39 +1779,45 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
                   InkWell(
                     onTap: () => setState(() => _referencedTile = null),
                     borderRadius: BorderRadius.circular(8),
-                    child: Icon(Icons.close, size: 14, color: theme.textTheme.bodySmall?.color),
+                    child: Icon(Icons.close, size: 12, color: theme.textTheme.bodySmall?.color),
                   ),
                 ],
               ),
             ),
 
-          // Input
+          // ── Composer ──
           Container(
             padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              border: Border(top: _referencedTile == null ? StudioTheme.panelBorder : BorderSide.none),
+            decoration: const BoxDecoration(
+              border: Border(top: StudioTheme.panelBorder),
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: KeyboardListener(
+            child: Container(
+              decoration: BoxDecoration(
+                color: StudioTheme.recessedBg,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: _focusNode.hasFocus
+                      ? theme.colorScheme.primary.withValues(alpha: 0.5)
+                      : theme.dividerColor.withValues(alpha: 0.4),
+                ),
+              ),
+              child: Column(
+                children: [
+                  KeyboardListener(
                     focusNode: FocusNode(),
                     onKeyEvent: (event) {
                       if (event is! KeyDownEvent) return;
-                      // Cmd+Enter or Ctrl+Enter → send
                       if (event.logicalKey == LogicalKeyboardKey.enter &&
                           (HardwareKeyboard.instance.isMetaPressed ||
                            HardwareKeyboard.instance.isControlPressed)) {
                         _send();
                         return;
                       }
-                      // Up arrow → history back (only when cursor is at start)
                       if (event.logicalKey == LogicalKeyboardKey.arrowUp &&
                           _controller.selection.baseOffset == 0) {
                         _historyUp();
                         return;
                       }
-                      // Down arrow → history forward (only when cursor is at end)
                       if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
                           _controller.selection.baseOffset == _controller.text.length) {
                         _historyDown();
@@ -1820,41 +1829,343 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
                       focusNode: _focusNode,
                       enabled: !isGenerating,
                       style: theme.textTheme.bodyMedium!.copyWith(fontSize: 12),
-                      maxLines: 3,
+                      maxLines: 4,
                       minLines: 1,
                       textInputAction: TextInputAction.newline,
                       decoration: InputDecoration(
                         hintText: isGenerating
                             ? 'Generating...'
-                            : claude.hasApiKey
-                                ? 'Ask or "generate a wall tile"... (Cmd+Enter)'
-                                : 'Add API key in Settings...',
-                        hintStyle: theme.textTheme.bodySmall,
+                            : 'Message...',
+                        hintStyle: theme.textTheme.bodySmall!.copyWith(fontSize: 11),
                         isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
-                          borderSide: StudioTheme.panelBorder,
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
-                          borderSide: BorderSide(color: theme.colorScheme.primary),
-                        ),
+                        contentPadding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+                        border: InputBorder.none,
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 4),
-                isGenerating
-                    ? const SizedBox(
-                        width: 24, height: 24,
-                        child: CircularProgressIndicator(strokeWidth: 1.5),
-                      )
-                    : _IconBtn(icon: Icons.send, onTap: _send, tooltip: 'Send'),
-              ],
+                  // Bottom controls row
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 0, 4, 4),
+                    child: Row(
+                      children: [
+                        // Model indicator
+                        Padding(
+                          padding: const EdgeInsets.only(left: 4),
+                          child: Text(
+                            claude.model.split('-').take(2).join(' '),
+                            style: theme.textTheme.bodySmall!.copyWith(
+                              fontSize: 8,
+                              color: theme.disabledColor,
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        // Send button
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          width: 26, height: 26,
+                          decoration: BoxDecoration(
+                            color: isGenerating
+                                ? Colors.transparent
+                                : theme.colorScheme.primary.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: isGenerating
+                              ? Center(
+                                  child: SizedBox(
+                                    width: 14, height: 14,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 1.5,
+                                      color: theme.colorScheme.primary,
+                                    ),
+                                  ),
+                                )
+                              : InkWell(
+                                  onTap: _send,
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Icon(
+                                    Icons.arrow_upward,
+                                    size: 14,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // ── Message Bubble Builders ────────────────────────────────
+
+  /// Welcome state shown when chat is empty.
+  Widget _buildWelcomeState(ThemeData theme, LlmState claude, BackendState backend) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40, height: 40,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    theme.colorScheme.primary.withValues(alpha: 0.2),
+                    theme.colorScheme.primary.withValues(alpha: 0.05),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                Icons.auto_awesome,
+                size: 20,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'AI Tile Expert',
+              style: theme.textTheme.bodyMedium!.copyWith(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Generate tiles, get feedback,\nor ask about pixel art.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall!.copyWith(
+                fontSize: 10,
+                height: 1.4,
+              ),
+            ),
+            if (!backend.isConnected || !claude.hasApiKey) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: StudioTheme.warning.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: StudioTheme.warning.withValues(alpha: 0.2)),
+                ),
+                child: Text(
+                  !backend.isConnected
+                      ? 'Engine offline'
+                      : 'Add API key in Settings',
+                  style: TextStyle(
+                    fontSize: 9,
+                    color: StudioTheme.warning,
+                    fontFamily: 'JetBrainsMono',
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// User message bubble — right-aligned feel with warm bg.
+  Widget _buildUserBubble(ThemeData theme, ChatMessage msg) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4, left: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF3C3836),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(12),
+                topRight: Radius.circular(12),
+                bottomLeft: Radius.circular(12),
+                bottomRight: Radius.circular(4),
+              ),
+            ),
+            child: SelectionArea(
+              child: Text(
+                msg.content,
+                style: theme.textTheme.bodyMedium!.copyWith(
+                  fontSize: 11,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Assistant message bubble — left-aligned with accent stripe.
+  Widget _buildAssistantBubble(ThemeData theme, ChatMessage msg) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6, right: 8),
+      child: _HoverableBubble(
+        onCopy: () {
+          Clipboard.setData(ClipboardData(text: msg.content));
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Copied', style: TextStyle(fontSize: 11)),
+              duration: Duration(seconds: 1),
+            ),
+          );
+        },
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF242220),
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(4),
+              topRight: Radius.circular(12),
+              bottomLeft: Radius.circular(12),
+              bottomRight: Radius.circular(12),
+            ),
+            border: Border(
+              left: BorderSide(
+                color: theme.colorScheme.primary.withValues(alpha: 0.4),
+                width: 2,
+              ),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SelectionArea(
+                  child: MarkdownBody(
+                    data: msg.content,
+                    selectable: true,
+                    styleSheet: MarkdownStyleSheet(
+                      p: theme.textTheme.bodyMedium!.copyWith(fontSize: 11, height: 1.4),
+                      code: theme.textTheme.bodyMedium!.copyWith(
+                        fontSize: 10,
+                        color: const Color(0xFFFED7AA),
+                        backgroundColor: const Color(0xFF1A1816),
+                      ),
+                      codeblockDecoration: BoxDecoration(
+                        color: const Color(0xFF1A1816),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(0xFF3C3836)),
+                      ),
+                      codeblockPadding: const EdgeInsets.all(8),
+                      blockquoteDecoration: BoxDecoration(
+                        border: Border(
+                          left: BorderSide(
+                            color: theme.colorScheme.primary.withValues(alpha: 0.4),
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                      blockquotePadding: const EdgeInsets.only(left: 10, top: 4, bottom: 4),
+                      h1: theme.textTheme.bodyMedium!.copyWith(fontSize: 13, fontWeight: FontWeight.w700),
+                      h2: theme.textTheme.bodyMedium!.copyWith(fontSize: 12, fontWeight: FontWeight.w700),
+                      h3: theme.textTheme.bodyMedium!.copyWith(fontSize: 11, fontWeight: FontWeight.w700),
+                      listBullet: theme.textTheme.bodyMedium!.copyWith(fontSize: 11),
+                      tableHead: theme.textTheme.bodyMedium!.copyWith(fontSize: 10, fontWeight: FontWeight.w700),
+                      tableBody: theme.textTheme.bodyMedium!.copyWith(fontSize: 10),
+                      tableBorder: TableBorder.all(color: const Color(0xFF3C3836)),
+                      tableCellsPadding: const EdgeInsets.all(4),
+                    ),
+                  ),
+                ),
+                // Inline tile preview cards
+                if (msg.previewImages.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final img in msg.previewImages)
+                        _buildTilePreviewCard(theme, img, msg.previewImages.length),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Status message — minimal centered chip.
+  Widget _buildStatusChip(ThemeData theme, String content) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: theme.dividerColor.withValues(alpha: 0.2),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            content,
+            style: theme.textTheme.bodySmall!.copyWith(
+              fontSize: 9,
+              fontStyle: FontStyle.italic,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Typing indicator — three animated dots.
+  Widget _buildTypingIndicator(ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6, right: 8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF242220),
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(4),
+            topRight: Radius.circular(12),
+            bottomLeft: Radius.circular(12),
+            bottomRight: Radius.circular(12),
+          ),
+          border: Border(
+            left: BorderSide(
+              color: theme.colorScheme.primary.withValues(alpha: 0.4),
+              width: 2,
+            ),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 12, height: 12,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.5,
+                color: theme.colorScheme.primary.withValues(alpha: 0.6),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Thinking...',
+              style: theme.textTheme.bodySmall!.copyWith(
+                fontSize: 10,
+                color: theme.colorScheme.primary.withValues(alpha: 0.7),
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1932,6 +2243,53 @@ class _ActionButton extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Hoverable message bubble — shows a copy button on hover.
+class _HoverableBubble extends StatefulWidget {
+  const _HoverableBubble({required this.child, required this.onCopy});
+  final Widget child;
+  final VoidCallback onCopy;
+
+  @override
+  State<_HoverableBubble> createState() => _HoverableBubbleState();
+}
+
+class _HoverableBubbleState extends State<_HoverableBubble> {
+  bool _hovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          widget.child,
+          if (_hovering)
+            Positioned(
+              top: 4,
+              right: 4,
+              child: GestureDetector(
+                onTap: widget.onCopy,
+                child: Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF3C3836),
+                    borderRadius: BorderRadius.circular(4),
+                    boxShadow: const [
+                      BoxShadow(color: Color(0x33000000), blurRadius: 4, offset: Offset(0, 1)),
+                    ],
+                  ),
+                  child: const Icon(Icons.copy, size: 10, color: Color(0xFFA8A29E)),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
