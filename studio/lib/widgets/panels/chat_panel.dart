@@ -44,7 +44,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
 
   // Pending generated tile for accept/reject flow
   String? _pendingTileName;
-  String? _pendingPreviewB64;
+
   String? _lastGenerationPrompt;
 
   // Variation system — multiple alternatives shown side by side
@@ -311,22 +311,28 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
       return;
     }
 
-    // Step 6: Get preview
-    final previewB64 = createResp['preview'] as String?;
+    // Step 6: Get preview (fallback to renderTile if createResp lacks one)
+    final previewB64 = await _getPreviewB64(
+      tileName, createResp['preview'] as String?,
+    );
 
     setState(() {
       _pendingTileName = tileName;
-      _pendingPreviewB64 = previewB64;
     });
 
     final validationInfo = createResp['validation'] as Map<String, dynamic>?;
     final isValid = validationInfo?['valid'] as bool? ?? true;
 
+    final previews = <({String name, String base64})>[];
+    if (previewB64 != null) {
+      previews.add((name: tileName, base64: previewB64));
+    }
+
     chat.addAssistantMessage(
       '**Generated: `$tileName`** ($finalSize)\n\n'
       '${isValid ? 'Validation passed.' : 'Validation warnings — check the validation panel.'}\n\n'
-      '*${resp.totalTokens} tokens*\n\n'
-      'Use the buttons below to **accept** or **reject**, or request **variations**.',
+      '*${resp.totalTokens} tokens*',
+      previewImages: previews,
     );
     _scrollToBottom();
   }
@@ -361,18 +367,24 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
       return;
     }
 
-    final previewB64 = resp['preview_b64'] as String?;
+    final previewB64 = await _getPreviewB64(
+      tileName, resp['preview_b64'] as String?,
+    );
 
     setState(() {
       _pendingTileName = tileName;
-      _pendingPreviewB64 = previewB64;
     });
 
     final generated = resp['generated'] == true;
+    final previews = <({String name, String base64})>[];
+    if (previewB64 != null) {
+      previews.add((name: tileName, base64: previewB64));
+    }
+
     chat.addAssistantMessage(
       '**Generated: `$tileName`** ($sizeStr)\n\n'
-      '${generated ? 'Generated on-device with LoRA adapter.' : 'Created.'}\n\n'
-      'Use the buttons below to **accept** or **reject**, or request **variations**.',
+      '${generated ? 'Generated on-device with LoRA adapter.' : 'Created.'}',
+      previewImages: previews,
     );
     _scrollToBottom();
   }
@@ -517,13 +529,15 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
       return;
     }
 
+    final previewB64 = await _getPreviewB64(newName, createResp['preview'] as String?);
     setState(() {
       _pendingTileName = newName;
-      _pendingPreviewB64 = createResp['preview'] as String?;
     });
+    final previews = <({String name, String base64})>[];
+    if (previewB64 != null) previews.add((name: newName, base64: previewB64));
     chat.addAssistantMessage(
-      '**Created tileable version: `$newName`**\n\n'
-      'Accept or reject below.',
+      '**Created tileable version: `$newName`**',
+      previewImages: previews,
     );
     _scrollToBottom();
   }
@@ -619,12 +633,15 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
       return;
     }
 
+    final restylePreview = await _getPreviewB64(newName, createResp['preview'] as String?);
     setState(() {
       _pendingTileName = newName;
-      _pendingPreviewB64 = createResp['preview'] as String?;
     });
+    final restylePreviews = <({String name, String base64})>[];
+    if (restylePreview != null) restylePreviews.add((name: newName, base64: restylePreview));
     chat.addAssistantMessage(
-      '**Restyled: `$newName`**\n\nAccept or reject below.',
+      '**Restyled: `$newName`**',
+      previewImages: restylePreviews,
     );
     _scrollToBottom();
   }
@@ -695,14 +712,204 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
       return;
     }
 
+    final inpaintPreview = await _getPreviewB64(newName, createResp['preview'] as String?);
     setState(() {
       _pendingTileName = newName;
-      _pendingPreviewB64 = createResp['preview'] as String?;
     });
+    final inpaintPreviews = <({String name, String base64})>[];
+    if (inpaintPreview != null) inpaintPreviews.add((name: newName, base64: inpaintPreview));
     chat.addAssistantMessage(
-      '**Inpainted: `$newName`**\n\nAccept or reject below.',
+      '**Inpainted: `$newName`**',
+      previewImages: inpaintPreviews,
     );
     _scrollToBottom();
+  }
+
+  /// Build a tile preview card for inline display in chat messages.
+  Widget _buildTilePreviewCard(
+    ThemeData theme,
+    ({String name, String base64}) img,
+    int totalCount,
+  ) {
+    final isPending = _pendingTileName == img.name;
+    final isReferenced = _referencedTile?.name == img.name;
+    final isSingle = totalCount == 1;
+
+    // Single tile: full card with name, actions, accept/reject.
+    // Multi tile: compact thumbnail — click to preview, tooltip for name.
+    if (!isSingle) {
+      return _buildCompactTileThumb(theme, img, isReferenced);
+    }
+
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 200),
+      decoration: BoxDecoration(
+        color: StudioTheme.recessedBg,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: isPending
+              ? theme.colorScheme.primary.withValues(alpha: 0.5)
+              : isReferenced
+                  ? theme.colorScheme.primary
+                  : theme.dividerColor.withValues(alpha: 0.5),
+          width: isReferenced ? 2 : 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Tile image — click to preview on canvas
+          _HoverablePreview(
+            onTap: () => _previewTileOnCanvas(img.name),
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: const BoxDecoration(
+                color: Color(0xFF121212),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(5)),
+              ),
+              child: Center(
+                child: Image.memory(
+                  base64Decode(img.base64),
+                  width: 96, height: 96,
+                  filterQuality: FilterQuality.none,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+          ),
+
+          // Name + action icons
+          Padding(
+            padding: const EdgeInsets.fromLTRB(6, 4, 4, 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    img.name,
+                    style: theme.textTheme.bodySmall!.copyWith(fontSize: 9),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                _TinyIconBtn(
+                  icon: Icons.visibility_outlined,
+                  tooltip: 'Preview on canvas',
+                  onTap: () => _previewTileOnCanvas(img.name),
+                ),
+                _TinyIconBtn(
+                  icon: Icons.link,
+                  tooltip: 'Use as reference',
+                  isActive: isReferenced,
+                  onTap: () {
+                    final tiles = ref.read(backendProvider).tiles;
+                    final match = tiles.where((t) => t.name == img.name);
+                    setState(() {
+                      _referencedTile = isReferenced
+                          ? null
+                          : (match.isNotEmpty ? match.first : TileInfo(name: img.name));
+                    });
+                  },
+                ),
+              ],
+            ),
+          ),
+
+          // Accept / Reject — only for pending tiles
+          if (isPending)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(6, 0, 6, 6),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _CompactActionBtn(
+                      icon: Icons.check,
+                      label: 'Add',
+                      color: StudioTheme.success,
+                      onTap: _acceptTile,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: _CompactActionBtn(
+                      icon: Icons.close,
+                      label: 'Reject',
+                      color: StudioTheme.error,
+                      onTap: _rejectTile,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Compact thumbnail for multi-tile previews (tileset loads).
+  Widget _buildCompactTileThumb(
+    ThemeData theme,
+    ({String name, String base64}) img,
+    bool isReferenced,
+  ) {
+    return Tooltip(
+      message: img.name,
+      child: _HoverablePreview(
+        onTap: () => _previewTileOnCanvas(img.name),
+        onSecondaryTap: () {
+          final tiles = ref.read(backendProvider).tiles;
+          final match = tiles.where((t) => t.name == img.name);
+          setState(() {
+            _referencedTile = isReferenced
+                ? null
+                : (match.isNotEmpty ? match.first : TileInfo(name: img.name));
+          });
+        },
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF121212),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(
+              color: isReferenced
+                  ? theme.colorScheme.primary
+                  : theme.dividerColor.withValues(alpha: 0.4),
+              width: isReferenced ? 2 : 1,
+            ),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: Image.memory(
+              base64Decode(img.base64),
+              width: 56, height: 56,
+              filterQuality: FilterQuality.none,
+              fit: BoxFit.contain,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Get a preview base64 for a tile — tries createResp, renderTile, then tile list.
+  Future<String?> _getPreviewB64(String tileName, String? fromCreateResp) async {
+    if (fromCreateResp != null) return fromCreateResp;
+    // Fallback 1: render via backend API
+    final rendered = await ref.read(backendProvider.notifier).renderTile(tileName, scale: 8);
+    if (rendered != null) return rendered;
+    // Fallback 2: check if tile list already has a preview (from refreshTiles)
+    final tiles = ref.read(backendProvider).tiles;
+    final match = tiles.where((t) => t.name == tileName);
+    return match.isNotEmpty ? match.first.previewBase64 : null;
+  }
+
+  /// Load a tile onto the canvas for preview.
+  Future<void> _previewTileOnCanvas(String tileName) async {
+    final result = await ref.read(backendProvider.notifier).getTilePixels(tileName);
+    if (result == null || !mounted) return;
+    ref.read(canvasProvider.notifier).loadTilePixels(
+      result.pixels,
+      result.width,
+      result.height,
+    );
   }
 
   /// Accept the pending tile — record feedback, update style latent.
@@ -723,7 +930,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     }
     setState(() {
       _pendingTileName = null;
-      _pendingPreviewB64 = null;
+
     });
     _scrollToBottom();
   }
@@ -783,7 +990,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     }
     setState(() {
       _pendingTileName = null;
-      _pendingPreviewB64 = null;
+
     });
     _scrollToBottom();
   }
@@ -801,7 +1008,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     }
     setState(() {
       _pendingTileName = null;
-      _pendingPreviewB64 = null;
+
     });
 
     if (_lastGenerationPrompt != null) {
@@ -826,7 +1033,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
 
     setState(() {
       _pendingTileName = null;
-      _pendingPreviewB64 = null;
+
       _variations = [];
       _selectedVariation = -1;
       _isGeneratingVariations = true;
@@ -1077,10 +1284,14 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
 
     // Send to Claude as expert chat if API key is configured
     if (claude.hasApiKey && backend.isConnected) {
-      // Build system prompt with knowledge base + session context
+      // Build system prompt with knowledge base + session context.
+      // Pass tile type (not chat) so the palette symbol table is included —
+      // if the LLM decides to return a grid, it needs valid symbols.
+      final canvasSize = ref.read(canvasProvider).canvasSize;
+      final chatSize = '${canvasSize.width}x${canvasSize.height}';
       final ctx = await ref.read(backendProvider.notifier).getGenerationContext(
         prompt: text,
-        type: 'chat',
+        size: chatSize,
       );
       final backendCtx = ctx['system_prompt'] as String? ?? '';
       final style = ref.read(styleProvider);
@@ -1184,26 +1395,33 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
             );
 
             if (createResp.containsKey('error')) {
-              // Creation failed — show the text response, not raw grid
+              // Creation failed — show error + the raw grid so the user
+              // can see what the LLM produced and diagnose the issue.
+              final truncGrid = grid.length > 400 ? '${grid.substring(0, 400)}...' : grid;
               chat.addAssistantMessage(
                 'Tile creation failed: ${createResp['error']}\n\n'
+                '```\n$truncGrid\n```\n\n'
                 '*${resp.totalTokens} tokens*',
               );
             } else {
-              // Success — show accept/reject flow (preview lives in the
-              // pending bar only, no duplicate in the message bubble)
-              final previewB64 = createResp['preview'] as String?;
+              final previewB64 = await _getPreviewB64(
+                tileName, createResp['preview'] as String?,
+              );
 
               setState(() {
                 _pendingTileName = tileName;
-                _pendingPreviewB64 = previewB64;
                 _lastGenerationPrompt = text;
               });
 
+              final previews = <({String name, String base64})>[];
+              if (previewB64 != null) {
+                previews.add((name: tileName, base64: previewB64));
+              }
+
               chat.addAssistantMessage(
                 '**Generated: `$tileName`** ($gridSize)\n\n'
-                '*${resp.totalTokens} tokens*\n\n'
-                'Use the buttons below to **accept** or **reject**, or request **variations**.',
+                '*${resp.totalTokens} tokens*',
+                previewImages: previews,
               );
             }
           } else {
@@ -1299,7 +1517,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
                     ref.read(chatProvider.notifier).clear();
                     setState(() {
                       _pendingTileName = null;
-                      _pendingPreviewB64 = null;
+                
                       _lastGenerationPrompt = null;
                     });
                   },
@@ -1349,46 +1567,15 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
                           ),
                         ),
                       ),
-                      // Inline tile previews
+                      // Inline tile preview cards
                       if (msg.previewImages.isNotEmpty) ...[
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 8),
                         Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
+                          spacing: 8,
+                          runSpacing: 8,
                           children: [
                             for (final img in msg.previewImages)
-                              GestureDetector(
-                                onTap: () {
-                                  // Click-to-reference: set this tile as context for next message
-                                  final tiles = ref.read(backendProvider).tiles;
-                                  final match = tiles.where((t) => t.name == img.name);
-                                  setState(() {
-                                    _referencedTile = match.isNotEmpty ? match.first : TileInfo(name: img.name);
-                                  });
-                                  _focusNode.requestFocus();
-                                },
-                                child: Tooltip(
-                                  message: '${img.name} — click to reference',
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(4),
-                                      border: _referencedTile?.name == img.name
-                                          ? Border.all(color: theme.colorScheme.primary, width: 2)
-                                          : null,
-                                    ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(3),
-                                      child: Image.memory(
-                                        base64Decode(img.base64),
-                                        width: msg.previewImages.length > 1 ? 56 : 96,
-                                        height: msg.previewImages.length > 1 ? 56 : 96,
-                                        filterQuality: FilterQuality.none,
-                                        fit: BoxFit.contain,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
+                              _buildTilePreviewCard(theme, img, msg.previewImages.length),
                           ],
                         ),
                       ],
@@ -1517,67 +1704,36 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
               ),
             ),
 
-          // Pending tile accept/reject/variation bar (single tile)
+          // Pending tile variation actions (compact, no duplicate preview)
           if (_pendingTileName != null && _variations.isEmpty)
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               decoration: const BoxDecoration(
                 border: Border(top: StudioTheme.panelBorder),
                 color: StudioTheme.recessedBg,
               ),
-              child: Column(
+              child: Row(
                 children: [
-                  // Preview
-                  if (_pendingPreviewB64 != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: Image.memory(
-                          base64Decode(_pendingPreviewB64!),
-                          width: 120, height: 120,
-                          filterQuality: FilterQuality.none,
-                          fit: BoxFit.contain,
-                        ),
-                      ),
-                    ),
+                  Icon(Icons.auto_awesome, size: 12, color: theme.colorScheme.primary),
+                  const SizedBox(width: 6),
                   Text(
                     _pendingTileName!,
-                    style: theme.textTheme.bodySmall!.copyWith(fontSize: 10),
+                    style: theme.textTheme.bodySmall!.copyWith(
+                      fontSize: 10,
+                      color: theme.colorScheme.primary,
+                    ),
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _ActionButton(
-                          label: 'Accept',
-                          color: StudioTheme.success,
-                          onTap: _acceptTile,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: _ActionButton(
-                          label: 'Reject',
-                          color: StudioTheme.error,
-                          onTap: _rejectTile,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: _ActionButton(
-                          label: 'Vary',
-                          color: theme.colorScheme.primary,
-                          onTap: isGenerating ? null : _generateVariation,
-                        ),
-                      ),
-                    ],
+                  const Spacer(),
+                  _SmallActionBtn(
+                    icon: Icons.shuffle,
+                    label: 'Vary',
+                    onTap: isGenerating ? null : _generateVariation,
                   ),
-                  const SizedBox(height: 4),
-                  _ActionButton(
-                    label: 'Variations (3)',
-                    color: theme.colorScheme.secondary,
+                  const SizedBox(width: 4),
+                  _SmallActionBtn(
+                    icon: Icons.grid_view,
+                    label: '3x',
                     onTap: isGenerating ? null : _generateVariations,
                   ),
                 ],
@@ -1775,6 +1931,177 @@ class _ActionButton extends StatelessWidget {
               color: onTap != null ? color : color.withValues(alpha: 0.3),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Hoverable wrapper — shows a subtle "eye" overlay on hover to indicate
+/// the tile image is clickable and will preview on canvas.
+class _HoverablePreview extends StatefulWidget {
+  const _HoverablePreview({
+    required this.child,
+    required this.onTap,
+    this.onSecondaryTap,
+  });
+  final Widget child;
+  final VoidCallback onTap;
+  final VoidCallback? onSecondaryTap;
+
+  @override
+  State<_HoverablePreview> createState() => _HoverablePreviewState();
+}
+
+class _HoverablePreviewState extends State<_HoverablePreview> {
+  bool _hovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: widget.onTap,
+      onSecondaryTap: widget.onSecondaryTap,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hovering = true),
+        onExit: (_) => setState(() => _hovering = false),
+        child: Stack(
+          children: [
+            widget.child,
+            if (_hovering)
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.visibility_outlined,
+                      size: 18,
+                      color: Color(0x66FFFFFF),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Tiny icon button for tile preview card actions (12px icon).
+class _TinyIconBtn extends StatelessWidget {
+  const _TinyIconBtn({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+    this.isActive = false,
+  });
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  final bool isActive;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(3),
+        child: Padding(
+          padding: const EdgeInsets.all(3),
+          child: Icon(
+            icon,
+            size: 12,
+            color: isActive ? theme.colorScheme.primary : theme.textTheme.bodySmall?.color,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Compact action button with icon + label for tile cards.
+class _CompactActionBtn extends StatelessWidget {
+  const _CompactActionBtn({
+    required this.icon,
+    required this.label,
+    required this.color,
+    this.onTap,
+  });
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = onTap != null;
+    final c = active ? color : color.withValues(alpha: 0.3);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(4),
+          color: c.withValues(alpha: 0.1),
+          border: Border.all(color: c.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 10, color: c),
+            const SizedBox(width: 3),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
+                color: c,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Small action button with icon + label for the pending bar.
+class _SmallActionBtn extends StatelessWidget {
+  const _SmallActionBtn({
+    required this.icon,
+    required this.label,
+    this.onTap,
+  });
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final c = onTap != null
+        ? theme.textTheme.bodySmall?.color ?? Colors.grey
+        : (theme.textTheme.bodySmall?.color ?? Colors.grey).withValues(alpha: 0.3);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 11, color: c),
+            const SizedBox(width: 3),
+            Text(label, style: TextStyle(fontSize: 9, color: c)),
+          ],
         ),
       ),
     );
