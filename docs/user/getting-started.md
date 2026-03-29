@@ -1,101 +1,77 @@
-# Getting Started with PIXL Studio
+# Getting Started
+
+Get PIXL running and create your first tileset in under five minutes.
 
 ## Install
 
-### Option 1: Homebrew (recommended)
+### PIXL Studio (recommended)
+
+Download the desktop app for Mac, Windows, or Linux from [GitHub Releases](https://github.com/SimplyLiz/PIXL/releases/latest). The Rust engine is bundled inside — no separate install needed.
+
+On macOS with Homebrew:
 
 ```bash
 brew install SimplyLiz/pixl/pixl-studio
 ```
 
-### Option 2: Download
+### CLI only
 
-Download the latest `.dmg` from [GitHub Releases](https://github.com/SimplyLiz/PIXL/releases) and drag PIXL Studio to your Applications folder.
-
-### Option 3: Build from source
-
-Prerequisites: macOS, [Flutter](https://flutter.dev), [Rust toolchain](https://rustup.rs)
+Download prebuilt binaries from [GitHub Releases](https://github.com/SimplyLiz/PIXL/releases/latest) (macOS, Linux, Windows), or install via Cargo:
 
 ```bash
-# 1. Build the PIXL engine
-cd tool && cargo build --release
-
-# 2. Run Studio
-cd studio && flutter pub get && flutter run -d macos
+cargo install pixl
 ```
 
-Studio automatically starts the engine on launch. If it can't find the binary, you'll see "Engine not connected" in the status bar — make sure `tool/target/release/pixl` exists.
-
-## CLI
-
-You also need the `pixl` CLI for rendering, exporting, and MCP server. Install it separately:
+Or build from source:
 
 ```bash
-# macOS (Apple Silicon)
-curl -fsSL https://github.com/SimplyLiz/PIXL/releases/latest/download/pixl-v1.0.0-aarch64-apple-darwin.tar.gz | tar xz
-sudo mv pixl /usr/local/bin/
+git clone https://github.com/SimplyLiz/PIXL.git
+cd PIXL/tool
+cargo build --release
 ```
 
-Or build from source: `cd tool && cargo build --release`
+The binary is at `tool/target/release/pixl`.
 
-## Prerequisites
+## Create your first tileset
 
-- **macOS** (Apple Silicon recommended for local AI)
-- An LLM API key (Anthropic, OpenAI, Gemini) OR Ollama running locally
+### 1. Start from a template
 
-## First Launch
-
-On first launch, you'll see the **Auto-Learn opt-in dialog**. This asks whether accepted tiles should be saved as training data for the local LoRA model. All data stays on your machine. You can change this anytime in Settings > Training.
-
-## Opening a Project
-
-1. Click **Open PAX** in the top bar to load a `.pax` file
-2. Click **New** to open the **New from Template** dialog:
-   - Pick a theme (Dark Fantasy, Light Fantasy, Sci-Fi, Nature, Retro 8-bit, Game Boy)
-   - Each theme comes with 6 starter tiles: wall, floor, floor variant, corner, door (N/S), and decoration
-   - Or choose **Blank Canvas** for an empty project
-3. Recent files appear in the clock icon menu next to Open PAX
-
-The engine loads the file automatically and populates tiles, palettes, and themes.
-
-## Layout
-
-```
-┌──────────────────────────────────────────────────┐
-│ Top Bar: mode toggle, file actions, canvas controls │
-├────────┬────┬──────────────────┬──┬───────────────┤
-│  Chat  │Tool│   Canvas         │Tab│  Right Panel  │
-│ Panel  │Strip  (pixel/tilemap) │Bar│  (4 tabs)     │
-│        │    │   Tile Picker    │  │               │
-├────────┴────┴──────────────────┴──┴───────────────┤
-│ Status Bar                                        │
-└───────────────────────────────────────────────────┘
+```bash
+pixl new dark_fantasy -o my_tileset.pax
 ```
 
-- **Chat Panel** (left): AI expert chat, tile generation, accept/reject flow
-- **Tool Strip** (thin vertical): drawing tools, mode-aware
-- **Canvas** (center): pixel editor or tilemap painter
-- **Tile Picker** (below canvas): session tiles as selectable thumbnails
-- **Right Panel** (tabbed): Palette, Style, Generate, Tiles
+This creates a `.pax` file with a dark fantasy palette, theme constraints, and a few starter stamps. Available themes: `dark_fantasy`, `light_fantasy`, `sci_fi`, `nature`, `gameboy`, `nes`.
 
-## Editor Modes
+### 2. Validate
 
-Toggle between **Pixel** and **Tilemap** mode using the toggle in the top bar.
+```bash
+pixl validate my_tileset.pax
+```
 
-### Pixel Mode
-Traditional pixel-by-pixel editing with layers, symmetry, and palette.
+### 3. Render a tile
 
-### Tilemap Mode
-Paint tiles on a 2D grid. Select a tile from the picker strip, then stamp it on the map canvas. Useful after generating a tileset.
+```bash
+pixl render my_tileset.pax --tile wall_solid --scale 8 --out wall.png
+```
 
-## Saving
+### 4. Generate a map
 
-- **Cmd+S**: Quick-save to the last opened .pax file
-- **Export menu**: PNG (4x/8x), PAX source, atlas, game engine formats
+```bash
+pixl narrate my_tileset.pax --width 12 --height 8 --out map.png
+```
 
-## Next Steps
+## Using with Claude
 
-- [Drawing Tools](drawing-tools.md) — all tools and shortcuts
-- [AI Features](ai-features.md) — generation, style transfer, auto-tag
-- [Tilemap Mode](tilemap-mode.md) — painting maps with tiles
-- [Settings & Training](settings.md) — LLM providers, local inference, training
+PIXL includes an MCP server that connects directly to Claude Code or any MCP-compatible AI assistant:
+
+```bash
+pixl mcp --file my_tileset.pax
+```
+
+Then ask Claude to create tiles, critique your art, generate sprites, or build maps — all through natural conversation.
+
+## Next steps
+
+- [PAX Format](./PAX-Format) — understand the file format
+- [Sprite Generation](./Sprite-Generation) — generate art from descriptions
+- [CLI Reference](./CLI-Reference) — all available commands

@@ -1,0 +1,55 @@
+# Style Learning
+
+PIXL builds a profile of your art style and uses it to keep new tiles consistent with your existing work.
+
+## Style fingerprint
+
+When you run `pixl_learn_style`, PIXL analyzes your tiles and extracts 8 properties:
+
+| Property | What it measures |
+|----------|-----------------|
+| **Light direction** | Where highlights fall (top-left vs bottom-right) |
+| **Pixel density** | How filled your tiles are (sparse vs dense) |
+| **Shadow ratio** | How much of the tile is in shadow |
+| **Palette breadth** | How many distinct colors per tile |
+| **Run length** | How uniform your color regions are |
+| **Hue bias** | Overall color temperature (warm vs cool) |
+| **Luminance** | Average brightness |
+| **Entropy** | How varied the color distribution is |
+
+These 8 numbers are your style fingerprint. Every new tile gets scored against it.
+
+## How scoring works
+
+When you generate a new tile, PIXL compares its fingerprint to your session fingerprint. A score of 0.8 means "close match." A score of 0.3 means "very different style."
+
+The threshold adapts: if your last 5 accepted tiles averaged 0.75, PIXL sets the minimum at 0.6 (80% of your average). Tiles below that get flagged before you see them.
+
+## Feedback loop
+
+Every accept/reject decision teaches PIXL:
+
+- **Accept** a tile → its style features get averaged into your preferred profile
+- **Reject** as "too sparse" → future tiles aim for higher density
+- **Reject** as "bad edges" → future tiles get stricter edge validation
+
+After a few rounds, the AI knows your preferences without you explaining them.
+
+## Few-shot examples
+
+The last 3 accepted tiles are stored as reference examples. When generating new tiles, PIXL includes these as rendered images in the prompt — the AI sees what your art actually looks like, not just a text description of style.
+
+## Using it
+
+```bash
+# Extract style from existing tiles
+pixl style tileset.pax
+
+# Output:
+# Style fingerprint (from 12 tiles):
+#   Light: top-left (0.35)
+#   Density: dense (87%)
+#   Shadows: moderate (15%)
+#   Colors per tile: 3.2
+#   Hue bias: 240° (cool/blue)
+```
