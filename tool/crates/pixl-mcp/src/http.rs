@@ -34,6 +34,7 @@ pub fn create_router(state: McpState, inference_config: Option<InferenceConfig>)
         .route("/api/palette", post(get_palette))
         .route("/api/tile/create", post(create_tile))
         .route("/api/tile/render", post(render_tile))
+        .route("/api/tile/export-png", post(export_png))
         .route("/api/tile/delete", post(delete_tile))
         .route("/api/tile/edge-check", post(check_edge_pair))
         .route("/api/tiles", get(list_tiles))
@@ -97,6 +98,10 @@ async fn create_tile(State(state): State<SharedState>, Json(args): Json<Value>) 
 
 async fn render_tile(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
     Json(handlers::handle_tool(&state.mcp, "pixl_render_tile", &args))
+}
+
+async fn export_png(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {
+    Json(handlers::handle_tool(&state.mcp, "pixl_export_png", &args))
 }
 
 async fn delete_tile(State(state): State<SharedState>, Json(args): Json<Value>) -> Json<Value> {

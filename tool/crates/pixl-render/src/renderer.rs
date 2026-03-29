@@ -1,5 +1,48 @@
-use image::{ImageBuffer, Rgba, RgbaImage};
+use image::{imageops::FilterType, DynamicImage, ImageBuffer, Rgba, RgbaImage};
 use pixl_core::types::{Palette, Rgba as PaxRgba};
+
+/// Scaling algorithm for export.
+///
+/// Each algorithm has different trade-offs:
+/// - **Nearest**: pixel-perfect, preserves hard edges. Best for integer
+///   upscaling of pixel art (e.g. 16x16 → 256x256 at 16x).
+/// - **Bilinear** (Triangle): smooth interpolation. Good for non-integer
+///   scales or when a softer look is desired.
+/// - **CatmullRom**: cubic interpolation with slight sharpening. Good
+///   balance between smoothness and detail for downscaling.
+/// - **Lanczos3**: highest-quality resampling using a windowed sinc.
+///   Best for downscaling or large scale changes where color averaging
+///   matters. Used internally by the pixelize pipeline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScaleFilter {
+    Nearest,
+    Bilinear,
+    CatmullRom,
+    Lanczos3,
+}
+
+impl ScaleFilter {
+    /// Parse a filter name from a string (case-insensitive).
+    /// Returns `Nearest` for unrecognized values.
+    pub fn from_str(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "nearest" => Self::Nearest,
+            "bilinear" | "triangle" => Self::Bilinear,
+            "catmull_rom" | "catmullrom" | "cubic" => Self::CatmullRom,
+            "lanczos3" | "lanczos" => Self::Lanczos3,
+            _ => Self::Nearest,
+        }
+    }
+
+    fn to_filter_type(self) -> FilterType {
+        match self {
+            Self::Nearest => FilterType::Nearest,
+            Self::Bilinear => FilterType::Triangle,
+            Self::CatmullRom => FilterType::CatmullRom,
+            Self::Lanczos3 => FilterType::Lanczos3,
+        }
+    }
+}
 
 /// Render a resolved tile grid to an image at the given scale.
 /// Nearest-neighbor upscaling only — no bilinear, no anti-aliasing.
@@ -28,6 +71,36 @@ pub fn render_grid(grid: &[Vec<char>], palette: &Palette, scale: u32) -> RgbaIma
     }
 
     img
+}
+
+/// Render a tile grid to a specific output resolution using the chosen filter.
+///
+/// Internally renders at 1:1 first, then scales to the target size using the
+/// selected algorithm. For integer upscaling with `Nearest`, this produces
+/// identical results to `render_grid` but supports arbitrary target sizes.
+pub fn render_grid_scaled(
+    grid: &[Vec<char>],
+    palette: &Palette,
+    target_width: u32,
+    target_height: u32,
+    filter: ScaleFilter,
+) -> RgbaImage {
+    // Render at native 1:1 resolution first.
+    let native = render_grid(grid, palette, 1);
+    if native.width() == 0 || native.height() == 0 {
+        return native;
+    }
+
+    // If target matches native, no scaling needed.
+    if native.width() == target_width && native.height() == target_height {
+        return native;
+    }
+
+    // Scale to target using the selected filter.
+    let dynamic = DynamicImage::ImageRgba8(native);
+    dynamic
+        .resize_exact(target_width, target_height, filter.to_filter_type())
+        .to_rgba8()
 }
 
 /// Render a grid with palette swap applied.

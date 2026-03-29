@@ -16,6 +16,7 @@ pub fn handle_tool(state: &Mutex<McpState>, tool_name: &str, args: &Value) -> Va
         "pixl_create_tile" => handle_create_tile(state, args),
         "pixl_validate" => handle_validate(state, args),
         "pixl_render_tile" => handle_render_tile(state, args),
+        "pixl_export_png" => handle_export_png(state, args),
         "pixl_check_edge_pair" => handle_check_edge_pair(state, args),
         "pixl_list_tiles" => handle_list_tiles(state),
         "pixl_get_file" => handle_get_file(state, args),
@@ -435,6 +436,73 @@ fn handle_render_tile(state: &Mutex<McpState>, args: &Value) -> Value {
         "name": name,
         "size": size_str,
         "scale": scale,
+        "preview_b64": b64,
+    })
+}
+
+/// Export a tile as a PNG at a specific resolution with a configurable
+/// scaling algorithm.
+///
+/// Args:
+///   - `name` (string): tile name
+///   - `width` (int): target output width in pixels
+///   - `height` (int): target output height in pixels
+///   - `filter` (string, optional): scaling algorithm — one of:
+///     `"nearest"` (default), `"bilinear"`, `"catmull_rom"`, `"lanczos3"`
+///
+/// Returns:
+///   - `preview_b64`: base64-encoded PNG at the requested resolution
+///   - `size`: native tile size (e.g. "16x16")
+///   - `output_size`: actual output size (e.g. "256x256")
+///   - `filter`: the algorithm used
+fn handle_export_png(state: &Mutex<McpState>, args: &Value) -> Value {
+    let st = state.lock().unwrap();
+    let name = args["name"].as_str().unwrap_or("");
+    let target_w = args.get("width").and_then(|v| v.as_u64()).unwrap_or(256) as u32;
+    let target_h = args.get("height").and_then(|v| v.as_u64()).unwrap_or(256) as u32;
+    let filter_str = args.get("filter").and_then(|v| v.as_str()).unwrap_or("nearest");
+    let filter = renderer::ScaleFilter::from_str(filter_str);
+
+    let tile_raw = match st.file.tile.get(name) {
+        Some(t) => t,
+        None => return json!({"error": format!("tile '{}' not found", name)}),
+    };
+
+    let palette = match st.palettes.get(&tile_raw.palette) {
+        Some(p) => p,
+        None => return json!({"error": format!("palette '{}' not found", tile_raw.palette)}),
+    };
+
+    let stamps: std::collections::HashMap<String, pixl_core::types::Stamp> = st
+        .file
+        .stamp
+        .iter()
+        .filter_map(|(sname, raw)| {
+            let (sw, sh) = parse_size(&raw.size).ok()?;
+            let grid: Vec<Vec<char>> = raw.grid.lines()
+                .filter(|l| !l.trim().is_empty())
+                .map(|l| l.chars().collect()).collect();
+            Some((sname.clone(), pixl_core::types::Stamp {
+                palette: raw.palette.clone(), width: sw as u32, height: sh as u32, grid,
+            }))
+        })
+        .collect();
+
+    let (parsed, w, h) = match pixl_core::resolve::resolve_tile_grid(
+        name, &st.file.tile, &st.palettes, &stamps,
+    ) {
+        Ok(r) => r,
+        Err(e) => return json!({"error": format!("{}", e)}),
+    };
+
+    let img = renderer::render_grid_scaled(&parsed, palette, target_w, target_h, filter);
+    let b64 = renderer::png_to_base64(&renderer::encode_png(&img));
+
+    json!({
+        "name": name,
+        "size": format!("{}x{}", w, h),
+        "output_size": format!("{}x{}", img.width(), img.height()),
+        "filter": filter_str,
         "preview_b64": b64,
     })
 }

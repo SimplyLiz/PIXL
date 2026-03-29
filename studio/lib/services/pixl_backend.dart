@@ -179,6 +179,30 @@ class PixlBackend {
     return _post('/api/tile/render', {'name': name, 'scale': scale});
   }
 
+  /// Export a tile as a PNG at a specific resolution with configurable
+  /// scaling algorithm.
+  ///
+  /// [filter] must be one of: `nearest`, `bilinear`, `catmull_rom`, `lanczos3`.
+  /// - **nearest**: pixel-perfect, preserves hard edges (default for pixel art)
+  /// - **bilinear**: smooth interpolation for non-integer scales
+  /// - **catmull_rom**: cubic interpolation, balanced sharpness
+  /// - **lanczos3**: highest-quality resampling, best for downscaling
+  ///
+  /// Returns a map with `preview_b64` (base64 PNG), `output_size`, `filter`.
+  Future<Map<String, dynamic>> exportPng(
+    String name, {
+    required int width,
+    required int height,
+    String filter = 'nearest',
+  }) async {
+    return _post('/api/tile/export-png', {
+      'name': name,
+      'width': width,
+      'height': height,
+      'filter': filter,
+    });
+  }
+
   /// Delete a tile.
   Future<Map<String, dynamic>> deleteTile(String name) async {
     return _post('/api/tile/delete', {'name': name});
