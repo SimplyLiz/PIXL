@@ -175,7 +175,7 @@ pub fn pack_atlas(
 
     let meta = AtlasMeta {
         app: "pixl".to_string(),
-        version: "0.1.0".to_string(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
         image: output_name.to_string(),
         format: "RGBA8888".to_string(),
         size: Size {

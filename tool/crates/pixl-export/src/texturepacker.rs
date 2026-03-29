@@ -36,7 +36,7 @@ pub fn generate_with_tags(
         frames,
         meta: AtlasMeta {
             app: "pixl".to_string(),
-            version: "0.1.0".to_string(),
+            version: env!("CARGO_PKG_VERSION").to_string(),
             image: image_name.to_string(),
             format: "RGBA8888".to_string(),
             frame_tags,

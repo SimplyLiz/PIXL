@@ -44,7 +44,7 @@ impl PixlProject {
         PixlProject {
             project: ProjectMeta {
                 name: name.to_string(),
-                version: "0.1.0".to_string(),
+                version: env!("CARGO_PKG_VERSION").to_string(),
                 created: chrono_now(),
                 theme: theme.map(String::from),
             },

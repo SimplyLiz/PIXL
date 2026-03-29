@@ -1,7 +1,7 @@
 name: pixl_studio
 description: "AI-native pixel art editor for the PIXL toolchain"
 publish_to: 'none'
-version: 1.0.0+1
+version: 2.0.0+1
 
 environment:
   sdk: ^3.8.1

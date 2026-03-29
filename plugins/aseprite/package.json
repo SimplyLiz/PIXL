@@ -2,7 +2,7 @@
   "name": "pixl-aseprite",
   "displayName": "PIXL",
   "description": "Bridge between Aseprite and the PIXL pixel-art engine — import/export PAX tiles, critique sprites, pack atlases, and convert images to true pixel art.",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "author": "SimplyLiz",
   "license": "SEE LICENSE IN LICENSE",
   "contributes": {

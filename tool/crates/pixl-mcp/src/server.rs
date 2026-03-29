@@ -52,7 +52,7 @@ impl ServerHandler for PixlServer {
     fn get_info(&self) -> ServerInfo {
         let mut info = ServerInfo::default();
         info.server_info.name = "pixl".to_string();
-        info.server_info.version = "0.1.0".to_string();
+        info.server_info.version = env!("CARGO_PKG_VERSION").to_string();
         info.capabilities.tools = Some(ToolsCapability {
             list_changed: Some(false),
         });
