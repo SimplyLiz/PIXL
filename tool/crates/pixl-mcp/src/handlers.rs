@@ -404,22 +404,30 @@ fn handle_render_tile(state: &Mutex<McpState>, args: &Value) -> Value {
         None => return json!({"error": format!("palette '{}' not found", tile_raw.palette)}),
     };
 
-    let size_str = tile_raw.size.as_deref().unwrap_or("16x16");
-    let (w, h) = match parse_size(size_str) {
-        Ok(s) => s,
-        Err(e) => return json!({"error": e}),
-    };
+    // Resolve grid via resolve_tile_grid so template/compose/symmetry tiles work.
+    let stamps: std::collections::HashMap<String, pixl_core::types::Stamp> = st
+        .file
+        .stamp
+        .iter()
+        .filter_map(|(sname, raw)| {
+            let (sw, sh) = parse_size(&raw.size).ok()?;
+            let grid: Vec<Vec<char>> = raw.grid.lines()
+                .filter(|l| !l.trim().is_empty())
+                .map(|l| l.chars().collect()).collect();
+            Some((sname.clone(), pixl_core::types::Stamp {
+                palette: raw.palette.clone(), width: sw as u32, height: sh as u32, grid,
+            }))
+        })
+        .collect();
 
-    let grid_str = match &tile_raw.grid {
-        Some(g) => g,
-        None => return json!({"error": "tile has no grid data"}),
-    };
-
-    let parsed = match grid::parse_grid(grid_str, w, h, palette) {
-        Ok(g) => g,
+    let (parsed, w, h) = match pixl_core::resolve::resolve_tile_grid(
+        name, &st.file.tile, &st.palettes, &stamps,
+    ) {
+        Ok(r) => r,
         Err(e) => return json!({"error": format!("{}", e)}),
     };
 
+    let size_str = format!("{}x{}", w, h);
     let img = renderer::render_grid(&parsed, palette, scale);
     let b64 = renderer::png_to_base64(&renderer::encode_png(&img));
 

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/pixel_canvas.dart';
 import '../../providers/backend_provider.dart';
+import '../../providers/canvas_provider.dart';
 import '../../providers/tilemap_provider.dart';
 import '../../theme/studio_theme.dart';
 
@@ -57,6 +58,16 @@ class _VariantStripState extends ConsumerState<VariantStrip> {
       }
     }
     if (didChange && mounted) setState(() {});
+  }
+
+  Future<void> _loadTileToCanvas(String tileName) async {
+    final result = await ref.read(backendProvider.notifier).getTilePixels(tileName);
+    if (result == null || !mounted) return;
+    ref.read(canvasProvider.notifier).loadTilePixels(
+      result.pixels,
+      result.width,
+      result.height,
+    );
   }
 
   @override
@@ -114,6 +125,7 @@ class _VariantStripState extends ConsumerState<VariantStrip> {
                           ref.read(tilemapProvider.notifier).setSelectedTile(tile.name);
                         } else {
                           setState(() => _selectedTile = tile.name);
+                          _loadTileToCanvas(tile.name);
                         }
                       },
                       borderRadius: BorderRadius.circular(4),

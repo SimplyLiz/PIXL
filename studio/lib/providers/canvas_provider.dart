@@ -73,6 +73,21 @@ class CanvasNotifier extends StateNotifier<CanvasState> {
   bool get canUndo => _undoStack.isNotEmpty;
   bool get canRedo => _redoStack.isNotEmpty;
 
+  /// Expose undo/redo stacks for tab save/restore.
+  List<CanvasSnapshot> get undoStack => List.unmodifiable(_undoStack);
+  List<CanvasSnapshot> get redoStack => List.unmodifiable(_redoStack);
+
+  /// Restore full document state (used by tab manager on tab switch).
+  void restoreDocument(CanvasState newState, List<CanvasSnapshot> undo, List<CanvasSnapshot> redo) {
+    _undoStack
+      ..clear()
+      ..addAll(undo);
+    _redoStack
+      ..clear()
+      ..addAll(redo);
+    state = newState;
+  }
+
   // -- Drawing --
 
   void _setPixelWithSymmetry(int x, int y, Color? color) {
@@ -497,6 +512,35 @@ class CanvasNotifier extends StateNotifier<CanvasState> {
         final color = data[y * pw + x];
         if (color != null) {
           layer.pixels[ty * w + tx] = color;
+        }
+      }
+    }
+    state = state.copyWith(layers: List.from(state.layers));
+  }
+
+  /// Load tile pixel data onto the active layer.
+  ///
+  /// Auto-resizes the canvas if the tile dimensions match a known [CanvasSize].
+  /// Pushes a single undo snapshot.
+  void loadTilePixels(List<Color?> pixels, int tileW, int tileH) {
+    // Auto-resize canvas if tile matches a known size.
+    final matchedSize = CanvasSize.fromDimensions(tileW, tileH);
+    if (matchedSize != null && matchedSize != state.canvasSize) {
+      setCanvasSize(matchedSize);
+    }
+
+    _pushSnapshot();
+    final w = state.width;
+    final h = state.height;
+    final layer = state.activeLayer;
+
+    // Clear active layer, then write tile pixels.
+    layer.pixels.fillRange(0, layer.pixels.length, null);
+    for (var y = 0; y < tileH && y < h; y++) {
+      for (var x = 0; x < tileW && x < w; x++) {
+        final color = pixels[y * tileW + x];
+        if (color != null) {
+          layer.pixels[y * w + x] = color;
         }
       }
     }

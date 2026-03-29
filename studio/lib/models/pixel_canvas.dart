@@ -15,6 +15,14 @@ enum CanvasSize {
   final int height;
 
   String get label => '$width×$height';
+
+  /// Find a CanvasSize matching the given dimensions, or null.
+  static CanvasSize? fromDimensions(int width, int height) {
+    for (final s in values) {
+      if (s.width == width && s.height == height) return s;
+    }
+    return null;
+  }
 }
 
 /// Drawing tools available in the editor.
