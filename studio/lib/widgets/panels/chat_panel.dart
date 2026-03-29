@@ -8,6 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/backend_provider.dart';
 import '../../providers/canvas_provider.dart';
 import '../../providers/chat_provider.dart';
+import '../../models/palette.dart';
+import '../../providers/palette_provider.dart';
 import '../../providers/claude_provider.dart';
 import '../../providers/style_provider.dart';
 import '../../services/llm_provider.dart';
@@ -50,6 +52,9 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
   int _selectedVariation = -1;
   bool _isGeneratingVariations = false;
 
+  // Click-to-reference: selected tile for next message context
+  TileInfo? _referencedTile;
+
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
@@ -66,6 +71,10 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
 
+    // Capture and clear referenced tile before sending.
+    final refTile = _referencedTile;
+    setState(() => _referencedTile = null);
+
     // Track input history
     _inputHistory.add(text);
     _historyIndex = -1;
@@ -79,9 +88,9 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     if (_isAiCommand(text)) {
       await _handleAiCommand(text);
     } else if (_isGenerationRequest(text)) {
-      await _handleGeneration(text);
+      await _handleGeneration(text, refTile: refTile);
     } else {
-      await _handleChat(text);
+      await _handleChat(text, refTile: refTile);
     }
     _scrollToBottom();
   }
@@ -97,9 +106,52 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
         lower.contains('draw me');
   }
 
+  /// Ensure the engine has the active palette registered and return its name.
+  ///
+  /// The engine's palette key (e.g. 'dungeon') differs from both the theme ID
+  /// ('dark_fantasy') and the display name ('Dark Fantasy'). If no PAX file is
+  /// loaded yet, bootstraps via /api/new → /api/load with the full template.
+  Future<String?> _ensurePalette() async {
+    final palette = ref.read(paletteProvider);
+    final enginePalette = palette.enginePalette ?? 'dungeon';
+    final engineId = palette.engineId ?? 'dark_fantasy';
+    final backend = ref.read(backendProvider.notifier);
+
+    // Check if the palette already exists in the engine.
+    // getPalette takes a theme name (e.g. 'dark_fantasy'), not a palette name.
+    final check = await backend.backend.getPalette(engineId);
+    if (!check.containsKey('error')) return enginePalette;
+
+    // Palette missing — bootstrap full template via /api/new → /api/load.
+    final tmpl = await backend.backend.newFromTemplate(engineId);
+    final source = tmpl['source'] as String?;
+    if (source != null && source.isNotEmpty) {
+      final loadResp = await backend.loadSource(source);
+      if (!loadResp.containsKey('error')) {
+        // Sync palette provider from the freshly loaded template.
+        final synced = PixlPalette.fromEngineResponse(loadResp);
+        if (synced != null) {
+          ref.read(paletteProvider.notifier).setPalette(synced);
+          return synced.enginePalette ?? enginePalette;
+        }
+        return enginePalette;
+      }
+      ref.read(chatProvider.notifier).addAssistantMessage(
+        'Failed to load template: ${loadResp['error']}',
+      );
+      return null;
+    }
+
+    // /api/new failed — tell user to load manually.
+    ref.read(chatProvider.notifier).addAssistantMessage(
+      'No palette loaded. Create a **New Project** or **Open a .pax file** from the top bar.',
+    );
+    return null;
+  }
+
   // ── Generation Flow ──────────────────────────────────────
 
-  Future<void> _handleGeneration(String prompt) async {
+  Future<void> _handleGeneration(String prompt, {TileInfo? refTile}) async {
     final chat = ref.read(chatProvider.notifier);
     final backend = ref.read(backendProvider);
     final claude = ref.read(claudeProvider);
@@ -130,7 +182,11 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
 
     // ── Cloud LLM path — client-side generation ──
 
-    // Step 2: Get enriched context from backend
+    // Step 2: Ensure the engine has a palette loaded before anything else.
+    final ensuredPalette = await _ensurePalette();
+    if (ensuredPalette == null) return;
+
+    // Step 3: Get enriched context from backend
     chat.addAssistantMessage('Getting generation context...', isStatus: true);
     _scrollToBottom();
 
@@ -145,8 +201,16 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     }
 
     final backendContext = ctx['system_prompt'] as String? ?? '';
-    final userPrompt = ctx['user_prompt'] as String? ?? prompt;
+    var userPrompt = ctx['user_prompt'] as String? ?? prompt;
     final themeName = ctx['theme'] as String? ?? '';
+
+    // Inject referenced tile context if present.
+    if (refTile != null) {
+      final edges = refTile.edgeClasses?.entries.map((e) => '${e.key}=${e.value}').join(', ') ?? 'unknown';
+      final tags = refTile.tags.isNotEmpty ? refTile.tags.join(', ') : 'none';
+      userPrompt = '[Reference tile: ${refTile.name}, size: ${refTile.size ?? 'unknown'}, '
+          'edges: $edges, tags: $tags]\n\n$userPrompt';
+    }
 
     // Step 3: Build enriched system prompt with knowledge base + style
     final style = ref.read(styleProvider);
@@ -201,24 +265,9 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     // Step 4b: Extract single grid from response
     var grid = extractGrid(content);
 
-    // Validate grid dimensions match expected size
-    if (grid != null) {
-      final gridLines = grid.split('\n').where((l) => l.trim().isNotEmpty).toList();
-      final gridH = gridLines.length;
-      final gridW = gridLines.isNotEmpty ? gridLines.first.length : 0;
-      final expectedW = int.tryParse(sizeStr.split('x').first) ?? 16;
-      final expectedH = int.tryParse(sizeStr.split('x').last) ?? 16;
-
-      if (gridW != expectedW || gridH != expectedH) {
-        // Grid was extracted but wrong size — show diagnostic
-        chat.addAssistantMessage(
-          'Extracted a ${gridW}x$gridH grid but expected $sizeStr.\n\n'
-          '**Grid found:**\n```\n${grid.length > 300 ? '${grid.substring(0, 300)}...' : grid}\n```\n\n'
-          'The model may not support this canvas size. Try a different model or a smaller canvas.',
-        );
-        // Still try to create it — the backend may accept it or give a better error
-      }
-    }
+    // Note: grid dimensions may not match canvas size (small models struggle
+    // with exact size constraints). We accept the actual dimensions rather than
+    // rejecting or retrying — the engine handles arbitrary tile sizes.
 
     if (grid == null) {
       final modelName = claude.model;
@@ -228,27 +277,36 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
           ? '\n\n**Hint:** `$modelName` is a small model that struggles with structured grid output. '
             'Try **qwen3:8b**, **llama3.1:8b**, or a cloud provider (Claude, GPT-4o) for reliable PAX generation.'
           : '';
+      // Show a brief preview of what the model returned (truncated, no raw grid dump)
+      final preview = content.length > 200 ? '${content.substring(0, 200)}...' : content;
       chat.addAssistantMessage(
-        'The model responded but I couldn\'t extract a valid grid.\n\n'
-        '**Response:**\n${content.length > 500 ? '${content.substring(0, 500)}...' : content}\n\n'
+        'Couldn\'t extract a valid grid from the response.\n\n'
+        '> ${preview.replaceAll('\n', '\n> ')}\n\n'
         '*${resp.totalTokens} tokens used*$hint',
       );
       return;
     }
 
     // Step 5: Create tile via backend → validate + render
-    final tileName = generateTileName(prompt);
+    // Use actual grid dimensions — the model may have returned a different size.
+    final finalLines = grid.split('\n').where((l) => l.trim().isNotEmpty).toList();
+    final finalW = finalLines.isNotEmpty ? finalLines.first.length : 0;
+    final finalH = finalLines.length;
+    final finalSize = '${finalW}x$finalH';
+
+    final existingNames = ref.read(backendProvider).tiles.map((t) => t.name).toSet();
+    final tileName = uniqueTileName(generateTileName(prompt), existingNames);
+    final palette = ctx['palette'] as String? ?? ensuredPalette;
     final createResp = await ref.read(backendProvider.notifier).createTile(
       name: tileName,
-      palette: ctx['palette'] as String? ?? 'default',
-      size: sizeStr,
+      palette: palette,
+      size: finalSize,
       grid: grid,
     );
 
     if (createResp.containsKey('error')) {
       chat.addAssistantMessage(
-        'Tile validation failed: ${createResp['error']}\n\n'
-        '**Generated grid:**\n```\n$grid\n```',
+        'Tile creation failed: ${createResp['error']}',
       );
       return;
     }
@@ -265,7 +323,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     final isValid = validationInfo?['valid'] as bool? ?? true;
 
     chat.addAssistantMessage(
-      '**Generated: `$tileName`** ($sizeStr)\n\n'
+      '**Generated: `$tileName`** ($finalSize)\n\n'
       '${isValid ? 'Validation passed.' : 'Validation warnings — check the validation panel.'}\n\n'
       '*${resp.totalTokens} tokens*\n\n'
       'Use the buttons below to **accept** or **reject**, or request **variations**.',
@@ -445,9 +503,11 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     final newName = '${tileName}_tileable';
     final canvasSize = ref.read(canvasProvider).canvasSize;
     final sizeStr = '${canvasSize.width}x${canvasSize.height}';
+    final pal = ctx['palette'] as String? ?? await _ensurePalette();
+    if (pal == null) return;
     final createResp = await ref.read(backendProvider.notifier).createTile(
       name: newName,
-      palette: ctx['palette'] as String? ?? 'default',
+      palette: pal,
       size: sizeStr,
       grid: grid,
     );
@@ -545,9 +605,11 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     }
 
     final newName = '${tileName}_restyled';
+    final pal2 = ctx['palette'] as String? ?? await _ensurePalette();
+    if (pal2 == null) return;
     final createResp = await ref.read(backendProvider.notifier).createTile(
       name: newName,
-      palette: ctx['palette'] as String? ?? 'default',
+      palette: pal2,
       size: sizeStr,
       grid: grid,
     );
@@ -619,9 +681,11 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     }
 
     final newName = '${tileName}_inpainted';
+    final pal3 = ctx['palette'] as String? ?? await _ensurePalette();
+    if (pal3 == null) return;
     final createResp = await ref.read(backendProvider.notifier).createTile(
       name: newName,
-      palette: ctx['palette'] as String? ?? 'default',
+      palette: pal3,
       size: sizeStr,
       grid: grid,
     );
@@ -834,6 +898,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     );
 
     // Fire 3 generation calls in parallel
+    final existingNames = ref.read(backendProvider).tiles.map((t) => t.name).toSet();
     final futures = List.generate(3, (i) async {
       final resp = await ref.read(claudeProvider.notifier).service.generate(
         systemPrompt: systemPrompt,
@@ -845,11 +910,19 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
       final grid = extractGrid(resp.content);
       if (grid == null) return null;
 
-      final tileName = '${generateTileName(prompt)}_v${i + 1}';
+      // Use actual grid dimensions — the model may return a different size.
+      final gridLines = grid.split('\n').where((l) => l.trim().isNotEmpty).toList();
+      final gridW = gridLines.isNotEmpty ? gridLines.first.length : 0;
+      final gridH = gridLines.length;
+      final gridSize = '${gridW}x$gridH';
+
+      final tileName = uniqueTileName('${generateTileName(prompt)}_v${i + 1}', existingNames);
+      final varPal = ctx['palette'] as String? ?? await _ensurePalette();
+      if (varPal == null) return null;
       final createResp = await ref.read(backendProvider.notifier).createTile(
         name: tileName,
-        palette: ctx['palette'] as String? ?? 'default',
-        size: sizeStr,
+        palette: varPal,
+        size: gridSize,
         grid: grid,
       );
       if (createResp.containsKey('error')) return null;
@@ -936,7 +1009,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
 
   // ── Chat Flow ────────────────────────────────────────────
 
-  Future<void> _handleChat(String text) async {
+  Future<void> _handleChat(String text, {TileInfo? refTile}) async {
     final chat = ref.read(chatProvider.notifier);
     final backend = ref.read(backendProvider);
     final claude = ref.read(claudeProvider);
@@ -1028,6 +1101,20 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
           ? messages.sublist(messages.length - 10)
           : messages;
 
+      // Inject referenced tile context into the last user message.
+      if (refTile != null && recentMessages.isNotEmpty) {
+        final last = recentMessages.last;
+        if (last.role == 'user') {
+          final edges = refTile.edgeClasses?.entries.map((e) => '${e.key}=${e.value}').join(', ') ?? 'unknown';
+          final tags = refTile.tags.isNotEmpty ? refTile.tags.join(', ') : 'none';
+          recentMessages[recentMessages.length - 1] = LlmMessage(
+            role: 'user',
+            content: '[Reference tile: ${refTile.name}, size: ${refTile.size ?? 'unknown'}, '
+                'edges: $edges, tags: $tags]\n\n${last.content}',
+          );
+        }
+      }
+
       final resp = await ref.read(claudeProvider.notifier).chat(
         systemPrompt: systemPrompt,
         messages: recentMessages,
@@ -1036,7 +1123,94 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
       if (resp.isError) {
         chat.addAssistantMessage('Error: ${resp.errorMessage}');
       } else {
-        chat.addAssistantMessage(resp.content);
+        // ── PAX interception: detect tile content in chat responses ──
+        final content = resp.content;
+
+        if (_isPaxSource(content)) {
+          // Full PAX tileset — load into session (merges, no overwrite)
+          final paxSource = _extractPaxSource(content);
+          chat.addAssistantMessage('Loading tileset...', isStatus: true);
+          _scrollToBottom();
+
+          final tilesBefore = ref.read(backendProvider).tiles.map((t) => t.name).toSet();
+          final loadResp = await ref.read(backendProvider.notifier).loadSource(paxSource);
+
+          if (loadResp.containsKey('error')) {
+            chat.addAssistantMessage(
+              'Failed to load PAX: ${loadResp['error']}\n\n'
+              '*${resp.totalTokens} tokens used*',
+            );
+          } else {
+            final allTiles = ref.read(backendProvider).tiles;
+            final newTiles = allTiles.where((t) => !tilesBefore.contains(t.name)).toList();
+            final previews = <({String name, String base64})>[];
+            for (final t in newTiles) {
+              if (t.previewBase64 != null) {
+                previews.add((name: t.name, base64: t.previewBase64!));
+              }
+            }
+            chat.addAssistantMessage(
+              '**Loaded ${newTiles.length} tile${newTiles.length == 1 ? '' : 's'}** '
+              'into session (${allTiles.length} total)\n\n'
+              '*${resp.totalTokens} tokens*',
+              previewImages: previews,
+            );
+          }
+        } else {
+          // Check for a single grid embedded in the response
+          final grid = extractGrid(content);
+
+          if (grid != null) {
+            // Single tile detected — use actual grid dimensions.
+            final gridLines = grid.split('\n').where((l) => l.trim().isNotEmpty).toList();
+            final gridW = gridLines.isNotEmpty ? gridLines.first.length : 0;
+            final gridH = gridLines.length;
+            final gridSize = '${gridW}x$gridH';
+
+            final genCtx = await ref.read(backendProvider.notifier).getGenerationContext(
+              prompt: text,
+              size: gridSize,
+            );
+            final existingNames = ref.read(backendProvider).tiles.map((t) => t.name).toSet();
+            final tileName = uniqueTileName(generateTileName(text), existingNames);
+
+            final chatPalette = genCtx['palette'] as String? ?? await _ensurePalette();
+            if (chatPalette == null) return;
+            final createResp = await ref.read(backendProvider.notifier).createTile(
+              name: tileName,
+              palette: chatPalette,
+              size: gridSize,
+              grid: grid,
+            );
+
+            if (createResp.containsKey('error')) {
+              // Creation failed — show the text response, not raw grid
+              chat.addAssistantMessage(
+                'Tile creation failed: ${createResp['error']}\n\n'
+                '*${resp.totalTokens} tokens*',
+              );
+            } else {
+              // Success — show accept/reject flow (preview lives in the
+              // pending bar only, no duplicate in the message bubble)
+              final previewB64 = createResp['preview'] as String?;
+
+              setState(() {
+                _pendingTileName = tileName;
+                _pendingPreviewB64 = previewB64;
+                _lastGenerationPrompt = text;
+              });
+
+              chat.addAssistantMessage(
+                '**Generated: `$tileName`** ($gridSize)\n\n'
+                '*${resp.totalTokens} tokens*\n\n'
+                'Use the buttons below to **accept** or **reject**, or request **variations**.',
+              );
+            }
+          } else {
+            // No PAX content — plain text chat response
+            chat.addAssistantMessage(content);
+          }
+        }
       }
     } else if (!claude.hasApiKey) {
       chat.addAssistantMessage(
@@ -1175,6 +1349,49 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
                           ),
                         ),
                       ),
+                      // Inline tile previews
+                      if (msg.previewImages.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            for (final img in msg.previewImages)
+                              GestureDetector(
+                                onTap: () {
+                                  // Click-to-reference: set this tile as context for next message
+                                  final tiles = ref.read(backendProvider).tiles;
+                                  final match = tiles.where((t) => t.name == img.name);
+                                  setState(() {
+                                    _referencedTile = match.isNotEmpty ? match.first : TileInfo(name: img.name);
+                                  });
+                                  _focusNode.requestFocus();
+                                },
+                                child: Tooltip(
+                                  message: '${img.name} — click to reference',
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: _referencedTile?.name == img.name
+                                          ? Border.all(color: theme.colorScheme.primary, width: 2)
+                                          : null,
+                                    ),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(3),
+                                      child: Image.memory(
+                                        base64Decode(img.base64),
+                                        width: msg.previewImages.length > 1 ? 56 : 96,
+                                        height: msg.previewImages.length > 1 ? 56 : 96,
+                                        filterQuality: FilterQuality.none,
+                                        fit: BoxFit.contain,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 );
@@ -1367,11 +1584,53 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
               ),
             ),
 
+          // Reference chip
+          if (_referencedTile != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: const BoxDecoration(
+                border: Border(top: StudioTheme.panelBorder),
+                color: StudioTheme.recessedBg,
+              ),
+              child: Row(
+                children: [
+                  if (_referencedTile!.previewBase64 != null)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(2),
+                        child: Image.memory(
+                          base64Decode(_referencedTile!.previewBase64!),
+                          width: 20, height: 20,
+                          filterQuality: FilterQuality.none,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                    ),
+                  Expanded(
+                    child: Text(
+                      _referencedTile!.name,
+                      style: theme.textTheme.bodySmall!.copyWith(
+                        fontSize: 10,
+                        color: theme.colorScheme.primary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  InkWell(
+                    onTap: () => setState(() => _referencedTile = null),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Icon(Icons.close, size: 14, color: theme.textTheme.bodySmall?.color),
+                  ),
+                ],
+              ),
+            ),
+
           // Input
           Container(
             padding: const EdgeInsets.all(8),
-            decoration: const BoxDecoration(
-              border: Border(top: StudioTheme.panelBorder),
+            decoration: BoxDecoration(
+              border: Border(top: _referencedTile == null ? StudioTheme.panelBorder : BorderSide.none),
             ),
             child: Row(
               children: [

@@ -484,6 +484,32 @@ fn handle_check_edge_pair(state: &Mutex<McpState>, args: &Value) -> Value {
 
 fn handle_list_tiles(state: &Mutex<McpState>) -> Value {
     let st = state.lock().unwrap();
+
+    // Resolve StampRaw → Stamp so compose tiles can reference them.
+    let stamps: std::collections::HashMap<String, pixl_core::types::Stamp> = st
+        .file
+        .stamp
+        .iter()
+        .filter_map(|(name, raw)| {
+            let (w, h) = parse_size(&raw.size).ok()?;
+            let grid: Vec<Vec<char>> = raw
+                .grid
+                .lines()
+                .filter(|l| !l.trim().is_empty())
+                .map(|l| l.chars().collect())
+                .collect();
+            Some((
+                name.clone(),
+                pixl_core::types::Stamp {
+                    palette: raw.palette.clone(),
+                    width: w as u32,
+                    height: h as u32,
+                    grid,
+                },
+            ))
+        })
+        .collect();
+
     let tiles: Vec<Value> = st
         .file
         .tile
@@ -496,7 +522,7 @@ fn handle_list_tiles(state: &Mutex<McpState>) -> Value {
                     name,
                     &st.file.tile,
                     &st.palettes,
-                    &st.file.stamp,
+                    &stamps,
                 )
                 .ok()?;
                 let img = renderer::render_grid(&parsed, palette, 4);

@@ -329,9 +329,16 @@ class BackendNotifier extends StateNotifier<BackendState> {
   }
 
   /// Load PAX source into session.
+  ///
+  /// On success, updates [sessionTheme] / [sessionPalette] from the engine
+  /// response so the UI can sync its palette panel.
   Future<Map<String, dynamic>> loadSource(String source) async {
     final resp = await _backend.loadSource(source);
     if (!resp.containsKey('error')) {
+      state = state.copyWith(
+        sessionTheme: resp['active_theme'] as String?,
+        sessionPalette: resp['active_palette'] as String?,
+      );
       await refreshTiles();
     }
     return resp;

@@ -2,10 +2,62 @@ import 'dart:ui' show Color;
 
 /// A named color palette for the editor.
 class PixlPalette {
-  const PixlPalette({required this.name, required this.colors});
+  const PixlPalette({
+    required this.name,
+    required this.colors,
+    this.engineId,
+    this.enginePalette,
+  });
 
   final String name;
   final List<Color> colors;
+  /// Engine-side theme identifier used for newFromTemplate (e.g. 'dark_fantasy').
+  final String? engineId;
+  /// Engine-side palette key used in tile creation (e.g. 'dungeon').
+  /// This is the [palette.*] section name inside the theme's .pax file.
+  final String? enginePalette;
+
+  /// Build a palette from the engine's loadSource response.
+  ///
+  /// [resp] should contain `active_theme`, `active_palette`, and
+  /// `palette_colors` (list of "#rrggbbaa" hex strings).
+  static PixlPalette? fromEngineResponse(Map<String, dynamic> resp) {
+    final theme = resp['active_theme'] as String?;
+    final palette = resp['active_palette'] as String?;
+    final colorList = resp['palette_colors'] as List<dynamic>?;
+    if (theme == null || palette == null || colorList == null) return null;
+
+    final colors = <Color>[];
+    for (final hex in colorList) {
+      final h = (hex as String).replaceFirst('#', '');
+      if (h.length == 8) {
+        // #rrggbbaa → Color(0xAARRGGBB)
+        final r = int.parse(h.substring(0, 2), radix: 16);
+        final g = int.parse(h.substring(2, 4), radix: 16);
+        final b = int.parse(h.substring(4, 6), radix: 16);
+        final a = int.parse(h.substring(6, 8), radix: 16);
+        colors.add(Color.fromARGB(a, r, g, b));
+      } else if (h.length == 6) {
+        colors.add(Color(int.parse('ff$h', radix: 16)));
+      }
+    }
+
+    // Use the display name from BuiltInPalettes if available, else humanize.
+    final builtIn = BuiltInPalettes.all.where((p) => p.engineId == theme);
+    final displayName = builtIn.isNotEmpty
+        ? builtIn.first.name
+        : theme.replaceAll('_', ' ').replaceAllMapped(
+            RegExp(r'\b\w'),
+            (m) => m[0]!.toUpperCase(),
+          );
+
+    return PixlPalette(
+      name: displayName,
+      colors: colors,
+      engineId: theme,
+      enginePalette: palette,
+    );
+  }
 
   int get length => colors.length;
   Color operator [](int index) => colors[index];
@@ -30,6 +82,8 @@ class PixlPalette {
 class BuiltInPalettes {
   static const darkFantasy = PixlPalette(
     name: 'Dark Fantasy',
+    engineId: 'dark_fantasy',
+    enginePalette: 'dungeon',
     colors: [
       Color(0x00000000), // transparent
       Color(0xFF0f0b14), // void black
@@ -52,6 +106,8 @@ class BuiltInPalettes {
 
   static const sciFi = PixlPalette(
     name: 'Sci-Fi',
+    engineId: 'sci_fi',
+    enginePalette: 'cyber',
     colors: [
       Color(0x00000000), // transparent
       Color(0xFF0a0a12), // deep black
@@ -70,6 +126,8 @@ class BuiltInPalettes {
 
   static const nature = PixlPalette(
     name: 'Nature',
+    engineId: 'nature',
+    enginePalette: 'forest',
     colors: [
       Color(0x00000000), // transparent
       Color(0xFF2d5a27), // dark green
@@ -90,6 +148,8 @@ class BuiltInPalettes {
 
   static const retro8bit = PixlPalette(
     name: 'Retro 8-bit',
+    engineId: 'nes',
+    enginePalette: 'nes_palette',
     colors: [
       Color(0x00000000), // transparent
       Color(0xFF000000), // black
@@ -112,6 +172,8 @@ class BuiltInPalettes {
 
   static const gameboy = PixlPalette(
     name: 'Game Boy',
+    engineId: 'gameboy',
+    enginePalette: 'gameboy_palette',
     colors: [
       Color(0xFF0f380f), // darkest
       Color(0xFF306230), // dark
