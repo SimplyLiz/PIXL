@@ -263,6 +263,54 @@ pub fn generate_map(
     }
 }
 
+/// Pick the best terrain layer from a tilemap and convert its grid to tile indices.
+///
+/// Prefers `layer_role = "platform"`, then `"background"`, then lowest z_order.
+/// Returns `None` if no layer has a grid. Uses `usize::MAX` for empty cells.
+pub fn resolve_terrain_grid(
+    tilemap_raw: &pixl_core::tilemap::TilemapRaw,
+    tile_names: &[String],
+) -> Option<Vec<Vec<usize>>> {
+    let terrain_layer = tilemap_raw
+        .layer
+        .values()
+        .filter(|l| l.grid.is_some())
+        .min_by_key(|l| {
+            let role_priority = match l.layer_role.as_deref() {
+                Some("platform") => 0,
+                Some("background") => 1,
+                _ => 2,
+            };
+            (role_priority, l.z_order)
+        })?;
+
+    Some(
+        terrain_layer
+            .grid
+            .as_deref()
+            .unwrap()
+            .lines()
+            .map(|l| l.trim())
+            .filter(|l| !l.is_empty())
+            .map(|line| {
+                line.split_whitespace()
+                    .map(|name| {
+                        if name == "." {
+                            return usize::MAX;
+                        }
+                        // Strip flip/variant suffixes for index lookup
+                        let base = name.split('!').next().unwrap_or(name);
+                        let base = base.split(':').next().unwrap_or(base);
+                        tile_names
+                            .binary_search(&base.to_string())
+                            .unwrap_or(usize::MAX)
+                    })
+                    .collect()
+            })
+            .collect(),
+    )
+}
+
 /// Parse an object's `tiles` string into a row-major grid of tile names.
 fn parse_object_tile_grid(tiles: &str) -> Vec<Vec<&str>> {
     tiles
@@ -324,6 +372,21 @@ pub fn generate_map_with_objects(
         let (obj_cols, obj_rows) =
             pixl_core::types::parse_size(&obj_def.size_tiles)?;
         let obj_grid = parse_object_tile_grid(&obj_def.tiles);
+
+        if obj_grid.len() != obj_rows as usize {
+            return Err(format!(
+                "object '{}': size_tiles says {} rows but tiles grid has {}",
+                obj_name, obj_rows, obj_grid.len()
+            ));
+        }
+        for (i, row) in obj_grid.iter().enumerate() {
+            if row.len() != obj_cols as usize {
+                return Err(format!(
+                    "object '{}': size_tiles says {} columns but row {} has {}",
+                    obj_name, obj_cols, i, row.len()
+                ));
+            }
+        }
 
         // Stamp base_tile into terrain under the object footprint
         if let Some(ref base) = obj_def.base_tile {

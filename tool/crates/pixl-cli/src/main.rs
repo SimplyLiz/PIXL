@@ -1858,50 +1858,13 @@ fn cmd_export(file: &PathBuf, format: &str, out_dir: &PathBuf) {
                         pax_file.object.iter().map(|(k, v)| (k.clone(), v)).collect();
 
                     for (tm_name, tilemap_raw) in &pax_file.tilemap {
-                        // Pick the terrain layer: prefer layer_role "platform",
-                        // then lowest z_order, then any layer with a grid.
-                        let terrain_layer = tilemap_raw
-                            .layer
-                            .values()
-                            .filter(|l| l.grid.is_some())
-                            .min_by_key(|l| {
-                                let role_priority = match l.layer_role.as_deref() {
-                                    Some("platform") => 0,
-                                    Some("background") => 1,
-                                    _ => 2,
-                                };
-                                (role_priority, l.z_order)
-                            });
-                        let terrain_layer = match terrain_layer {
-                            Some(l) => l,
+                        let terrain_grid = match pixl_export::tiled::resolve_terrain_grid(
+                            tilemap_raw,
+                            &tile_names,
+                        ) {
+                            Some(g) => g,
                             None => continue,
                         };
-
-                        // Parse terrain grid: convert tile names to indices via tile_names.
-                        // Use usize::MAX as sentinel for empty cells ("." in grids).
-                        let terrain_grid: Vec<Vec<usize>> = terrain_layer
-                            .grid
-                            .as_deref()
-                            .unwrap()
-                            .lines()
-                            .map(|l| l.trim())
-                            .filter(|l| !l.is_empty())
-                            .map(|line| {
-                                line.split_whitespace()
-                                    .map(|name| {
-                                        if name == "." {
-                                            return usize::MAX; // empty cell sentinel
-                                        }
-                                        // Strip flip suffixes for index lookup
-                                        let base = name.split('!').next().unwrap_or(name);
-                                        let base = base.split(':').next().unwrap_or(base);
-                                        tile_names
-                                            .binary_search(&base.to_string())
-                                            .unwrap_or(usize::MAX)
-                                    })
-                                    .collect()
-                            })
-                            .collect();
 
                         let placements: Vec<(String, u32, u32)> = tilemap_raw
                             .objects

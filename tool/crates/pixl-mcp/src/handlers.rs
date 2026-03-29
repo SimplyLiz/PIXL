@@ -484,8 +484,6 @@ fn handle_check_edge_pair(state: &Mutex<McpState>, args: &Value) -> Value {
 
 fn handle_list_tiles(state: &Mutex<McpState>) -> Value {
     let st = state.lock().unwrap();
-    let empty_stamps = std::collections::HashMap::new();
-
     let tiles: Vec<Value> = st
         .file
         .tile
@@ -498,7 +496,7 @@ fn handle_list_tiles(state: &Mutex<McpState>) -> Value {
                     name,
                     &st.file.tile,
                     &st.palettes,
-                    &empty_stamps,
+                    &st.file.stamp,
                 )
                 .ok()?;
                 let img = renderer::render_grid(&parsed, palette, 4);
@@ -2163,45 +2161,13 @@ fn handle_export(state: &Mutex<McpState>, args: &Value) -> Value {
                         st.file.object.iter().map(|(k, v)| (k.clone(), v)).collect();
 
                     for (tm_name, tilemap_raw) in &st.file.tilemap {
-                        let terrain_layer = tilemap_raw
-                            .layer
-                            .values()
-                            .filter(|l| l.grid.is_some())
-                            .min_by_key(|l| {
-                                let role_priority = match l.layer_role.as_deref() {
-                                    Some("platform") => 0,
-                                    Some("background") => 1,
-                                    _ => 2,
-                                };
-                                (role_priority, l.z_order)
-                            });
-                        let terrain_layer = match terrain_layer {
-                            Some(l) => l,
+                        let terrain_grid = match pixl_export::tiled::resolve_terrain_grid(
+                            tilemap_raw,
+                            &tile_names,
+                        ) {
+                            Some(g) => g,
                             None => continue,
                         };
-
-                        let terrain_grid: Vec<Vec<usize>> = terrain_layer
-                            .grid
-                            .as_deref()
-                            .unwrap()
-                            .lines()
-                            .map(|l| l.trim())
-                            .filter(|l| !l.is_empty())
-                            .map(|line| {
-                                line.split_whitespace()
-                                    .map(|name| {
-                                        if name == "." {
-                                            return usize::MAX;
-                                        }
-                                        let base = name.split('!').next().unwrap_or(name);
-                                        let base = base.split(':').next().unwrap_or(base);
-                                        tile_names
-                                            .binary_search(&base.to_string())
-                                            .unwrap_or(usize::MAX)
-                                    })
-                                    .collect()
-                            })
-                            .collect();
 
                         let placements: Vec<(String, u32, u32)> = tilemap_raw
                             .objects
