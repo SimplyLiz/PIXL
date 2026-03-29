@@ -1,0 +1,51 @@
+name: Release Aseprite Plugin
+
+on:
+  push:
+    tags: ["aseprite-v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Package extension
+        working-directory: plugins/aseprite
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          zip -r "pixl-aseprite-${tag}.aseprite-extension" \
+            package.json plugin.lua LICENSE lib/ commands/ \
+            -x "*.DS_Store" -x "build.sh"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: aseprite-extension
+          path: plugins/aseprite/*.aseprite-extension
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: aseprite-extension
+          path: dist
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Aseprite Plugin ${{ github.ref_name }}"
+          body: |
+            ## PIXL Aseprite Plugin
+
+            Install: double-click the `.aseprite-extension` file, or use **Edit > Preferences > Extensions > Add Extension** in Aseprite.
+
+            Requires the `pixl` CLI on PATH — or configure the binary path in **PIXL Settings** inside Aseprite.
+          files: dist/*
