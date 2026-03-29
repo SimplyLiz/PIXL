@@ -17,6 +17,21 @@ class TilemapNotifier extends StateNotifier<TilemapState> {
   bool get canUndo => _undoStack.isNotEmpty;
   bool get canRedo => _redoStack.isNotEmpty;
 
+  /// Expose undo/redo stacks for tab save/restore.
+  List<TilemapSnapshot> get undoStack => List.unmodifiable(_undoStack);
+  List<TilemapSnapshot> get redoStack => List.unmodifiable(_redoStack);
+
+  /// Restore full document state (used by tab manager on tab switch).
+  void restoreDocument(TilemapState newState, List<TilemapSnapshot> undo, List<TilemapSnapshot> redo) {
+    _undoStack
+      ..clear()
+      ..addAll(undo);
+    _redoStack
+      ..clear()
+      ..addAll(redo);
+    state = newState;
+  }
+
   // ── Undo / Redo ──────────────────────────────────
 
   void _pushSnapshot() {
@@ -216,6 +231,82 @@ class TilemapNotifier extends StateNotifier<TilemapState> {
 
   void toggleGrid() {
     state = state.copyWith(showGrid: !state.showGrid);
+  }
+
+  // ── Play Mode (Zelda-style screen scroll) ───────
+
+  void togglePlayMode() {
+    final entering = !state.playMode;
+    if (entering) {
+      // Place player at center of first screen
+      final startCol = (state.screenTilesX ~/ 2).clamp(0, state.gridWidth - 1);
+      final startRow = (state.screenTilesY ~/ 2).clamp(0, state.gridHeight - 1);
+      state = state.copyWith(
+        playMode: true,
+        playerCol: startCol,
+        playerRow: startRow,
+        screenX: 0,
+        screenY: 0,
+        transitioning: false,
+        transitionProgress: 0.0,
+      );
+    } else {
+      state = state.copyWith(
+        playMode: false,
+        transitioning: false,
+      );
+    }
+  }
+
+  /// Move player by (dx, dy) in tile units. Returns true if a screen
+  /// transition was triggered.
+  bool movePlayer(int dx, int dy) {
+    if (!state.playMode || state.transitioning) return false;
+
+    final newCol = state.playerCol + dx;
+    final newRow = state.playerRow + dy;
+
+    // Clamp to map bounds
+    if (newCol < 0 || newCol >= state.gridWidth ||
+        newRow < 0 || newRow >= state.gridHeight) {
+      return false;
+    }
+
+    // Check which screen the new position falls on
+    final newScreenX = newCol ~/ state.screenTilesX;
+    final newScreenY = newRow ~/ state.screenTilesY;
+
+    if (newScreenX != state.screenX || newScreenY != state.screenY) {
+      // Screen transition — start animated scroll
+      state = state.copyWith(
+        playerCol: newCol,
+        playerRow: newRow,
+        prevScreenX: state.screenX,
+        prevScreenY: state.screenY,
+        screenX: newScreenX,
+        screenY: newScreenY,
+        transitioning: true,
+        transitionProgress: 0.0,
+      );
+      return true;
+    }
+
+    // Same screen — just move
+    state = state.copyWith(playerCol: newCol, playerRow: newRow);
+    return false;
+  }
+
+  /// Advance the screen transition animation. Called by the viewport's ticker.
+  void updateTransition(double progress) {
+    if (!state.transitioning) return;
+    if (progress >= 1.0) {
+      state = state.copyWith(
+        transitioning: false,
+        transitionProgress: 1.0,
+      );
+    } else {
+      state = state.copyWith(transitionProgress: progress);
+    }
   }
 }
 

@@ -18,7 +18,8 @@ class TilemapViewport extends ConsumerStatefulWidget {
   ConsumerState<TilemapViewport> createState() => _TilemapViewportState();
 }
 
-class _TilemapViewportState extends ConsumerState<TilemapViewport> {
+class _TilemapViewportState extends ConsumerState<TilemapViewport>
+    with SingleTickerProviderStateMixin {
   final _tileImages = <String, ui.Image>{};
   final _loadingTiles = <String>{};
   (int, int)? _hoverTile;
@@ -28,6 +29,9 @@ class _TilemapViewportState extends ConsumerState<TilemapViewport> {
   Offset _panOffset = Offset.zero;
   Offset _panStart = Offset.zero;
   double _pinchAccum = 0.0;
+
+  // Screen transition animation
+  AnimationController? _transitionController;
 
   @override
   void initState() {
@@ -42,10 +46,35 @@ class _TilemapViewportState extends ConsumerState<TilemapViewport> {
 
   @override
   void dispose() {
+    _transitionController?.dispose();
     for (final img in _tileImages.values) {
       img.dispose();
     }
     super.dispose();
+  }
+
+  void _startScreenTransition() {
+    _transitionController?.dispose();
+    _transitionController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+    final curve = CurvedAnimation(
+      parent: _transitionController!,
+      curve: Curves.easeInOut,
+    );
+    curve.addListener(() {
+      ref.read(tilemapProvider.notifier).updateTransition(curve.value);
+    });
+    _transitionController!.forward();
+  }
+
+  /// Whether a tile renders above the player (canopy, walls, trees).
+  /// Uses tile name directly — no dependency on async backend metadata.
+  static bool _isForeground(String name) {
+    return name.startsWith('canopy') ||
+        name.startsWith('tree_') ||
+        name.contains('_canopy');
   }
 
   // ── Tile image cache ─────────────────────────────
@@ -108,6 +137,7 @@ class _TilemapViewportState extends ConsumerState<TilemapViewport> {
   // ── Pointer handlers ─────────────────────────────
 
   void _handlePointerDown(PointerDownEvent event) {
+    if (ref.read(tilemapProvider).playMode) return;
     if (_spaceHeld) {
       _panStart = event.localPosition - _panOffset;
       return;
@@ -133,6 +163,7 @@ class _TilemapViewportState extends ConsumerState<TilemapViewport> {
   }
 
   void _handlePointerMove(PointerMoveEvent event) {
+    if (ref.read(tilemapProvider).playMode) return;
     if (_spaceHeld && event.buttons != 0) {
       setState(() => _panOffset = event.localPosition - _panStart);
       return;
@@ -208,15 +239,50 @@ class _TilemapViewportState extends ConsumerState<TilemapViewport> {
         return Focus(
           autofocus: true,
           onKeyEvent: (node, event) {
-            // Track space for pan mode
-            if (event.logicalKey == LogicalKeyboardKey.space) {
+            final notifier = ref.read(tilemapProvider.notifier);
+            final ts = ref.read(tilemapProvider);
+
+            // Track space for pan mode (editor only)
+            if (event.logicalKey == LogicalKeyboardKey.space && !ts.playMode) {
               final isDown = event is KeyDownEvent || event is KeyRepeatEvent;
               if (_spaceHeld != isDown) setState(() => _spaceHeld = isDown);
               return KeyEventResult.handled;
             }
             if (event is! KeyDownEvent) return KeyEventResult.ignored;
-            final notifier = ref.read(tilemapProvider.notifier);
             final meta = HardwareKeyboard.instance.isMetaPressed;
+
+            // P toggles play mode
+            if (event.logicalKey == LogicalKeyboardKey.keyP && !meta) {
+              notifier.togglePlayMode();
+              return KeyEventResult.handled;
+            }
+            // Escape exits play mode
+            if (event.logicalKey == LogicalKeyboardKey.escape && ts.playMode) {
+              notifier.togglePlayMode();
+              return KeyEventResult.handled;
+            }
+
+            // Play mode: arrow keys move player
+            if (ts.playMode) {
+              int dx = 0, dy = 0;
+              switch (event.logicalKey) {
+                case LogicalKeyboardKey.arrowUp:
+                  dy = -1;
+                case LogicalKeyboardKey.arrowDown:
+                  dy = 1;
+                case LogicalKeyboardKey.arrowLeft:
+                  dx = -1;
+                case LogicalKeyboardKey.arrowRight:
+                  dx = 1;
+                default:
+                  return KeyEventResult.ignored;
+              }
+              final triggered = notifier.movePlayer(dx, dy);
+              if (triggered) _startScreenTransition();
+              return KeyEventResult.handled;
+            }
+
+            // Editor mode shortcuts
             switch (event.logicalKey) {
               case LogicalKeyboardKey.keyT:
                 notifier.setTool(TilemapTool.stamp);
@@ -276,15 +342,50 @@ class _TilemapViewportState extends ConsumerState<TilemapViewport> {
                 onPointerDown: _handlePointerDown,
                 onPointerMove: _handlePointerMove,
                 onPointerUp: _handlePointerUp,
-                child: CustomPaint(
-                  size: Size(constraints.maxWidth, constraints.maxHeight),
-                  painter: _TilemapPainter(
-                    tilemapState: ts,
-                    tileImages: _tileImages,
-                    centerX: _centerX + _panOffset.dx,
-                    centerY: _centerY + _panOffset.dy,
-                    hoverTile: _hoverTile,
-                  ),
+                child: Stack(
+                  children: [
+                    CustomPaint(
+                      size: Size(constraints.maxWidth, constraints.maxHeight),
+                      painter: ts.playMode
+                          ? _PlayModePainter(
+                              tilemapState: ts,
+                              tileImages: _tileImages,
+                              viewportWidth: constraints.maxWidth,
+                              viewportHeight: constraints.maxHeight,
+                              isForeground: _isForeground,
+                            )
+                          : _TilemapPainter(
+                              tilemapState: ts,
+                              tileImages: _tileImages,
+                              centerX: _centerX + _panOffset.dx,
+                              centerY: _centerY + _panOffset.dy,
+                              hoverTile: _hoverTile,
+                            ),
+                    ),
+                    if (ts.playMode)
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xCC000000),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'PLAY  \u2190\u2191\u2193\u2192 move  ESC exit',
+                            style: TextStyle(
+                              color: Color(0xFFe8c040),
+                              fontSize: 11,
+                              fontFamily: 'monospace',
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),
@@ -408,5 +509,146 @@ class _TilemapPainter extends CustomPainter {
         centerX != oldDelegate.centerX ||
         centerY != oldDelegate.centerY ||
         hoverTile != oldDelegate.hoverTile;
+  }
+}
+
+// ── Play Mode Painter — Zelda-style screen-locked camera ────────
+
+class _PlayModePainter extends CustomPainter {
+  _PlayModePainter({
+    required this.tilemapState,
+    required this.tileImages,
+    required this.viewportWidth,
+    required this.viewportHeight,
+    required this.isForeground,
+  });
+
+  final TilemapState tilemapState;
+  final Map<String, ui.Image> tileImages;
+  final double viewportWidth;
+  final double viewportHeight;
+  final bool Function(String) isForeground;
+
+  static const _bgColor = Color(0xFF101010);
+  static const _playerColor = Color(0xFFe8c040);
+  static const _playerOutline = Color(0xFF2a1a0a);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final ts = tilemapState;
+    final stx = ts.screenTilesX;
+    final sty = ts.screenTilesY;
+
+    // Calculate scale to fit one screen in the viewport
+    final scaleX = viewportWidth / (stx * ts.tilePixelSize);
+    final scaleY = viewportHeight / (sty * ts.tilePixelSize);
+    final scale = scaleX < scaleY ? scaleX : scaleY;
+    final cellSize = ts.tilePixelSize * scale;
+
+    // Center the screen view in the viewport
+    final screenPixelW = stx * cellSize;
+    final screenPixelH = sty * cellSize;
+    final offsetX = (viewportWidth - screenPixelW) / 2;
+    final offsetY = (viewportHeight - screenPixelH) / 2;
+
+    // Clear background
+    final paint = Paint()..color = _bgColor;
+    canvas.drawRect(Rect.fromLTWH(0, 0, viewportWidth, viewportHeight), paint);
+
+    canvas.save();
+    canvas.translate(offsetX, offsetY);
+
+    // Clip to screen bounds
+    canvas.clipRect(Rect.fromLTWH(0, 0, screenPixelW, screenPixelH));
+
+    // Calculate camera offset (in pixels) — lerp during transition
+    double camX, camY;
+    if (ts.transitioning) {
+      final fromX = ts.prevScreenX * stx * cellSize;
+      final fromY = ts.prevScreenY * sty * cellSize;
+      final toX = ts.screenX * stx * cellSize;
+      final toY = ts.screenY * sty * cellSize;
+      final t = ts.transitionProgress;
+      camX = fromX + (toX - fromX) * t;
+      camY = fromY + (toY - fromY) * t;
+    } else {
+      camX = ts.screenX * stx * cellSize;
+      camY = ts.screenY * sty * cellSize;
+    }
+
+    canvas.save();
+    canvas.translate(-camX, -camY);
+
+    final w = ts.gridWidth;
+    final h = ts.gridHeight;
+
+    // ── Pass 1: ground tiles (below player) ──────────
+    for (var row = 0; row < h; row++) {
+      for (var col = 0; col < w; col++) {
+        final rect = Rect.fromLTWH(
+          col * cellSize, row * cellSize, cellSize, cellSize,
+        );
+        final tileName = ts.cells[row][col];
+        if (tileName != null && tileImages.containsKey(tileName)) {
+          if (!isForeground(tileName)) {
+            final img = tileImages[tileName]!;
+            final src = Rect.fromLTWH(
+              0, 0, img.width.toDouble(), img.height.toDouble(),
+            );
+            canvas.drawImageRect(img, src, rect, paint);
+          } else {
+            // Draw base ground under foreground tiles (dark fill)
+            paint.color = _bgColor;
+            canvas.drawRect(rect, paint);
+          }
+        } else {
+          paint.color = _bgColor;
+          canvas.drawRect(rect, paint);
+        }
+      }
+    }
+
+    // ── Pass 2: player ───────────────────────────────
+    final px = ts.playerCol * cellSize + cellSize / 2;
+    final py = ts.playerRow * cellSize + cellSize / 2;
+    final pr = cellSize * 0.35;
+
+    paint.style = PaintingStyle.fill;
+    paint.color = _playerOutline;
+    canvas.drawCircle(Offset(px, py + 1), pr + 1, paint);
+    paint.color = _playerColor;
+    canvas.drawCircle(Offset(px, py), pr, paint);
+    paint.color = const Color(0xFFfff0c0);
+    canvas.drawCircle(Offset(px, py - pr * 0.2), pr * 0.3, paint);
+
+    // ── Pass 3: foreground tiles (above player) ──────
+    for (var row = 0; row < h; row++) {
+      for (var col = 0; col < w; col++) {
+        final tileName = ts.cells[row][col];
+        if (tileName != null &&
+            isForeground(tileName) &&
+            tileImages.containsKey(tileName)) {
+          final rect = Rect.fromLTWH(
+            col * cellSize, row * cellSize, cellSize, cellSize,
+          );
+          final img = tileImages[tileName]!;
+          final src = Rect.fromLTWH(
+            0, 0, img.width.toDouble(), img.height.toDouble(),
+          );
+          canvas.drawImageRect(img, src, rect, paint);
+        }
+      }
+    }
+
+    canvas.restore(); // undo camera translate
+    canvas.restore(); // undo viewport translate
+  }
+
+  @override
+  bool shouldRepaint(covariant _PlayModePainter oldDelegate) {
+    return tilemapState != oldDelegate.tilemapState ||
+        tileImages != oldDelegate.tileImages ||
+        viewportWidth != oldDelegate.viewportWidth ||
+        viewportHeight != oldDelegate.viewportHeight;
   }
 }

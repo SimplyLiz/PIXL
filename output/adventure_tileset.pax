@@ -1,0 +1,560 @@
+[pax]
+version = "2.0"
+name    = "adventure_overworld"
+theme   = "adventure"
+
+[theme.adventure]
+palette          = "overworld"
+scale            = 2
+canvas           = 16
+max_palette_size = 16
+light_source     = "top-left"
+
+[theme.adventure.roles]
+void   = "."
+bg     = "#"
+fg     = "+"
+accent = "o"
+danger = "r"
+shadow = "s"
+life   = "g"
+hi     = "G"
+
+[theme.adventure.constraints]
+fg_brighter_than_bg         = true
+shadow_darker_than_bg       = true
+accent_hue_distinct_from_bg = true
+max_colors_per_tile         = 16
+
+# Palette: overworld adventure — vibrant greens, warm earth, cool stone
+# Derived from reference: Blossom Tales / Zelda-like top-down RPG
+[palette.overworld]
+"." = "#00000000"
+"s" = "#2a1a0a"
+"#" = "#5a3a1a"
+"+" = "#8a6a3a"
+"h" = "#c0a060"
+"w" = "#e8d8b0"
+"g" = "#1a6a20"
+"G" = "#40a840"
+"L" = "#70d050"
+"~" = "#607888"
+"B" = "#788a98"
+"W" = "#98aab8"
+"o" = "#e8c040"
+"r" = "#c83838"
+"p" = "#e880a0"
+"k" = "#101008"
+
+# --- Stamps ---
+
+[stamp.cobble_4x4]
+palette = "overworld"
+size    = "4x4"
+grid = '''
+~BWB
+B~~B
+W~B~
+BWB~
+'''
+
+[stamp.grass_4x4]
+palette = "overworld"
+size    = "4x4"
+grid = '''
+gGgG
+GgLg
+gGgG
+GgGg
+'''
+
+[stamp.earth_4x4]
+palette = "overworld"
+size    = "4x4"
+grid = '''
+#s+#
+s#+#
+#s+#
++#s+
+'''
+
+# ===================================================================
+# FLOOR TILES — walkable ground
+# ===================================================================
+
+# Grass: lush green field, base walkable terrain
+# Blossom Tales style — dominant mid-green, organic tuft marks, sparse highlights
+[tile.grass]
+palette    = "overworld"
+size       = "16x16"
+edge_class = { n = "grass", e = "grass", s = "grass", w = "grass" }
+tags       = ["floor", "grass", "exterior"]
+weight     = 5.0
+semantic   = { affordance = "walkable", collision = "none", tags = { biome = "overworld" } }
+grid = '''
+GGGGGgGGGGGGGGgG
+GGGGGGGGGGGGGGGG
+GGgGGGGGGGLGGGGG
+GGGGGGGGGGgGGGgG
+GGGGGLGGGGGGGGgG
+GGGGGGGGGGGGGGGG
+GLGGGGGGgGGGGGGG
+GgGGGGGGGGGGGgGG
+GgGGGGGGGGGGGGGG
+GGGGGGGGGGGgGGGG
+GGGGGgGGLGGGGGGG
+GGGGGGGGgGGGGGGg
+GGgGGGGGGGGGGGGG
+GGGGGGGGGGGGLGgG
+GGGGGGgGGGGGGGGG
+GGGGGGGGGGgGGGGG
+'''
+
+# Grass with white flowers scattered
+[tile.grass_flowers_white]
+palette    = "overworld"
+size       = "16x16"
+edge_class = { n = "grass", e = "grass", s = "grass", w = "grass" }
+tags       = ["floor", "grass", "flowers", "exterior"]
+weight     = 1.5
+semantic   = { affordance = "walkable", collision = "none", tags = { biome = "overworld" } }
+grid = '''
+GGGGGgGGGGGGGGGG
+GGGGGGGGGGwGGGgG
+GGgGGGGGGGGGGGGG
+GGGGGGLGGGGGGGgG
+GGGGGGgGGGGwGGGG
+GGwGGGGGGGGGGGGG
+GGGGGGGGgGGGGGGG
+GLGGGGGGGGGGwGGG
+GgGGGwGGGGGGGGGG
+GGGGGGGGGGgGGGGG
+GGGGGGGGGGGGGGGg
+GGGGgGGGGGGGGGGG
+GGGGGGGGLGGGwGGG
+GGwGGGGGgGGGGGgG
+GGGGGGGGGGGGGGGG
+GGGGGgGGGGGGGGGG
+'''
+
+# Grass with pink flowers
+[tile.grass_flowers_pink]
+palette    = "overworld"
+size       = "16x16"
+edge_class = { n = "grass", e = "grass", s = "grass", w = "grass" }
+tags       = ["floor", "grass", "flowers", "exterior"]
+weight     = 1.0
+semantic   = { affordance = "walkable", collision = "none", tags = { biome = "overworld" } }
+grid = '''
+GGGGGGGGGGGgGGGG
+GGGGgGGGGGGGGGGG
+GGGGGGGGpGGGGGGG
+GGpGGGGGGGGGGGgG
+GGGGGGGGGGGGpGGG
+GGGGGLGGGGGGGGGg
+GGGGGgGGGGGGGGGG
+GGGGGGGGGpGGGGGG
+GGgGGGGGGGGGGGGG
+GGGGGGpGGGGGGGGG
+GGGGGGGGGGGGgGGG
+GLGGGGGGGGGGGGpG
+GgGGGpGGGGGGGGGG
+GGGGGGGGGGGGGGgG
+GGGGGGGGGGLGpGGG
+GGpGGGgGGGGGGGGG
+'''
+
+# Grass with tall blades (darker accents for variety)
+# Denser tufts — more g marks in clusters suggesting taller growth
+[tile.grass_tall]
+palette    = "overworld"
+size       = "16x16"
+edge_class = { n = "grass", e = "grass", s = "grass", w = "grass" }
+tags       = ["floor", "grass", "tall", "exterior"]
+weight     = 2.0
+semantic   = { affordance = "walkable", collision = "none", tags = { biome = "overworld" } }
+grid = '''
+GGGGgGGGGGGGgGGG
+GLGGGGGGGgGGGGGG
+GgGGGGgGGGGGGGGg
+GGGGGGgGGGGLGGGG
+GGgGGGGGGGGgGGGG
+GGgGGGGGGgGGGGGG
+GGGGGLGGGGGGGgGG
+GGGGGgGGGGGGGgGG
+GGGGGGGGgGGGGGGG
+GGgGGGGGgGGGGGGG
+GGGGGGGGGGGGgGGG
+GGGGgGGGGLGGgGGG
+GGGGgGGGGgGGGGGG
+GLGGGGGGGGGGGGgG
+GgGGGGgGGGGGGGGG
+GGGGGGgGGGGgGGGG
+'''
+
+# Stone brick path — cobblestones with mortar gaps
+# Blossom Tales style — irregular stone shapes, visible mortar lines
+[tile.path_stone]
+palette    = "overworld"
+size       = "16x16"
+edge_class = { n = "path", e = "path", s = "path", w = "path" }
+tags       = ["floor", "path", "stone", "exterior"]
+weight     = 3.0
+semantic   = { affordance = "walkable", collision = "none", tags = { biome = "overworld" } }
+grid = '''
+BWW~BWWW~BWW~BWW
+BWWWBWWWWBWWWBWW
+BWB~BBWB~BBW~BBW
+~~~~~~~~~~~~~~~~
+WWBB~BWW~BWWW~BW
+WWBBWBWWWBWWWWBW
+WBBB~BBW~BBWB~BB
+~~~~~~~~~~~~~~~~
+BWWW~BWW~BWW~BWW
+BWWWWBWWWBWWWBWW
+BBWB~BBW~BBW~BBW
+~~~~~~~~~~~~~~~~
+WBW~BWWW~BWWW~BW
+WBWWBWWWWBWWWWBW
+WBB~BBWB~BBWB~BB
+~~~~~~~~~~~~~~~~
+'''
+
+# ===================================================================
+# WALL TILES — obstacle terrain
+# ===================================================================
+
+# Dense tree canopy — solid green mass (walls/obstacles)
+[tile.tree_canopy]
+palette    = "overworld"
+size       = "16x16"
+edge_class = { n = "canopy", e = "canopy", s = "canopy", w = "canopy" }
+tags       = ["wall", "tree", "canopy"]
+weight     = 0.5
+semantic   = { affordance = "obstacle", collision = "full", tags = { biome = "overworld" } }
+grid = '''
+gGLGgGLGgGLGgGLG
+GLgGGLgGGLgGGLgG
+LGgGLGgGLGgGLGgG
+GgGLGgGLGgGLGgGL
+gGLGgGLGgGLGgGLG
+GLgGGLgGGLgGGLgG
+LGgGLGgGLGgGLGgG
+GgGLGgGLGgGLGgGL
+gGLGgGLGgGLGgGLG
+GLgGGLgGGLgGGLgG
+LGgGLGgGLGgGLGgG
+GgGLGgGLGgGLGgGL
+gGLGgGLGgGLGgGLG
+GLgGGLgGGLgGGLgG
+LGgGLGgGLGgGLGgG
+GgGLGgGLGgGLGgGL
+'''
+
+# ===================================================================
+# TRANSITION TILES — edge classes for WFC tiling
+# ===================================================================
+
+# Tree canopy to grass — south edge fades from canopy to grass
+[tile.canopy_grass_s]
+palette     = "overworld"
+size        = "16x16"
+auto_rotate = "4way"
+edge_class  = { n = "canopy", e = "canopy", s = "grass", w = "canopy" }
+tags        = ["transition", "tree_edge"]
+weight      = 2.0
+semantic    = { affordance = "obstacle", collision = "full", tags = { biome = "overworld" } }
+grid = '''
+gGLGgGLGgGLGgGLG
+GLgGGLgGGLgGGLgG
+LGgGLGgGLGgGLGgG
+GgGLGgGLGgGLGgGL
+gGLGgGLGgGLGgGLG
+GLgGGLgGGLgGGLgG
+LGgGLGgGLGgGLGgG
+GgGLGgGLGgGLGgGL
+gGLGgGLGgGLGgGLG
+GLgGGLgGLGgGGLgG
+LGgGLGgG+GgGLGgG
+GgGLGg+#+#+GLGgG
+gGLG#+#s#+#GGGGG
+GL#+#s##s#+#GGGG
++#s##s##s##+GGGG
+#s##s+#s#+#GGGGG
+'''
+
+# Corner: canopy to grass — SE corner opens
+[tile.canopy_corner_se]
+palette     = "overworld"
+size        = "16x16"
+auto_rotate = "4way"
+edge_class  = { n = "canopy", e = "grass", s = "grass", w = "canopy" }
+tags        = ["transition", "corner"]
+weight      = 1.5
+semantic    = { affordance = "obstacle", collision = "full", tags = { biome = "overworld" } }
+grid = '''
+gGLGgGLGgGLGgGLG
+GLgGGLgGGLgGGLgG
+LGgGLGgGLGgGLGgG
+GgGLGgGLGgGLGgGL
+gGLGgGLGgGLGgGLG
+GLgGGLgGGLgGGLgG
+LGgGLGgGLGgGLGgG
+GgGLGgGLGgGLGgGL
+gGLGgGLGgGLGGGGG
+GLgGGLgGGLGGGGGG
+LGgGLGgGLGGGGGGG
+GgGLGgGLGGGGgGGG
+gGLGgGLGGGGGGGGG
+GLgGGLGGGGGGgGGG
+LGgGLGGGGGGGGGGG
+GgGLGGGGGGGGGGGG
+'''
+
+# Grass to path — south edge transitions from grass to stone
+[tile.grass_path_s]
+palette     = "overworld"
+size        = "16x16"
+auto_rotate = "4way"
+edge_class  = { n = "grass", e = "grass", s = "path", w = "grass" }
+tags        = ["transition", "path_edge"]
+weight      = 2.0
+semantic    = { affordance = "walkable", collision = "none", tags = { biome = "overworld" } }
+grid = '''
+GGGGGgGGGGGGGGGG
+GGGGGGGGGGGGGgGG
+GGgGGGGGGGLGGGGG
+GGGGGGGGGGgGGGGG
+GGGGGLGGGGGGGGgG
+GGGGGGGGGGGGGGgG
+GLGGGGGGgGGGGGGG
+GgGGGGGGGGGGGgGG
+Gg+G+G+G+G+GGGGG
+G+h+h+h+h+h+GGGG
++h#+h#+h#+h#+GGG
+h#s#h#s#h#s#h+GG
+#s~Bs#s~Bs#s~B+G
+s~BWBs~BWBs~BWB+
+~BWB~BWB~BWB~BWB
+BWB~BWB~BWB~BWB~
+'''
+
+# Corner: grass to path — SE corner opens to stone
+[tile.grass_path_corner_se]
+palette     = "overworld"
+size        = "16x16"
+auto_rotate = "4way"
+edge_class  = { n = "grass", e = "path", s = "path", w = "grass" }
+tags        = ["transition", "corner"]
+weight      = 1.5
+semantic    = { affordance = "walkable", collision = "none", tags = { biome = "overworld" } }
+grid = '''
+GGGGGgGGGGGGGGGG
+GGGGGGGGGGGGGgGG
+GGgGGGGGGGLGGGGG
+GGGGGGGGGGgGGGGG
+GGGGGLGGGGGGGGgG
+GGGGGGGGGGGGGGgG
+GLGGGGGGgGGGGG+G
+GgGGGGGGGGGGG+h+
+GgGGGGGGGGGG+h#s
+GGGGGGGGGGG+h#s~
+GGGGGgGGGG+h#s~B
+GGGGGGGGG+#s~BWB
+GGgGGGGGG+s~BWB~
+GGGGGGGG+s~BWB~B
+GGGGGGG+~BWB~BWB
+GGGGGG+~BWB~BWB~
+'''
+
+# Inner corner: grass to path — SE inner corner (concave)
+[tile.grass_path_inner_se]
+palette     = "overworld"
+size        = "16x16"
+auto_rotate = "4way"
+edge_class  = { n = "path", e = "path", s = "path", w = "path" }
+tags        = ["transition", "path_inner"]
+weight      = 1.0
+semantic    = { affordance = "walkable", collision = "none", tags = { biome = "overworld" } }
+grid = '''
+BWW~BWWW~BWW~BWW
+BWWWBWWWWBWWWBWW
+BWB~BBWB~BBW~BBW
+~~~~~~~~~~~~~~~~
+WWBB~BWW~BWWW~BW
+WWBBWBWWWBWWWWBW
+WBBB~BBW~BBWB~BB
+~~~~~~~~~~~~~~~~
+BWWW~BWW~BWW~BWW
+BWWWWBWWWBWWWBWW
+BBWB~BBW~BBW~BBW
+~~~~~~~~~~~~~+G+
+WBW~BWWW~BW+G+GG
+WBWWBWWWWB+GGGGG
+WBB~BBWB+GGGGgGG
+~~~~~~~~~GGGGGGG
+'''
+
+# Earth/dirt — exposed brown ground (transition between biomes)
+[tile.earth]
+palette    = "overworld"
+size       = "16x16"
+edge_class = { n = "earth", e = "earth", s = "earth", w = "earth" }
+tags       = ["floor", "earth", "dirt"]
+weight     = 1.0
+semantic   = { affordance = "walkable", collision = "none", tags = { biome = "overworld" } }
+grid = '''
+#+#s+#h+s#+#s+#h
+#s+##s+#s#+##s+#
+s#+#s#+##s#+#s#+
++##s#+#s+##s#+#s
+#+#s+#h+s#+#s+#h
+#s+##s+#s#+##s+#
+s#+#s#+##s#+#s#+
++##s#+#s+##s#+#s
+#+#s+#h+s#+#s+#h
+#s+##s+#s#+##s+#
+s#+#s#+##s#+#s#+
++##s#+#s+##s#+#s
+#+#s+#h+s#+#s+#h
+#s+##s+#s#+##s+#
+s#+#s#+##s#+#s#+
++##s#+#s+##s#+#s
+'''
+
+# Canopy to grass with earth rim — tree base visible
+[tile.canopy_earth_s]
+palette     = "overworld"
+size        = "16x16"
+auto_rotate = "4way"
+edge_class  = { n = "canopy", e = "canopy", s = "grass", w = "canopy" }
+tags        = ["transition", "tree_base"]
+weight      = 1.5
+semantic    = { affordance = "obstacle", collision = "full", tags = { biome = "overworld" } }
+grid = '''
+gGLGgGLGgGLGgGLG
+GLgGGLgGGLgGGLgG
+LGgGLGgGLGgGLGgG
+GgGLGgGLGgGLGgGL
+gGLGgGLGgGLGgGLG
+GLgGGLgGGLgGGLgG
+LGgGLGgGLGgGLGgG
+GgGLGgGLGgGLGgGL
+gGLGgGLGgGLGgGLG
+GLgGGGGGGGGGGLgG
+LGg++#+++#++GGGG
+Gg+#s#+#+#s#+GGG
+G+#s##s+#s##s+GG
++#s##s##s##s##+G
+#s##s+#s#+#s#GGG
+s#+#GGGGGGg+GGGG
+'''
+
+# ===================================================================
+# SPECIAL TILES
+# ===================================================================
+
+# Cave entrance — dark hole in the ground
+[tile.cave_entrance]
+palette    = "overworld"
+size       = "16x16"
+edge_class = { n = "grass", e = "grass", s = "grass", w = "grass" }
+tags       = ["special", "cave", "entrance"]
+weight     = 0.3
+semantic   = { affordance = "walkable", collision = "none", tags = { biome = "overworld" } }
+grid = '''
+gGgGGgGgLgGgGgGg
+GgGg++#++gGGgGgG
+gGg+#s##s#+gGggg
+Gg+#skkks##+LgGG
+g+#skkkkkks#+gGg
+G+#skkkkkkks#+GG
+g+#skkkkkkkks+Gg
+G+#skkkkkkks#+GG
+g+#skkkkkks#+gGg
+Gg+#skkks##+GgGG
+gGg+#s##s#+gGgGg
+GgGg++#+++gGgGgG
+gGgGgGgGgGgGgGgg
+GgGgGgGgGgGgGgGG
+gGgGgGgGLgGgGgGg
+GgGgGgGgGgGgGgGg
+'''
+
+# Water tile (small pond)
+[tile.water]
+palette    = "overworld"
+size       = "16x16"
+edge_class = { n = "water", e = "water", s = "water", w = "water" }
+tags       = ["floor", "water"]
+weight     = 0.5
+semantic   = { affordance = "obstacle", collision = "full", tags = { biome = "overworld" } }
+grid = '''
+~B~W~B~W~B~W~B~W
+B~WB~WBW~BWB~WBW
+~WB~~WB~~WB~~WB~
+WB~WBW~BWB~WBW~B
+~B~W~B~W~B~W~B~W
+B~WB~WBW~BWB~WBW
+~WB~~WB~~WB~~WB~
+WB~WBW~BWB~WBW~B
+~B~W~B~W~B~W~B~W
+B~WB~WBW~BWB~WBW
+~WB~~WB~~WB~~WB~
+WB~WBW~BWB~WBW~B
+~B~W~B~W~B~W~B~W
+B~WB~WBW~BWB~WBW
+~WB~~WB~~WB~~WB~
+WB~WBW~BWB~WBW~B
+'''
+
+# Grass to water — south edge transitions to water
+[tile.grass_water_s]
+palette     = "overworld"
+size        = "16x16"
+auto_rotate = "4way"
+edge_class  = { n = "grass", e = "grass", s = "water", w = "grass" }
+tags        = ["transition", "water_edge"]
+weight      = 1.5
+semantic    = { affordance = "obstacle", collision = "full", tags = { biome = "overworld" } }
+grid = '''
+GGGGGgGGGGGGGGGG
+GGGGGGGGGGGGGgGG
+GGgGGGGGGGLGGGGG
+GGGGGGGGGGgGGGGG
+GGGGGLGGGGGGGGgG
+GGGGGGGGGGGGGGgG
+GLGGGGGGgGGGGGGG
+GgGGGGGGGGGGGgGG
+Gg+G+G+G+G+GGGGG
+G+#+#+#+#+#+GGGG
++#+#s#+#s#+#s+GG
++#s~#+#s~#+#s~+G
+#s~B~#+s~B~#+s~B
+s~BWB~s~BWB~s~BW
+~BWB~BWB~BWB~BWB
+BWB~BWB~BWB~BWB~
+'''
+
+# ===================================================================
+# WFC RULES
+# ===================================================================
+
+[wfc_rules]
+
+# Canopy tiles stay together but can touch grass edges
+[wfc_rules.semantic]
+requires = []
+forbids  = [
+    # Canopy can't directly touch path or water
+    { a = "tree_canopy", b = "path_stone" },
+    { a = "tree_canopy", b = "water" },
+    # Cave only in grass areas
+    { a = "cave_entrance", b = "path_stone" },
+    { a = "cave_entrance", b = "water" },
+]
+
+[atlas]
+padding = 1
+format  = "png"
+output  = "adventure_atlas.png"
