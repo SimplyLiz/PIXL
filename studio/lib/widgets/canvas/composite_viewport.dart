@@ -22,6 +22,7 @@ class _CompositeViewportState extends ConsumerState<CompositeViewport> {
   double _zoom = 4.0;
   bool _spaceHeld = false;
   double _pinchAccum = 0.0;
+  double _lastPanZoomScale = 1.0;
 
   @override
   void initState() {
@@ -382,18 +383,20 @@ class _CompositeViewportState extends ConsumerState<CompositeViewport> {
                   }
                 }
               },
+              onPointerPanZoomStart: (_) => _lastPanZoomScale = 1.0,
               onPointerPanZoomUpdate: (event) {
                 setState(() {
                   _panOffset += event.panDelta;
                 });
-                if (event.scale != 1.0) {
-                  _pinchAccum += (event.scale - 1.0);
-                  if (_pinchAccum.abs() > 0.1) {
-                    setState(() {
-                      _zoom = _pinchAccum > 0
-                          ? (_zoom * 1.2).clamp(1.0, 32.0)
-                          : (_zoom / 1.2).clamp(1.0, 32.0);
-                    });
+                final scaleDelta = event.scale - _lastPanZoomScale;
+                _lastPanZoomScale = event.scale;
+                if (scaleDelta != 0.0) {
+                  _pinchAccum += scaleDelta;
+                  if (_pinchAccum > 0.3) {
+                    setState(() => _zoom = (_zoom * 1.2).clamp(1.0, 32.0));
+                    _pinchAccum = 0.0;
+                  } else if (_pinchAccum < -0.3) {
+                    setState(() => _zoom = (_zoom / 1.2).clamp(1.0, 32.0));
                     _pinchAccum = 0.0;
                   }
                 }

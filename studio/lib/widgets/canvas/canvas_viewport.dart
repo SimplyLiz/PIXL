@@ -37,6 +37,7 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
   (int, int)? _selectStart;
   // Pinch-to-zoom accumulator
   double _pinchAccum = 0.0;
+  double _lastPanZoomScale = 1.0;
 
   (int, int)? _pixelFromLocal(Offset localPos, CanvasState cs) {
     final ps = cs.zoomLevel;
@@ -406,18 +407,21 @@ class _CanvasViewportState extends ConsumerState<CanvasViewport> {
           },
           child: Listener(
             onPointerSignal: (event) => _handleScroll(event, cs),
+            onPointerPanZoomStart: (_) => _lastPanZoomScale = 1.0,
             onPointerPanZoomUpdate: (event) {
               // Trackpad two-finger pan
               setState(() {
                 _panOffset += event.panDelta;
               });
-              // Trackpad pinch-to-zoom
-              if (event.scale != 1.0) {
-                _pinchAccum += (event.scale - 1.0);
-                if (_pinchAccum > 0.1) {
+              // Trackpad pinch-to-zoom (use delta from last event)
+              final scaleDelta = event.scale - _lastPanZoomScale;
+              _lastPanZoomScale = event.scale;
+              if (scaleDelta != 0.0) {
+                _pinchAccum += scaleDelta;
+                if (_pinchAccum > 0.3) {
                   ref.read(canvasProvider.notifier).zoomIn();
                   _pinchAccum = 0.0;
-                } else if (_pinchAccum < -0.1) {
+                } else if (_pinchAccum < -0.3) {
                   ref.read(canvasProvider.notifier).zoomOut();
                   _pinchAccum = 0.0;
                 }

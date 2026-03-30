@@ -29,6 +29,7 @@ class _TilemapViewportState extends ConsumerState<TilemapViewport>
   Offset _panOffset = Offset.zero;
   Offset _panStart = Offset.zero;
   double _pinchAccum = 0.0;
+  double _lastPanZoomScale = 1.0;
 
   // Screen transition animation
   AnimationController? _transitionController;
@@ -332,16 +333,19 @@ class _TilemapViewportState extends ConsumerState<TilemapViewport>
           },
           child: Listener(
             onPointerSignal: _handleScroll,
+            onPointerPanZoomStart: (_) => _lastPanZoomScale = 1.0,
             onPointerPanZoomUpdate: (event) {
               setState(() {
                 _panOffset += event.panDelta;
               });
-              if (event.scale != 1.0) {
-                _pinchAccum += (event.scale - 1.0);
-                if (_pinchAccum > 0.1) {
+              final scaleDelta = event.scale - _lastPanZoomScale;
+              _lastPanZoomScale = event.scale;
+              if (scaleDelta != 0.0) {
+                _pinchAccum += scaleDelta;
+                if (_pinchAccum > 0.3) {
                   ref.read(tilemapProvider.notifier).zoomIn();
                   _pinchAccum = 0.0;
-                } else if (_pinchAccum < -0.1) {
+                } else if (_pinchAccum < -0.3) {
                   ref.read(tilemapProvider.notifier).zoomOut();
                   _pinchAccum = 0.0;
                 }

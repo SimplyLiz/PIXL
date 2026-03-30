@@ -27,6 +27,7 @@ class _BackdropViewportState extends ConsumerState<BackdropViewport> {
   Timer? _animTimer;
 
   double _pinchAccum = 0.0;
+  double _lastPanZoomScale = 1.0;
 
   // Zone dragging state
   int? _draggingZone;
@@ -248,20 +249,20 @@ class _BackdropViewportState extends ConsumerState<BackdropViewport> {
                 }
               }
             },
+            onPointerPanZoomStart: (_) => _lastPanZoomScale = 1.0,
             onPointerPanZoomUpdate: (event) {
               setState(() {
                 _panOffset += event.panDelta;
               });
-              if (event.scale != 1.0) {
-                _pinchAccum += (event.scale - 1.0);
-                if (_pinchAccum.abs() > 0.1) {
-                  setState(() {
-                    if (_pinchAccum > 0) {
-                      _zoom = (_zoom * 1.2).clamp(0.5, 16.0);
-                    } else {
-                      _zoom = (_zoom / 1.2).clamp(0.5, 16.0);
-                    }
-                  });
+              final scaleDelta = event.scale - _lastPanZoomScale;
+              _lastPanZoomScale = event.scale;
+              if (scaleDelta != 0.0) {
+                _pinchAccum += scaleDelta;
+                if (_pinchAccum > 0.3) {
+                  setState(() => _zoom = (_zoom * 1.2).clamp(0.5, 16.0));
+                  _pinchAccum = 0.0;
+                } else if (_pinchAccum < -0.3) {
+                  setState(() => _zoom = (_zoom / 1.2).clamp(0.5, 16.0));
                   _pinchAccum = 0.0;
                 }
               }
