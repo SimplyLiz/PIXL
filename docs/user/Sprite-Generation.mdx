@@ -1,0 +1,90 @@
+# Sprite Generation
+
+Describe what you need and PIXL draws it, or import any AI-generated pixel art image and reconstruct it as a clean, game-ready tile.
+
+## The pipeline
+
+<PipelineDiagram />
+
+Every step is automatic. You provide a text prompt and get back a palette-constrained PAX tile.
+
+## From text to pixel art
+
+Tell PIXL what you want:
+
+```bash
+pixl generate-sprite tileset.pax \
+  --prompt "wizard with purple hat and staff" \
+  --name wizard \
+  --out wizard.png
+```
+
+<Callout type="info">
+  Requires the `OPENAI_API_KEY` environment variable. The `.pax` file provides your palette — create one with `pixl new dark_fantasy -o tileset.pax` if you don't have one yet.
+</Callout>
+
+## How each step works
+
+### Pixel grid detection
+
+AI images look like pixel art but are rendered at 1024×1024. Each "art pixel" is actually a 20-40px block. PIXL scans for this repeating grid and finds the real resolution — usually 24-32 pixels.
+
+### Center-sampling
+
+Instead of blurry Lanczos downscaling, PIXL picks the center pixel of each block. No smeared edges, no anti-aliasing artifacts.
+
+### Background removal
+
+AI generators often add glowing halos around sprites, even when asked for transparency. PIXL flood-fills from the image corners to detect and strip these automatically.
+
+### Palette extraction
+
+The dominant colors are pulled from the image using median-cut quantization. The actual darkest pixel (for outlines) and lightest pixel (for highlights) are always preserved — they won't get averaged away.
+
+### Anti-aliasing cleanup
+
+Stray blended pixels between color regions get snapped to their nearest clean neighbor. The result is crisp pixel art, not a soft downscale.
+
+### Outline enforcement
+
+Any boundary pixel that's too light gets darkened. This ensures the sprite has a readable silhouette — the single most important quality rule in pixel art.
+
+## Import your own images
+
+Already have AI-generated pixel art from Midjourney, DALL-E, or Stable Diffusion?
+
+```bash
+pixl convert wizard.png --width 32 --colors 32
+```
+
+PIXL detects the pixel grid, samples cleanly, strips the background, extracts a palette, and outputs a true 32×32 sprite with 32 indexed colors.
+
+## Palette management
+
+### Auto-extracted palette
+
+Every generated sprite comes with a palette in PAX format — copy it into your `.pax` file:
+
+```toml
+[palette.auto]
+"." = "#00000000"
+"#" = "#1a1020ff"
+"a" = "#4a3668ff"
+"b" = "#6a5090ff"
+```
+
+### Remap to your project palette
+
+When you're ready to integrate, remap auto-extracted colors to your project palette. PIXL uses perceptual color matching (OKLab) to find the closest color for each symbol.
+
+<Callout type="tip">
+  Use auto-palette for maximum fidelity during creation, then remap to your project palette when you're happy with the result.
+</Callout>
+
+## Backed by real pixel art knowledge
+
+PIXL doesn't wing it. It pulls from a built-in [knowledge base](./Knowledge-Base) of pixel art techniques — dithering patterns, shading rules, palette theory, retro hardware constraints. The AI knows that 16×16 characters need strong silhouettes and that outlines should be the darkest palette color.
+
+## Quality checks included
+
+Every generated sprite is automatically analyzed. See [Art Direction](./Art-Direction) for the full quality system.

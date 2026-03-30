@@ -1,0 +1,134 @@
+# Backdrops
+
+Backdrops are large animated background scenes — parallax layers, waterfalls, sky gradients, and retro screen effects. Built from tiles, animated with zones.
+
+## What's a backdrop?
+
+A backdrop is a multi-layer scene composed from small tiles, with animation zones that add movement. Think: the scrolling background in a platformer, or the animated waterfall behind a boss fight.
+
+```toml
+[backdrop.cave_scene]
+palette      = "cave"
+palette_ext  = "cave_ext"
+size         = "256x160"
+tile_size    = "16x16"
+tilemap = '''
+sky_a   sky_b   sky_a   sky_b
+cliff_l rock_a  rock_b  cliff_r
+water_a water_b water_a water_b
+'''
+```
+
+## Layers
+
+Each backdrop can have multiple layers with independent parallax scrolling:
+
+```toml
+[[backdrop.cave_scene.layer]]
+name          = "far_mountains"
+scroll_factor = 0.3          # moves at 30% of camera speed
+opacity       = 0.6
+blend         = "normal"
+```
+
+<FeatureGrid>
+  <Feature title="Parallax scrolling">
+    Each layer moves at a different speed. Far layers scroll slowly, near layers fast — creates depth.
+  </Feature>
+  <Feature title="Blend modes">
+    Normal, additive, multiply, screen — combine layers for atmospheric effects like fog or glow.
+  </Feature>
+  <Feature title="Opacity">
+    Per-layer transparency from 0.0 (invisible) to 1.0 (opaque). Fade layers in and out.
+  </Feature>
+  <Feature title="GBA fade effects">
+    BLDY-style fade to black or white. Simulate screen transitions and dramatic lighting.
+  </Feature>
+</FeatureGrid>
+
+## Animation zones
+
+Rectangular regions with procedural effects — no stored frames, the engine generates animation at runtime:
+
+<FeatureGrid>
+  <Feature title="Cycle">
+    Rotate palette colors uniformly. Classic water shimmer.
+  </Feature>
+  <Feature title="Wave">
+    Cycle with per-row phase offset. Water reflections with horizontal ripple.
+  </Feature>
+  <Feature title="Flicker">
+    Random subset of cycle pixels active per frame. Fire and torches.
+  </Feature>
+  <Feature title="Scroll down">
+    Shift pixels downward with wrap. Waterfalls and rain.
+  </Feature>
+  <Feature title="H-scroll sine">
+    Per-scanline horizontal sine distortion. Heat haze and dream sequences. Inspired by SNES HDMA.
+  </Feature>
+  <Feature title="V-scroll sine">
+    Per-column vertical sine distortion. Waterfall columns and wavy grass. Inspired by Genesis VSRAM.
+  </Feature>
+  <Feature title="Color gradient">
+    Per-pixel tint interpolation across the zone. Atmospheric perspective and fog.
+  </Feature>
+  <Feature title="Palette ramp">
+    Per-scanline palette replacement. Sky gradients from horizon to zenith. Inspired by Konami raster tricks.
+  </Feature>
+  <Feature title="Mosaic">
+    Pixelation with independent X/Y block sizes. GBA MOSAIC register effect.
+  </Feature>
+  <Feature title="Window">
+    Layer visibility control within a rectangle. GBA WIN0/WIN1 — reveal or hide layers in a region.
+  </Feature>
+</FeatureGrid>
+
+## Extended palettes
+
+Backdrops often need more than 16 colors. Use `palette_ext` for up to 48 colors with two-character symbols:
+
+```toml
+[palette_ext.cave_ext]
+base = "cave"
+"2a" = "#1a3a5cff"
+"2b" = "#2a5a8cff"
+"2c" = "#4a8abcff"
+```
+
+<Callout type="info">
+  The first 16 most-used colors get single-character symbols (fast). Additional colors use two-character symbols in the extended palette. The engine handles the mapping automatically.
+</Callout>
+
+## Import from images
+
+Convert any image into a PAX backdrop:
+
+```bash
+pixl backdrop-import scene.png \
+  --name cave_scene \
+  --colors 32 \
+  --tile-size 16 \
+  -o backdrop.pax
+```
+
+PIXL slices the image into tiles, deduplicates identical tiles (via hash), builds the palette, and generates the full PAX source — tilemap, palette, and all.
+
+## Rendering
+
+```bash
+# Static PNG
+pixl backdrop-render backdrop.pax --name cave_scene -o proof.png --scale 4
+
+# Animated GIF with zone effects
+pixl backdrop-render backdrop.pax --name cave_scene -o animated.gif --frames 8 --scale 4
+```
+
+## Scroll-lock regions
+
+Pin a region of the backdrop to the screen (doesn't scroll with the camera). Use for HUD overlays and fixed UI elements:
+
+```toml
+[[backdrop.cave_scene.layer]]
+name        = "hud"
+scroll_lock = { x = 0, y = 0, w = 256, h = 24 }
+```

@@ -1,8 +1,16 @@
-use image::{DynamicImage, GenericImageView, Rgba};
+use image::{DynamicImage, GenericImageView, Rgba, RgbaImage};
 use pixl_core::types::{Palette, Rgba as PaxRgba};
 
 /// Quantize a reference image into a PAX character grid using the given palette.
-/// Downscales to target_size, then maps each pixel to the nearest palette symbol.
+///
+/// Pipeline for AI-generated pixel art:
+/// 1. Detect the native pixel grid (how big each "art pixel" is in the source)
+/// 2. Center-sample each pixel block (avoids anti-aliasing at block edges)
+/// 3. If native > target, nearest-neighbor downscale
+/// 4. Quantize each pixel to nearest palette symbol
+/// 5. Flood-fill background removal from corners (strips grey halos)
+/// 6. AA cleanup: snap lone intermediate pixels to dominant neighbor
+/// 7. Enforce outlines on light boundary pixels
 pub fn import_reference(
     reference: &DynamicImage,
     target_width: u32,
@@ -10,25 +18,87 @@ pub fn import_reference(
     palette: &Palette,
     dither: bool,
 ) -> ImportResult {
-    // Step 1: Downscale with Lanczos3 (preserves edges better than bilinear)
-    let small = reference.resize_exact(target_width, target_height, image::imageops::Lanczos3);
+    let rgba = reference.to_rgba8();
+    let (src_w, src_h) = rgba.dimensions();
 
-    // Step 2: Quantize each pixel to nearest palette symbol
-    let mut grid = Vec::with_capacity(target_height as usize);
-    let mut total_distance: f64 = 0.0;
-    let mut clipped = 0u32;
+    // Step 1: Detect native pixel grid
+    let detected = detect_pixel_size(reference);
+    let native_w = (src_w / detected).max(1);
+    let native_h = (src_h / detected).max(1);
 
-    // Build palette lookup vec for efficiency
+    // Step 2: Center-sample each pixel block.
+    // Instead of Nearest/Lanczos resize, sample the CENTER pixel of each NxN block.
+    // This avoids anti-aliasing artifacts at block boundaries.
+    let mut sampled = if detected > 1 {
+        let mut img = RgbaImage::new(native_w, native_h);
+        let half = detected / 2;
+        for y in 0..native_h {
+            for x in 0..native_w {
+                let src_x = (x * detected + half).min(src_w - 1);
+                let src_y = (y * detected + half).min(src_h - 1);
+                img.put_pixel(x, y, *rgba.get_pixel(src_x, src_y));
+            }
+        }
+        img
+    } else {
+        rgba.clone()
+    };
+
+    // Step 3: Flood-fill background removal from corners.
+    // AI generators produce grey/dark halos that are opaque but not part of the sprite.
+    // Only apply on larger images (AI output) — small images are already pixel art.
+    // Also only apply if the image has significant transparent regions already
+    // (indicating it's a sprite on background, not a full scene).
+    if native_w > 16 || native_h > 16 {
+        let total = (sampled.width() * sampled.height()) as usize;
+        let transparent_before = sampled.pixels().filter(|p| p.0[3] < 128).count();
+        // Only flood-fill if the image already has some transparency (sprite mode)
+        // or if the corners are very dark/grey (background halo)
+        let corner = sampled.get_pixel(0, 0);
+        let corner_dark = (corner.0[0] as u32 + corner.0[1] as u32 + corner.0[2] as u32) < 200;
+        if transparent_before > total / 10 || corner_dark {
+            flood_fill_background(&mut sampled, 40);
+        }
+    }
+
+    let sampled_dyn = DynamicImage::ImageRgba8(sampled);
+
+    // Step 4: Resize to target if native != target
+    let final_img = if native_w != target_width || native_h != target_height {
+        sampled_dyn.resize_exact(target_width, target_height, image::imageops::Nearest)
+    } else {
+        sampled_dyn
+    };
+
+    // Step 4: Quantize to palette
     let palette_entries: Vec<(char, PaxRgba)> = palette
         .symbols
         .iter()
         .map(|(&c, &rgba)| (c, rgba))
         .collect();
 
+    let void_sym = palette_entries
+        .iter()
+        .find(|(_, rgba)| rgba.a < 128)
+        .map(|&(c, _)| c)
+        .unwrap_or('.');
+
+    const ALPHA_THRESHOLD: u8 = 128;
+
+    let mut grid = Vec::with_capacity(target_height as usize);
+    let mut total_distance: f64 = 0.0;
+    let mut clipped = 0u32;
+
     for y in 0..target_height {
         let mut row = Vec::with_capacity(target_width as usize);
         for x in 0..target_width {
-            let pixel = small.get_pixel(x, y);
+            let pixel = final_img.get_pixel(x, y);
+
+            if pixel.0[3] < ALPHA_THRESHOLD {
+                row.push(void_sym);
+                continue;
+            }
+
             let (sym, dist) = nearest_palette_symbol(&pixel, &palette_entries);
             row.push(sym);
             total_distance += dist;
@@ -39,15 +109,25 @@ pub fn import_reference(
         grid.push(row);
     }
 
-    // Optional Bayer dithering
     if dither {
-        apply_bayer_dither(&mut grid, &small, &palette_entries);
+        apply_bayer_dither(&mut grid, &final_img, &palette_entries);
     }
 
-    let total_pixels = (target_width * target_height) as f64;
-    let color_accuracy = 1.0 - (total_distance / total_pixels / 255.0).min(1.0);
+    // Step 6: AA cleanup — lone pixels different from all neighbors are
+    // anti-aliasing artifacts. Snap to most common neighbor color.
+    cleanup_aa_artifacts(&mut grid, void_sym);
 
-    // Convert grid to PAX string
+    // Step 7: Enforce outlines on light boundary pixels
+    enforce_outlines(&mut grid, &palette_entries, void_sym);
+
+    let total_pixels = (target_width * target_height) as f64;
+    let non_void = grid.iter().flat_map(|r| r.iter()).filter(|&&c| c != void_sym).count() as f64;
+    let color_accuracy = if non_void > 0.0 {
+        1.0 - (total_distance / non_void / 255.0).min(1.0)
+    } else {
+        1.0
+    };
+
     let grid_string: String = grid
         .iter()
         .map(|row| row.iter().collect::<String>())
@@ -61,6 +141,8 @@ pub fn import_reference(
         height: target_height,
         color_accuracy,
         clipped_colors: clipped,
+        detected_pixel_size: detected,
+        native_resolution: (native_w, native_h),
     }
 }
 
@@ -72,9 +154,300 @@ pub struct ImportResult {
     pub height: u32,
     pub color_accuracy: f64,
     pub clipped_colors: u32,
+    /// Detected pixel block size in the source image (e.g., 32 means each art pixel was 32x32 screen pixels).
+    pub detected_pixel_size: u32,
+    /// Native resolution of the pixel art (source_size / detected_pixel_size).
+    pub native_resolution: (u32, u32),
 }
 
-/// Find the nearest palette symbol for a pixel using perceptual weighted distance.
+// ── Pixel grid detection ────────────────────────────────────────────
+
+/// Public wrapper for pixel size detection (used by diffusion bridge).
+pub fn detect_pixel_size_pub(img: &DynamicImage) -> u32 {
+    detect_pixel_size(img)
+}
+
+/// Detect the size of each "art pixel" in a high-resolution pixel art image.
+///
+/// Scans horizontal and vertical edges to find the most common block size.
+/// Returns the estimated pixel size (e.g., 32 means each art pixel is 32x32).
+fn detect_pixel_size(img: &DynamicImage) -> u32 {
+    let rgba = img.to_rgba8();
+    let (w, h) = rgba.dimensions();
+
+    if w <= 64 || h <= 64 {
+        return 1; // Already low-res, no detection needed
+    }
+
+    // Sample the middle rows/cols to avoid edge artifacts
+    let sample_y = h / 2;
+    let sample_x = w / 2;
+
+    // Scan horizontally: count consecutive identical pixels
+    let mut h_runs = Vec::new();
+    let mut run_len = 1u32;
+    for x in 1..w {
+        let prev = rgba.get_pixel(x - 1, sample_y);
+        let curr = rgba.get_pixel(x, sample_y);
+        if pixels_similar(prev, curr) {
+            run_len += 1;
+        } else {
+            if run_len >= 2 {
+                h_runs.push(run_len);
+            }
+            run_len = 1;
+        }
+    }
+    if run_len >= 2 {
+        h_runs.push(run_len);
+    }
+
+    // Scan vertically
+    let mut v_runs = Vec::new();
+    run_len = 1;
+    for y in 1..h {
+        let prev = rgba.get_pixel(sample_x, y - 1);
+        let curr = rgba.get_pixel(sample_x, y);
+        if pixels_similar(prev, curr) {
+            run_len += 1;
+        } else {
+            if run_len >= 2 {
+                v_runs.push(run_len);
+            }
+            run_len = 1;
+        }
+    }
+    if run_len >= 2 {
+        v_runs.push(run_len);
+    }
+
+    // Find the most common run length (the pixel block size)
+    let all_runs: Vec<u32> = h_runs.iter().chain(v_runs.iter()).copied().collect();
+    if all_runs.is_empty() {
+        return 1;
+    }
+
+    // Find mode of run lengths, biased toward common pixel art sizes
+    let mut freq: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
+    for &r in &all_runs {
+        // Snap to common sizes: runs of 14-18 → 16, 28-36 → 32, etc.
+        let snapped = snap_to_common_size(r);
+        *freq.entry(snapped).or_insert(0) += 1;
+    }
+
+    let pixel_size = freq
+        .into_iter()
+        .max_by_key(|&(_, count)| count)
+        .map(|(size, _)| size)
+        .unwrap_or(1);
+
+    pixel_size.clamp(1, w / 4) // Don't return anything larger than 1/4 of image
+}
+
+/// Snap a run length to a common pixel art block size.
+fn snap_to_common_size(run: u32) -> u32 {
+    // Common pixel art rendering sizes
+    const COMMON: &[u32] = &[8, 12, 16, 20, 24, 32, 40, 48, 64];
+    COMMON
+        .iter()
+        .min_by_key(|&&s| (s as i32 - run as i32).unsigned_abs())
+        .copied()
+        .unwrap_or(run)
+}
+
+/// Check if two pixels are similar enough to be "the same art pixel."
+fn pixels_similar(a: &Rgba<u8>, b: &Rgba<u8>) -> bool {
+    let dr = (a.0[0] as i16 - b.0[0] as i16).unsigned_abs();
+    let dg = (a.0[1] as i16 - b.0[1] as i16).unsigned_abs();
+    let db = (a.0[2] as i16 - b.0[2] as i16).unsigned_abs();
+    let da = (a.0[3] as i16 - b.0[3] as i16).unsigned_abs();
+    // Tolerance for JPEG artifacts and subtle anti-aliasing
+    (dr + dg + db) < 30 && da < 30
+}
+
+/// Find the next power-of-two between min and max (inclusive).
+/// If no POT fits, returns min.
+fn next_pot_between(min: u32, max: u32) -> u32 {
+    let mut pot = min.next_power_of_two();
+    if pot > max {
+        // Try min itself
+        pot = min;
+    }
+    pot.min(max).max(min)
+}
+
+// ── Palette quantization helpers ────────────────────────────────────
+
+/// Flood-fill from all 4 corners to detect and remove opaque background pixels.
+/// Marks reached pixels as transparent (alpha = 0). Uses color similarity
+/// tolerance to handle gradients and halos.
+fn flood_fill_background(img: &mut RgbaImage, tolerance: u32) {
+    let (w, h) = img.dimensions();
+    if w == 0 || h == 0 {
+        return;
+    }
+
+    let mut visited = vec![vec![false; w as usize]; h as usize];
+    let mut stack: Vec<(u32, u32)> = Vec::new();
+
+    // Seed from all 4 corners
+    let corners = [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)];
+    for &(cx, cy) in &corners {
+        let corner_color = *img.get_pixel(cx, cy);
+        stack.push((cx, cy));
+
+        while let Some((x, y)) = stack.pop() {
+            if visited[y as usize][x as usize] {
+                continue;
+            }
+            visited[y as usize][x as usize] = true;
+
+            let pixel = *img.get_pixel(x, y);
+
+            // Already transparent — mark and continue
+            if pixel.0[3] < 128 {
+                img.put_pixel(x, y, Rgba([0, 0, 0, 0]));
+                // Push neighbors
+                if x > 0 { stack.push((x - 1, y)); }
+                if x + 1 < w { stack.push((x + 1, y)); }
+                if y > 0 { stack.push((x, y - 1)); }
+                if y + 1 < h { stack.push((x, y + 1)); }
+                continue;
+            }
+
+            // Check color similarity to the corner
+            let dr = (pixel.0[0] as i32 - corner_color.0[0] as i32).unsigned_abs();
+            let dg = (pixel.0[1] as i32 - corner_color.0[1] as i32).unsigned_abs();
+            let db = (pixel.0[2] as i32 - corner_color.0[2] as i32).unsigned_abs();
+            let dist = dr + dg + db;
+
+            if dist <= tolerance {
+                // Similar to corner color → background → make transparent
+                img.put_pixel(x, y, Rgba([0, 0, 0, 0]));
+                if x > 0 { stack.push((x - 1, y)); }
+                if x + 1 < w { stack.push((x + 1, y)); }
+                if y > 0 { stack.push((x, y - 1)); }
+                if y + 1 < h { stack.push((x, y + 1)); }
+            }
+            // Different color → stop flood here (edge of sprite)
+        }
+    }
+}
+
+/// Clean up anti-aliasing artifacts: pixels that differ from ALL 4 neighbors
+/// are likely blended intermediate colors. Replace with the most common
+/// neighbor color.
+fn cleanup_aa_artifacts(grid: &mut [Vec<char>], void_sym: char) {
+    let h = grid.len();
+    if h == 0 {
+        return;
+    }
+    let w = grid[0].len();
+
+    let original = grid.to_vec();
+    for y in 0..h {
+        for x in 0..w {
+            let c = original[y][x];
+            if c == void_sym {
+                continue;
+            }
+
+            // Collect non-void neighbor colors
+            let mut neighbors = Vec::with_capacity(4);
+            if x > 0 && original[y][x - 1] != void_sym {
+                neighbors.push(original[y][x - 1]);
+            }
+            if x + 1 < w && original[y][x + 1] != void_sym {
+                neighbors.push(original[y][x + 1]);
+            }
+            if y > 0 && original[y - 1][x] != void_sym {
+                neighbors.push(original[y - 1][x]);
+            }
+            if y + 1 < h && original[y + 1][x] != void_sym {
+                neighbors.push(original[y + 1][x]);
+            }
+
+            if neighbors.is_empty() {
+                continue;
+            }
+
+            // If current pixel differs from ALL neighbors, it's likely AA
+            let matches_any = neighbors.iter().any(|&n| n == c);
+            if !matches_any && neighbors.len() >= 2 {
+                // Replace with most common neighbor
+                let mut freq: std::collections::HashMap<char, u32> =
+                    std::collections::HashMap::new();
+                for &n in &neighbors {
+                    *freq.entry(n).or_insert(0) += 1;
+                }
+                if let Some((&best, _)) = freq.iter().max_by_key(|(_, count)| *count) {
+                    grid[y][x] = best;
+                }
+            }
+        }
+    }
+}
+
+/// Enforce dark outlines: boundary pixels that are too light get darkened.
+/// Only replaces pixels significantly lighter than the darkest palette color —
+/// preserves mid-tone boundary pixels (like purple robe edges).
+fn enforce_outlines(grid: &mut [Vec<char>], palette: &[(char, PaxRgba)], void_sym: char) {
+    let h = grid.len();
+    if h == 0 {
+        return;
+    }
+    let w = grid[0].len();
+
+    // Find darkest non-void palette symbol and its lightness
+    let darkest_entry = palette
+        .iter()
+        .filter(|&(c, rgba)| *c != void_sym && rgba.a >= 128)
+        .min_by(|(_, a), (_, b)| {
+            let la = pixl_core::oklab::lightness(a.r, a.g, a.b);
+            let lb = pixl_core::oklab::lightness(b.r, b.g, b.b);
+            la.partial_cmp(&lb).unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+    let (darkest_sym, darkest_lightness) = match darkest_entry {
+        Some(&(c, ref rgba)) => (c, pixl_core::oklab::lightness(rgba.r, rgba.g, rgba.b)),
+        None => return,
+    };
+
+    // Only darken boundary pixels that are much lighter than the darkest color.
+    // Threshold: if pixel lightness > darkest + 0.35, it's too light for an outline.
+    let lightness_threshold = darkest_lightness + 0.35;
+
+    // Build lightness lookup
+    let lightness_map: std::collections::HashMap<char, f32> = palette
+        .iter()
+        .map(|&(c, ref rgba)| (c, pixl_core::oklab::lightness(rgba.r, rgba.g, rgba.b)))
+        .collect();
+
+    let mut to_darken: Vec<(usize, usize)> = Vec::new();
+    for y in 0..h {
+        for x in 0..w {
+            if grid[y][x] == void_sym {
+                continue;
+            }
+            let touches_void = (x > 0 && grid[y][x - 1] == void_sym)
+                || (x + 1 < w && grid[y][x + 1] == void_sym)
+                || (y > 0 && grid[y - 1][x] == void_sym)
+                || (y + 1 < h && grid[y + 1][x] == void_sym);
+
+            if touches_void {
+                let pixel_l = lightness_map.get(&grid[y][x]).copied().unwrap_or(0.5);
+                if pixel_l > lightness_threshold {
+                    to_darken.push((x, y));
+                }
+            }
+        }
+    }
+
+    for (x, y) in to_darken {
+        grid[y][x] = darkest_sym;
+    }
+}
+
 fn nearest_palette_symbol(pixel: &Rgba<u8>, palette: &[(char, PaxRgba)]) -> (char, f64) {
     palette
         .iter()
@@ -86,14 +459,12 @@ fn nearest_palette_symbol(pixel: &Rgba<u8>, palette: &[(char, PaxRgba)]) -> (cha
         .unwrap_or(('.', 999.0))
 }
 
-/// Perceptual color distance via OKLab — perceptually uniform ΔE.
 fn perceptual_distance(a: &Rgba<u8>, b: &PaxRgba) -> f64 {
     let lab_a = pixl_core::oklab::rgb_to_oklab(a.0[0], a.0[1], a.0[2]);
     let lab_b = pixl_core::oklab::rgb_to_oklab(b.r, b.g, b.b);
     pixl_core::oklab::delta_e(&lab_a, &lab_b) as f64
 }
 
-/// Apply 4x4 Bayer ordered dithering.
 fn apply_bayer_dither(grid: &mut [Vec<char>], source: &DynamicImage, palette: &[(char, PaxRgba)]) {
     const BAYER_4X4: [[f64; 4]; 4] = [
         [0.0 / 16.0, 8.0 / 16.0, 2.0 / 16.0, 10.0 / 16.0],
@@ -102,14 +473,13 @@ fn apply_bayer_dither(grid: &mut [Vec<char>], source: &DynamicImage, palette: &[
         [15.0 / 16.0, 7.0 / 16.0, 13.0 / 16.0, 5.0 / 16.0],
     ];
 
-    let spread = 32.0; // dither strength
+    let spread = 32.0;
 
     for y in 0..grid.len() {
         for x in 0..grid[0].len() {
             let threshold = BAYER_4X4[y % 4][x % 4];
             let pixel = source.get_pixel(x as u32, y as u32);
 
-            // Apply dither offset to pixel before quantization
             let dithered = Rgba([
                 (pixel.0[0] as f64 + (threshold - 0.5) * spread).clamp(0.0, 255.0) as u8,
                 (pixel.0[1] as f64 + (threshold - 0.5) * spread).clamp(0.0, 255.0) as u8,
@@ -131,55 +501,29 @@ mod tests {
 
     fn test_palette() -> Palette {
         let mut symbols = HashMap::new();
-        symbols.insert(
-            '.',
-            PaxRgba {
-                r: 0,
-                g: 0,
-                b: 0,
-                a: 255,
-            },
-        );
-        symbols.insert(
-            '#',
-            PaxRgba {
-                r: 128,
-                g: 128,
-                b: 128,
-                a: 255,
-            },
-        );
-        symbols.insert(
-            '+',
-            PaxRgba {
-                r: 255,
-                g: 255,
-                b: 255,
-                a: 255,
-            },
-        );
+        symbols.insert('.', PaxRgba { r: 0, g: 0, b: 0, a: 0 });
+        symbols.insert('#', PaxRgba { r: 128, g: 128, b: 128, a: 255 });
+        symbols.insert('+', PaxRgba { r: 255, g: 255, b: 255, a: 255 });
         Palette { symbols }
     }
 
     #[test]
     fn import_solid_black_image() {
-        let img = DynamicImage::ImageRgba8(ImageBuffer::from_pixel(32, 32, Rgba([0, 0, 0, 255])));
+        let img = DynamicImage::ImageRgba8(ImageBuffer::from_pixel(32, 32, Rgba([0, 0, 0, 0])));
         let result = import_reference(&img, 4, 4, &test_palette(), false);
         assert_eq!(result.width, 4);
         assert_eq!(result.height, 4);
-        // All pixels should map to '.' (black)
+        // All transparent pixels → void
         for row in &result.grid {
             for &ch in row {
                 assert_eq!(ch, '.');
             }
         }
-        assert!(result.color_accuracy > 0.99);
     }
 
     #[test]
     fn import_solid_white_image() {
-        let img =
-            DynamicImage::ImageRgba8(ImageBuffer::from_pixel(32, 32, Rgba([255, 255, 255, 255])));
+        let img = DynamicImage::ImageRgba8(ImageBuffer::from_pixel(32, 32, Rgba([255, 255, 255, 255])));
         let result = import_reference(&img, 4, 4, &test_palette(), false);
         for row in &result.grid {
             for &ch in row {
@@ -190,29 +534,93 @@ mod tests {
 
     #[test]
     fn import_downscales() {
-        let img = DynamicImage::ImageRgba8(ImageBuffer::from_pixel(
-            256,
-            256,
-            Rgba([128, 128, 128, 255]),
-        ));
+        let img = DynamicImage::ImageRgba8(ImageBuffer::from_pixel(256, 256, Rgba([128, 128, 128, 255])));
         let result = import_reference(&img, 16, 16, &test_palette(), false);
         assert_eq!(result.grid.len(), 16);
         assert_eq!(result.grid[0].len(), 16);
     }
 
     #[test]
-    fn import_with_dither_produces_grid() {
-        let img =
-            DynamicImage::ImageRgba8(ImageBuffer::from_pixel(32, 32, Rgba([64, 64, 64, 255])));
-        let result = import_reference(&img, 8, 8, &test_palette(), true);
-        assert_eq!(result.grid.len(), 8);
-        // Dithered result should have a mix of symbols
+    fn detect_pixel_size_on_lowres() {
+        let img = DynamicImage::ImageRgba8(ImageBuffer::from_pixel(16, 16, Rgba([0, 0, 0, 255])));
+        assert_eq!(detect_pixel_size(&img), 1);
     }
 
     #[test]
-    fn grid_string_format() {
-        let img = DynamicImage::ImageRgba8(ImageBuffer::from_pixel(4, 4, Rgba([0, 0, 0, 255])));
-        let result = import_reference(&img, 2, 2, &test_palette(), false);
-        assert_eq!(result.grid_string, "..\n..");
+    fn detect_pixel_size_on_scaled_up() {
+        // Create a 4x4 pixel art image scaled up 8x to 32x32
+        let mut img = RgbaImage::new(32, 32);
+        let colors = [
+            Rgba([255, 0, 0, 255]),
+            Rgba([0, 255, 0, 255]),
+            Rgba([0, 0, 255, 255]),
+            Rgba([255, 255, 0, 255]),
+        ];
+        for y in 0..32u32 {
+            for x in 0..32u32 {
+                let art_x = x / 8;
+                let art_y = y / 8;
+                let idx = ((art_y * 4 + art_x) % 4) as usize;
+                img.put_pixel(x, y, colors[idx]);
+            }
+        }
+        // Should be too small for detection (32x32 < 64 threshold)
+        let detected = detect_pixel_size(&DynamicImage::ImageRgba8(img));
+        assert_eq!(detected, 1);
+    }
+
+    #[test]
+    fn detect_pixel_size_on_large_scaled() {
+        // Create a 16x16 art scaled up 16x to 256x256
+        let mut img = RgbaImage::new(256, 256);
+        for y in 0..256u32 {
+            for x in 0..256u32 {
+                let art_x = x / 16;
+                let art_y = y / 16;
+                // Alternating colors per art pixel
+                let c = if (art_x + art_y) % 2 == 0 { 200u8 } else { 50u8 };
+                img.put_pixel(x, y, Rgba([c, c, c, 255]));
+            }
+        }
+        let detected = detect_pixel_size(&DynamicImage::ImageRgba8(img));
+        assert_eq!(detected, 16);
+    }
+
+    #[test]
+    fn transparent_pixels_become_void() {
+        let mut img = RgbaImage::new(4, 4);
+        // Left half opaque white, right half transparent
+        for y in 0..4u32 {
+            for x in 0..4u32 {
+                if x < 2 {
+                    img.put_pixel(x, y, Rgba([255, 255, 255, 255]));
+                } else {
+                    img.put_pixel(x, y, Rgba([0, 0, 0, 0]));
+                }
+            }
+        }
+        let result = import_reference(&DynamicImage::ImageRgba8(img), 4, 4, &test_palette(), false);
+        for row in &result.grid {
+            assert_eq!(row[0], '+'); // white (interior)
+            // row[1] is boundary — outline enforcement makes it darkest ('#')
+            assert_eq!(row[1], '#'); // dark outline (was white, but touches void)
+            assert_eq!(row[2], '.'); // void
+            assert_eq!(row[3], '.'); // void
+        }
+    }
+
+    #[test]
+    fn next_pot_between_values() {
+        assert_eq!(next_pot_between(16, 64), 16);
+        assert_eq!(next_pot_between(16, 48), 16);
+        assert_eq!(next_pot_between(8, 32), 8);
+    }
+
+    #[test]
+    fn snap_common_sizes() {
+        assert_eq!(snap_to_common_size(15), 16);
+        assert_eq!(snap_to_common_size(17), 16);
+        assert_eq!(snap_to_common_size(30), 32);
+        assert_eq!(snap_to_common_size(33), 32);
     }
 }

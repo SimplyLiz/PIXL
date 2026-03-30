@@ -15,6 +15,14 @@ enum CanvasSize {
   final int height;
 
   String get label => '$width×$height';
+
+  /// Find a CanvasSize matching the given dimensions, or null.
+  static CanvasSize? fromDimensions(int width, int height) {
+    for (final s in values) {
+      if (s.width == width && s.height == height) return s;
+    }
+    return null;
+  }
 }
 
 /// Drawing tools available in the editor.
@@ -216,7 +224,7 @@ class CanvasSnapshot {
 // ── Tilemap Mode ──────────────────────────────────────────
 
 /// Editor modes — pixel editing or tilemap painting.
-enum EditorMode { pixel, tilemap, backdrop }
+enum EditorMode { pixel, tilemap, backdrop, composite }
 
 /// Tools available in tilemap mode.
 enum TilemapTool { stamp, eraser, bucket, eyedropper }
@@ -232,6 +240,17 @@ class TilemapState {
     this.zoomLevel = 4.0,
     this.showGrid = true,
     this.tilePixelSize = 16,
+    this.playMode = false,
+    this.playerCol = 1,
+    this.playerRow = 1,
+    this.screenTilesX = 16,
+    this.screenTilesY = 10,
+    this.screenX = 0,
+    this.screenY = 0,
+    this.transitioning = false,
+    this.transitionProgress = 0.0,
+    this.prevScreenX = 0,
+    this.prevScreenY = 0,
   }) : cells = cells ??
            List.generate(gridHeight, (_) => List.filled(gridWidth, null));
 
@@ -243,6 +262,23 @@ class TilemapState {
   final double zoomLevel;
   final bool showGrid;
   final int tilePixelSize; // native tile size in pixels (e.g. 16)
+
+  // Play mode — Zelda-style screen-locked camera
+  final bool playMode;
+  final int playerCol;
+  final int playerRow;
+  final int screenTilesX; // tiles visible per screen horizontally
+  final int screenTilesY; // tiles visible per screen vertically
+  final int screenX; // current screen index (in screen units)
+  final int screenY;
+  final bool transitioning; // true during screen scroll animation
+  final double transitionProgress; // 0.0 → 1.0
+  final int prevScreenX; // screen we're scrolling from
+  final int prevScreenY;
+
+  /// Which screen the player is on (derived from player position).
+  int get playerScreenX => playerCol ~/ screenTilesX;
+  int get playerScreenY => playerRow ~/ screenTilesY;
 
   String? cellAt(int col, int row) {
     if (col < 0 || col >= gridWidth || row < 0 || row >= gridHeight) return null;
@@ -259,6 +295,17 @@ class TilemapState {
     double? zoomLevel,
     bool? showGrid,
     int? tilePixelSize,
+    bool? playMode,
+    int? playerCol,
+    int? playerRow,
+    int? screenTilesX,
+    int? screenTilesY,
+    int? screenX,
+    int? screenY,
+    bool? transitioning,
+    double? transitionProgress,
+    int? prevScreenX,
+    int? prevScreenY,
   }) {
     return TilemapState(
       gridWidth: gridWidth ?? this.gridWidth,
@@ -269,6 +316,17 @@ class TilemapState {
       zoomLevel: zoomLevel ?? this.zoomLevel,
       showGrid: showGrid ?? this.showGrid,
       tilePixelSize: tilePixelSize ?? this.tilePixelSize,
+      playMode: playMode ?? this.playMode,
+      playerCol: playerCol ?? this.playerCol,
+      playerRow: playerRow ?? this.playerRow,
+      screenTilesX: screenTilesX ?? this.screenTilesX,
+      screenTilesY: screenTilesY ?? this.screenTilesY,
+      screenX: screenX ?? this.screenX,
+      screenY: screenY ?? this.screenY,
+      transitioning: transitioning ?? this.transitioning,
+      transitionProgress: transitionProgress ?? this.transitionProgress,
+      prevScreenX: prevScreenX ?? this.prevScreenX,
+      prevScreenY: prevScreenY ?? this.prevScreenY,
     );
   }
 }

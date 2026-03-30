@@ -32,6 +32,9 @@ class PixelCanvasPainter extends CustomPainter {
   static const _checkerDark = Color(0xFF2c2c2c);
   static const _gridColor = Color(0x30ffffff);
   static const _hoverColor = Color(0x60ffffff);
+  static final _hoverPaint = Paint()
+    ..color = _hoverColor
+    ..style = PaintingStyle.fill;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -40,12 +43,13 @@ class PixelCanvasPainter extends CustomPainter {
     final ps = pixelSize;
 
     // Checkerboard background (transparency indicator)
+    final checkerLightPaint = Paint()..color = _checkerLight;
+    final checkerDarkPaint = Paint()..color = _checkerDark;
     for (var y = 0; y < h; y++) {
       for (var x = 0; x < w; x++) {
-        final isLight = (x + y) % 2 == 0;
         canvas.drawRect(
           Rect.fromLTWH(x * ps, y * ps, ps, ps),
-          Paint()..color = isLight ? _checkerLight : _checkerDark,
+          (x + y) % 2 == 0 ? checkerLightPaint : checkerDarkPaint,
         );
       }
     }
@@ -216,9 +220,7 @@ class PixelCanvasPainter extends CustomPainter {
       if (hx >= 0 && hx < w && hy >= 0 && hy < h) {
         canvas.drawRect(
           Rect.fromLTWH(hx * ps, hy * ps, ps, ps),
-          Paint()
-            ..color = _hoverColor
-            ..style = PaintingStyle.fill,
+          _hoverPaint,
         );
       }
     }

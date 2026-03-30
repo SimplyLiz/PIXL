@@ -1,0 +1,68 @@
+# Art Direction & Quality
+
+PIXL reviews your sprites automatically and tells you exactly what to fix — not a vague score, but specific notes with row numbers.
+
+## The refine loop
+
+<RefineDiagram />
+
+Create a sprite. PIXL critiques it. Fix the flagged rows. Re-check. Usually 2-3 rounds to pass. The loop arrow means: repeat until the critique is clean.
+
+## What gets checked
+
+<FeatureGrid>
+  <Feature title="Outlines">
+    Does every edge of your sprite have a dark pixel border? At small sizes, outlines are what make pixel art readable. Below 70% coverage triggers a warning.
+  </Feature>
+  <Feature title="Centering">
+    Is your character in the middle of the tile, or drifting to a corner? Off-center sprites waste canvas space.
+  </Feature>
+  <Feature title="Canvas use">
+    Is the sprite filling the space? A tiny figure in a big empty tile means wasted resolution.
+  </Feature>
+  <Feature title="Contrast">
+    Can you tell adjacent parts apart? Hair from face, armor from cloth. Low contrast makes everything look like one blob.
+  </Feature>
+  <Feature title="Fragmentation">
+    Are there floating pixels disconnected from the main body? Usually AA artifacts or stray marks.
+  </Feature>
+  <Feature title="Pixel density">
+    How filled is the tile? Reported for reference — not enforced, since some tiles are intentionally sparse.
+  </Feature>
+</FeatureGrid>
+
+## Fix instructions, not just scores
+
+When something's off, PIXL doesn't just say "low quality." It tells you:
+
+> Only 67% of boundary pixels are dark — outline is incomplete. Fill gaps in the silhouette border. Outline gaps found at rows: 3, 7, 12.
+
+Specific enough to act on immediately.
+
+## Severity levels
+
+| Level | What it means | What to do |
+|-------|--------------|------------|
+| **Error** | Fundamentally broken — no outline, tiny subject | Regenerate the tile |
+| **Warning** | Fixable issues — weak outline, off-center | Patch specific rows with `pixl_refine_tile` |
+| **Info** | Metric reported, no action needed | Read and move on |
+
+## It remembers what you like
+
+Accept a tile and PIXL notes the style. Reject one and it learns why. Over time, it builds a profile of your preferences — density, shading direction, color count. New tiles are pre-screened against your profile before you see them.
+
+See [Style Learning](./Style-Learning) for the full style system.
+
+## CLI usage
+
+```bash
+pixl critique tileset.pax --tile wizard
+```
+
+<Callout type="tip">
+  The `critique` command exits with code 1 on errors — use it in CI to catch quality regressions before they ship.
+</Callout>
+
+## Works on everything
+
+The quality system runs the same checks whether you painted the tile by hand, generated it with AI, or imported it from Aseprite. Same standards, same feedback.

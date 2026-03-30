@@ -1,0 +1,162 @@
+# CLI Reference
+
+The `pixl` command-line tool renders, validates, generates, and exports pixel art from `.pax` files.
+
+<Callout type="info">Every command that takes `FILE` expects a `.pax` file — your tileset, project file, and source of truth all in one. See [PAX Format](./PAX-Format) for the full spec, or run `pixl new dark_fantasy -o my_tileset.pax` to create one.</Callout>
+
+## The .pax file
+
+To create your first `.pax` file:
+
+```bash
+pixl new dark_fantasy -o my_tileset.pax
+```
+
+This generates a starter file with a palette, theme, and a few example tiles. You can also write one by hand in any text editor.
+
+## Workflow overview
+
+A typical session looks like this:
+
+```bash
+# 1. Create a tileset from a template
+pixl new dark_fantasy -o dungeon.pax
+
+# 2. Edit dungeon.pax in a text editor or Studio — add tiles
+
+# 3. Validate your work
+pixl validate dungeon.pax
+
+# 4. Render a tile to check it visually
+pixl render dungeon.pax --tile wall_solid --scale 8 --out wall.png
+
+# 5. Generate a map from your tiles
+pixl narrate dungeon.pax --width 12 --height 8 --out map.png
+
+# 6. Pack everything into a sprite atlas for your game
+pixl atlas dungeon.pax --out atlas.png --map atlas.json --scale 2
+
+# 7. Export to your game engine
+pixl export dungeon.pax --format tiled --out ./export/
+```
+
+## Command reference
+
+### Creating tilesets
+
+| Command | What it does |
+|---------|-------------|
+| `pixl new THEME -o FILE` | Create a `.pax` file from a built-in theme template. Themes: `dark_fantasy`, `light_fantasy`, `sci_fi`, `nature`, `gameboy`, `nes`. |
+
+### Rendering
+
+| Command | What it does |
+|---------|-------------|
+| `pixl render FILE --tile NAME --scale N --out PATH` | Render a single tile to PNG. Scale multiplies the pixel size (e.g., `--scale 8` makes each pixel 8x8 on screen). |
+| `pixl preview FILE --tile NAME --out PATH [--grid]` | 16x zoom preview. Add `--grid` for pixel grid overlay. |
+| `pixl render-sprite FILE --spriteset NAME --sprite NAME --out PATH` | Render an animated sprite as GIF or PNG spritesheet. |
+| `pixl render-composite FILE --composite NAME --out PATH` | Render a composite sprite. Add `--variant` or `--anim`/`--frame` for specific poses. |
+
+### Validation & quality
+
+| Command | What it does |
+|---------|-------------|
+| `pixl validate FILE` | Check for errors: broken palettes, wrong grid sizes, missing tiles. |
+| `pixl validate FILE --check-edges` | Also check WFC edge compatibility between tiles. |
+| `pixl validate FILE --check-seams` | Check pixel continuity at composite tile boundaries. |
+| `pixl validate FILE --completeness` | Find missing transition tiles for WFC. |
+| `pixl check FILE --fix` | Auto-detect edge classes from pixel content and write them into the file. |
+| `pixl check FILE --subcomplete` | Verify sub-completeness: every edge class appears on both sides of each axis. If sub-complete, WFC is mathematically guaranteed contradiction-free. |
+| `pixl critique FILE --tile NAME` | Structural quality analysis: outlines, centering, contrast, fragmentation. Prints a verdict (ACCEPT / REFINE / REJECT). |
+
+### Generation
+
+| Command | What it does |
+|---------|-------------|
+| `pixl generate-sprite FILE --prompt "..." --name NAME --out PATH` | Generate a sprite via DALL-E + palette quantization. `FILE` provides the palette. Requires `OPENAI_API_KEY` env var. |
+| `pixl narrate FILE --width W --height H -r "RULE" --out PATH` | Generate a WFC map. Rules: `"border:wall"`, `"region:boss:floor:3x3:southeast"`, `"path:0,3:11,3"`. |
+| `pixl vary FILE --tile NAME --count N` | Create N mutations of a tile (cracks, shifts, noise) while preserving edge compatibility. |
+| `pixl upscale FILE --tile NAME --factor 2 --out PATH` | Nearest-neighbor upscale: 8x8 → 16x16. Prints the upscaled grid for copy-paste. |
+| `pixl blueprint SIZE` | Show character anatomy landmarks for a canvas size (e.g., `32x48`). |
+
+### Image conversion
+
+These commands convert existing images into PAX pixel art. The input is an image file (PNG, JPG, etc.), not a `.pax` file.
+
+| Command | What it does |
+|---------|-------------|
+| `pixl convert IMAGE --width W --colors N` | Convert any image to pixel art. Downscales + quantizes colors. |
+| `pixl import IMAGE --size WxH --pax FILE --palette NAME` | Quantize an image using a specific palette from a `.pax` file. |
+| `pixl backdrop-import IMAGE --name NAME --colors N --tile-size T -o FILE` | Convert an image into a PAX backdrop with tiled layers. |
+
+### Atlas & export
+
+| Command | What it does |
+|---------|-------------|
+| `pixl atlas FILE --out PATH --map JSON [--columns N] [--scale N]` | Pack all tiles into a sprite atlas PNG + TexturePacker JSON metadata. |
+| `pixl export FILE --format FORMAT --out DIR` | Export to a game engine. Formats: `tiled`, `godot`, `unity`, `texturepacker`, `gbstudio`. |
+
+### Style
+
+| Command | What it does |
+|---------|-------------|
+| `pixl style FILE` | Extract an 8-point style fingerprint from your tiles (light direction, density, shadow ratio, etc.). |
+
+### PAX-L (compact format)
+
+| Command | What it does |
+|---------|-------------|
+| `pixl compact FILE` | Convert a `.pax` file to PAX-L compact format (stdout). ~40% fewer tokens than TOML. |
+| `pixl compact FILE --no-stamps` | Skip auto-stamp extraction (faster, slightly less compact). |
+| `pixl compact FILE --no-row-refs` | Disable `=N` row references. |
+| `pixl compact FILE --no-fill` | Disable `@fill` pattern detection. |
+| `pixl expand` | Convert PAX-L from stdin back to `.pax` TOML. Pipe: `pixl compact f.pax \| pixl expand`. |
+| `pixl expand --strict` | Strict parsing mode — rejects any structural error (default is lenient). |
+
+### Style Scanner
+
+Scan reference art, prepare training data, and train a LoRA adapter. See [Style Scanner](./Style-Scanner) for the full guide.
+
+| Command | What it does |
+|---------|-------------|
+| `pixl scan INPUT --out DIR` | Scan images or sprite sheets, extract quality-filtered patches. Auto-detects background colors, tile boundaries, and categories. |
+| `pixl scan DIR --stride 8` | Overlapping patches for more training data. |
+| `pixl scan IMAGE --tile-size 32` | Grid-based tilesets (e.g., 32x32 tiles resized to 16x16). |
+| `pixl prepare SCAN_DIR --out DIR --style NAME` | Prepare training data from scanned patches. Quantizes to PAX, augments, stratifies. |
+| `pixl prepare SCAN_DIR --out DIR --color-aug --aug 8` | Full augmentation: 8x geometric + 3x color shifts. |
+| `pixl train DATA_DIR --adapter DIR` | Train a LoRA adapter on prepared data. Runs locally on Apple Silicon via mlx-lm. |
+| `pixl train DATA_DIR --adapter DIR --epochs 10 --resume` | Resume training with more epochs. |
+| `pixl train DATA_DIR --sources eotb_optimal,matched --adapter DIR` | Merge multiple `data_*` directories, deduplicate, and train on the combined set. |
+| `pixl train DATA_DIR --exclude eotb_walls --adapter DIR` | Train on all datasets except the excluded ones. |
+| `pixl retrain FILE --adapter DIR --style NAME` | One command: export tiles from .pax → prepare training data → train adapter. Uses your tileset as the training source. |
+| `pixl generate-set FILE --set-type walls --theme dark_fantasy --count 5 --out DIR` | Generate a coherent set of tiles (walls, floors, enemies, items). Uses the trained adapter for style-consistent output. |
+| `pixl generate-set FILE --set-type enemies --adapter DIR --count 3 -o DIR` | Generate enemy sprites with a specific adapter. |
+| `pixl datasets [--dir DIR]` | List available training datasets with sample counts, style tags, and source info. |
+| `pixl adapters [--dir DIR]` | List available LoRA adapters with metadata (name, samples, epochs). |
+| `pixl compare FILE --prompt "..." --adapter-a A --adapter-b B -o FILE` | Generate the same tile with two adapters, render side by side. |
+| `pixl blend-style FILE_A FILE_B [--blend 0.5]` | Blend two style latents. Shows distance (0=identical, 1=very different) and interpolated properties. |
+
+**Full workflow:**
+
+```bash
+pixl scan my_sprites/ --out my_scan --stride 8
+pixl prepare my_scan/ --out my_data --style my-game --color-aug
+pixl train my_data --adapter my_adapter --epochs 5
+pixl serve --adapter my_adapter --file project.pax
+```
+
+### Servers
+
+| Command | What it does |
+|---------|-------------|
+| `pixl mcp --file FILE` | Start the MCP server for AI assistants. Connects via stdio — Claude Code and other MCP clients detect it automatically. |
+| `pixl serve --port 3742 --file FILE` | Start the HTTP API server for Studio or custom integrations. `FILE` is the `.pax` tileset to load into the session. |
+
+## Common flags
+
+| Flag | What it does |
+|------|-------------|
+| `--scale N` | Render scale factor. Each pixel becomes NxN on screen. |
+| `--out PATH` / `-o PATH` | Output file or directory. |
+| `FILE` (positional) | Input `.pax` file. This is your tileset. |
+| `--tile NAME` | Which tile to operate on (by name from the `.pax` file). |

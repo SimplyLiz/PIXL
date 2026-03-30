@@ -27,10 +27,21 @@ pub enum RleError {
     Empty,
 }
 
+/// Parse a row reference like `=3` → Some(3). Returns None if not a reference.
+fn parse_row_ref(line: &str) -> Option<usize> {
+    let trimmed = line.trim();
+    if let Some(rest) = trimmed.strip_prefix('=') {
+        rest.parse::<usize>().ok()
+    } else {
+        None
+    }
+}
+
 /// Parse a multi-line RLE string into a 2D char array.
 /// Format: space-separated `<count><symbol>` tokens, one line per row.
 /// Count defaults to 1 if absent (bare symbol).
 /// Every row must be explicit — no silent repetition.
+/// Supports `=N` row references (PAX 2.1): `=3` means "same as row 3" (1-indexed).
 pub fn parse_rle(
     raw: &str,
     width: u32,
@@ -54,39 +65,59 @@ pub fn parse_rle(
         });
     }
 
-    let mut grid = Vec::with_capacity(height as usize);
+    // Identify which lines are row references
+    let is_ref: Vec<bool> = lines.iter().map(|l| parse_row_ref(l).is_some()).collect();
+
+    let mut grid: Vec<Vec<char>> = Vec::with_capacity(height as usize);
 
     for (row_idx, line) in lines.iter().enumerate() {
-        let mut row = Vec::with_capacity(width as usize);
-
-        for token in line.split_whitespace() {
-            let (count, sym) = parse_rle_token(token).map_err(|_| RleError::InvalidToken {
-                row: row_idx,
-                token: token.to_string(),
-            })?;
-
-            if !palette.symbols.contains_key(&sym) {
-                return Err(RleError::UnknownSymbol {
+        if let Some(target) = parse_row_ref(line) {
+            if target == 0 || target > row_idx {
+                return Err(RleError::InvalidToken {
                     row: row_idx,
-                    sym,
-                    token: token.to_string(),
+                    token: format!("={} (out of range, must be 1..{})", target, row_idx),
+                });
+            }
+            if is_ref[target - 1] {
+                return Err(RleError::InvalidToken {
+                    row: row_idx,
+                    token: format!("={} (targets another reference, chains forbidden)", target),
+                });
+            }
+            grid.push(grid[target - 1].clone());
+        } else {
+            let mut row = Vec::with_capacity(width as usize);
+
+            for token in line.split_whitespace() {
+                let (count, sym) =
+                    parse_rle_token(token).map_err(|_| RleError::InvalidToken {
+                        row: row_idx,
+                        token: token.to_string(),
+                    })?;
+
+                if !palette.symbols.contains_key(&sym) {
+                    return Err(RleError::UnknownSymbol {
+                        row: row_idx,
+                        sym,
+                        token: token.to_string(),
+                    });
+                }
+
+                for _ in 0..count {
+                    row.push(sym);
+                }
+            }
+
+            if row.len() != width as usize {
+                return Err(RleError::WidthMismatch {
+                    row: row_idx,
+                    expected: width,
+                    got: row.len(),
                 });
             }
 
-            for _ in 0..count {
-                row.push(sym);
-            }
+            grid.push(row);
         }
-
-        if row.len() != width as usize {
-            return Err(RleError::WidthMismatch {
-                row: row_idx,
-                expected: width,
-                got: row.len(),
-            });
-        }
-
-        grid.push(row);
     }
 
     Ok(grid)
@@ -412,5 +443,24 @@ mod tests {
         let encoded = encode_rle(&original);
         let decoded = parse_rle(&encoded, 4, 4, &palette).unwrap();
         assert_eq!(original, decoded);
+    }
+
+    #[test]
+    fn rle_row_reference_expands() {
+        let palette = test_palette();
+        let raw = "4#\n2# 2+\n=1\n=2";
+        let grid = parse_rle(raw, 4, 4, &palette).unwrap();
+        assert_eq!(grid[0], vec!['#', '#', '#', '#']);
+        assert_eq!(grid[1], vec!['#', '#', '+', '+']);
+        assert_eq!(grid[2], vec!['#', '#', '#', '#']); // =1
+        assert_eq!(grid[3], vec!['#', '#', '+', '+']); // =2
+    }
+
+    #[test]
+    fn rle_row_reference_chain_rejected() {
+        let palette = test_palette();
+        let raw = "4#\n2# 2+\n=1\n=3"; // =3 targets =1 (a ref)
+        let err = parse_rle(raw, 4, 4, &palette).unwrap_err();
+        assert!(matches!(err, RleError::InvalidToken { row: 3, .. }));
     }
 }

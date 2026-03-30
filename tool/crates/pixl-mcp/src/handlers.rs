@@ -16,6 +16,7 @@ pub fn handle_tool(state: &Mutex<McpState>, tool_name: &str, args: &Value) -> Va
         "pixl_create_tile" => handle_create_tile(state, args),
         "pixl_validate" => handle_validate(state, args),
         "pixl_render_tile" => handle_render_tile(state, args),
+        "pixl_export_png" => handle_export_png(state, args),
         "pixl_check_edge_pair" => handle_check_edge_pair(state, args),
         "pixl_list_tiles" => handle_list_tiles(state),
         "pixl_get_file" => handle_get_file(state, args),
@@ -43,6 +44,17 @@ pub fn handle_tool(state: &Mutex<McpState>, tool_name: &str, args: &Value) -> Va
         "pixl_convert_sprite" => handle_convert_sprite(args),
         "pixl_backdrop_import" => handle_backdrop_import(args),
         "pixl_backdrop_render" => handle_backdrop_render(state, args),
+        "pixl_list_composites" => handle_list_composites(state),
+        "pixl_render_composite" => handle_render_composite(state, args),
+        "pixl_check_seams" => handle_check_seams(state),
+        "pixl_critique_tile" => handle_critique_tile(state, args),
+        "pixl_refine_tile" => handle_refine_tile(state, args),
+        "pixl_upscale_tile" => handle_upscale_tile(state, args),
+        "pixl_show_references" => handle_show_references(state, args),
+        "pixl_remap_tile" => handle_remap_tile(state, args),
+        "pixl_rate_tile" => handle_rate_tile(state, args),
+        "pixl_generate_wang" => handle_generate_wang(state, args),
+        "pixl_check_subcomplete" => handle_check_subcomplete_tool(state),
         _ => json!({"error": format!("unknown tool: {}", tool_name)}),
     }
 }
@@ -72,6 +84,10 @@ fn handle_session_start(state: &Mutex<McpState>) -> Value {
         .collect::<serde_json::Map<String, Value>>()
         .into();
 
+    // Generate PAX-L compact representation for LLM context
+    let config = pixl_core::paxl::PaxlConfig::default();
+    let paxl_source = pixl_core::paxl::to_paxl(&st.file, &config).ok();
+
     json!({
         "active_theme": st.active_theme(),
         "palettes": palette_symbols,
@@ -83,7 +99,9 @@ fn handle_session_start(state: &Mutex<McpState>) -> Value {
         "light_source": st.light_source(),
         "available_stamps": st.stamp_names(),
         "available_tiles": st.tile_names(),
-        "suggested_workflow": "1. Examine palette symbols. 2. Create tiles with pixl_create_tile. 3. Check edges with pixl_check_edge_pair. 4. Validate with pixl_validate. 5. Export with pixl_get_file."
+        "formats": ["pax", "paxl"],
+        "paxl_source": paxl_source,
+        "suggested_workflow": "1. Examine palette symbols and paxl_source. 2. Create tiles with pixl_create_tile (accepts paxl_data). 3. Check edges with pixl_check_edge_pair. 4. Use pixl_get_file(format='paxl') for compact file state."
     })
 }
 
@@ -132,6 +150,11 @@ fn handle_get_palette(state: &Mutex<McpState>, args: &Value) -> Value {
 }
 
 fn handle_create_tile(state: &Mutex<McpState>, args: &Value) -> Value {
+    // PAX-L input mode: parse a PAX-L tile definition directly
+    if let Some(paxl_data) = args.get("paxl_data").and_then(|v| v.as_str()) {
+        return handle_create_tile_paxl(state, paxl_data);
+    }
+
     let mut st = state.lock().unwrap();
 
     let name = args["name"].as_str().unwrap_or("").to_string();
@@ -224,6 +247,10 @@ fn handle_create_tile(state: &Mutex<McpState>, args: &Value) -> Value {
             grid: Some(grid_str.to_string()),
             rle: None,
             layout: None,
+            fill: None,
+            fill_size: None,
+            delta: None,
+            patches: vec![],
         },
     );
 
@@ -282,12 +309,21 @@ fn handle_validate(state: &Mutex<McpState>, args: &Value) -> Value {
         .get("check_edges")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
-    let result = validate::validate(&st.file, check_edges);
+    let quality = args
+        .get("quality")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let result = if quality {
+        validate::validate_quality(&st.file, check_edges, st.knowledge.as_ref())
+    } else {
+        validate::validate(&st.file, check_edges)
+    };
 
     let errors: Vec<String> = result.errors.iter().map(|e| format!("{}", e)).collect();
     let warnings: Vec<String> = result.warnings.clone();
 
-    json!({
+    let mut response = json!({
         "errors": errors,
         "warnings": warnings,
         "stats": {
@@ -297,6 +333,137 @@ fn handle_validate(state: &Mutex<McpState>, args: &Value) -> Value {
             "tiles": result.stats.tiles,
             "sprites": result.stats.sprites,
         }
+    });
+
+    if let Some(ref qr) = result.quality {
+        let tile_issues: Vec<Value> = qr
+            .tile_reports
+            .iter()
+            .filter(|r| !r.structural.issues.is_empty())
+            .map(|r| {
+                let issues: Vec<Value> = r
+                    .structural
+                    .issues
+                    .iter()
+                    .map(|i| {
+                        let advice: Vec<Value> = r
+                            .kb_advice
+                            .iter()
+                            .filter(|a| a.issue_code == i.code)
+                            .map(|a| {
+                                json!({
+                                    "summary": a.summary,
+                                    "source": a.source_title,
+                                })
+                            })
+                            .collect();
+                        json!({
+                            "code": i.code,
+                            "severity": format!("{:?}", i.severity),
+                            "message": i.message,
+                            "advice": advice,
+                        })
+                    })
+                    .collect();
+                json!({
+                    "tile": r.tile_name,
+                    "verdict": if pixl_core::structural::has_errors(&r.structural) {
+                        "REJECT"
+                    } else if pixl_core::structural::has_warnings(&r.structural) {
+                        "REFINE"
+                    } else {
+                        "ACCEPT"
+                    },
+                    "issues": issues,
+                })
+            })
+            .collect();
+
+        let consistency = qr.consistency.as_ref().map(|sc| {
+            let outliers: Vec<Value> = sc
+                .outliers
+                .iter()
+                .map(|o| {
+                    json!({
+                        "tile": o.tile_name,
+                        "light_direction": o.light_direction,
+                        "deviation": o.deviation,
+                    })
+                })
+                .collect();
+            json!({
+                "mean_light_direction": sc.mean_light_direction,
+                "light_direction_stddev": sc.light_direction_stddev,
+                "outliers": outliers,
+            })
+        });
+
+        response["quality"] = json!({
+            "tiles_analyzed": qr.tiles_analyzed,
+            "tile_issues": tile_issues,
+            "consistency": consistency,
+        });
+    }
+
+    response
+}
+
+/// Handle tile creation from PAX-L input (paxl_data parameter).
+fn handle_create_tile_paxl(state: &Mutex<McpState>, paxl_data: &str) -> Value {
+    // Parse the PAX-L tile definition using the deserializer
+    // Wrap it in a minimal PAX-L document so the parser can handle it
+    let (parsed, warnings) = match pixl_core::paxl::from_paxl(paxl_data, false) {
+        Ok(result) => result,
+        Err(e) => return json!({"ok": false, "error": format!("PAX-L parse error: {}", e)}),
+    };
+
+    if parsed.tile.is_empty() {
+        return json!({"ok": false, "error": "no tile found in paxl_data"});
+    }
+
+    let mut st = state.lock().unwrap();
+    let mut created = Vec::new();
+
+    for (name, tile_raw) in parsed.tile {
+        st.file.tile.insert(name.clone(), tile_raw);
+        created.push(name);
+    }
+
+    // Also import any stamps from the PAX-L input
+    for (name, stamp_raw) in parsed.stamp {
+        st.file.stamp.insert(name, stamp_raw);
+    }
+
+    // Diff mode: return PAX-L for only the new tiles
+    let config = pixl_core::paxl::PaxlConfig::default();
+    let tile_paxl = match pixl_core::paxl::to_paxl(&st.file, &config) {
+        Ok(full) => {
+            // Extract only the lines for the created tiles
+            let mut diff_lines = Vec::new();
+            let mut capturing = false;
+            for line in full.lines() {
+                if line.starts_with("@tile ") {
+                    let tile_name = line.split_whitespace().nth(1).unwrap_or("");
+                    capturing = created.iter().any(|c| c == tile_name);
+                } else if line.starts_with('@') && !line.starts_with("@tile") {
+                    capturing = false;
+                }
+                if capturing {
+                    diff_lines.push(line);
+                }
+            }
+            Some(diff_lines.join("\n"))
+        }
+        Err(_) => None,
+    };
+
+    let warn_list: Vec<&str> = warnings.iter().map(|s| s.as_str()).collect();
+    json!({
+        "ok": true,
+        "created_tiles": created,
+        "tile_paxl": tile_paxl,
+        "warnings": warn_list,
+        "message": format!("created {} tile(s) from PAX-L", created.len()),
     })
 }
 
@@ -315,22 +482,30 @@ fn handle_render_tile(state: &Mutex<McpState>, args: &Value) -> Value {
         None => return json!({"error": format!("palette '{}' not found", tile_raw.palette)}),
     };
 
-    let size_str = tile_raw.size.as_deref().unwrap_or("16x16");
-    let (w, h) = match parse_size(size_str) {
-        Ok(s) => s,
-        Err(e) => return json!({"error": e}),
-    };
+    // Resolve grid via resolve_tile_grid so template/compose/symmetry tiles work.
+    let stamps: std::collections::HashMap<String, pixl_core::types::Stamp> = st
+        .file
+        .stamp
+        .iter()
+        .filter_map(|(sname, raw)| {
+            let (sw, sh) = parse_size(&raw.size).ok()?;
+            let grid: Vec<Vec<char>> = raw.grid.lines()
+                .filter(|l| !l.trim().is_empty())
+                .map(|l| l.chars().collect()).collect();
+            Some((sname.clone(), pixl_core::types::Stamp {
+                palette: raw.palette.clone(), width: sw as u32, height: sh as u32, grid,
+            }))
+        })
+        .collect();
 
-    let grid_str = match &tile_raw.grid {
-        Some(g) => g,
-        None => return json!({"error": "tile has no grid data"}),
-    };
-
-    let parsed = match grid::parse_grid(grid_str, w, h, palette) {
-        Ok(g) => g,
+    let (parsed, w, h) = match pixl_core::resolve::resolve_tile_grid(
+        name, &st.file.tile, &st.palettes, &stamps,
+    ) {
+        Ok(r) => r,
         Err(e) => return json!({"error": format!("{}", e)}),
     };
 
+    let size_str = format!("{}x{}", w, h);
     let img = renderer::render_grid(&parsed, palette, scale);
     let b64 = renderer::png_to_base64(&renderer::encode_png(&img));
 
@@ -338,6 +513,73 @@ fn handle_render_tile(state: &Mutex<McpState>, args: &Value) -> Value {
         "name": name,
         "size": size_str,
         "scale": scale,
+        "preview_b64": b64,
+    })
+}
+
+/// Export a tile as a PNG at a specific resolution with a configurable
+/// scaling algorithm.
+///
+/// Args:
+///   - `name` (string): tile name
+///   - `width` (int): target output width in pixels
+///   - `height` (int): target output height in pixels
+///   - `filter` (string, optional): scaling algorithm — one of:
+///     `"nearest"` (default), `"bilinear"`, `"catmull_rom"`, `"lanczos3"`
+///
+/// Returns:
+///   - `preview_b64`: base64-encoded PNG at the requested resolution
+///   - `size`: native tile size (e.g. "16x16")
+///   - `output_size`: actual output size (e.g. "256x256")
+///   - `filter`: the algorithm used
+fn handle_export_png(state: &Mutex<McpState>, args: &Value) -> Value {
+    let st = state.lock().unwrap();
+    let name = args["name"].as_str().unwrap_or("");
+    let target_w = args.get("width").and_then(|v| v.as_u64()).unwrap_or(256) as u32;
+    let target_h = args.get("height").and_then(|v| v.as_u64()).unwrap_or(256) as u32;
+    let filter_str = args.get("filter").and_then(|v| v.as_str()).unwrap_or("nearest");
+    let filter = renderer::ScaleFilter::from_str(filter_str);
+
+    let tile_raw = match st.file.tile.get(name) {
+        Some(t) => t,
+        None => return json!({"error": format!("tile '{}' not found", name)}),
+    };
+
+    let palette = match st.palettes.get(&tile_raw.palette) {
+        Some(p) => p,
+        None => return json!({"error": format!("palette '{}' not found", tile_raw.palette)}),
+    };
+
+    let stamps: std::collections::HashMap<String, pixl_core::types::Stamp> = st
+        .file
+        .stamp
+        .iter()
+        .filter_map(|(sname, raw)| {
+            let (sw, sh) = parse_size(&raw.size).ok()?;
+            let grid: Vec<Vec<char>> = raw.grid.lines()
+                .filter(|l| !l.trim().is_empty())
+                .map(|l| l.chars().collect()).collect();
+            Some((sname.clone(), pixl_core::types::Stamp {
+                palette: raw.palette.clone(), width: sw as u32, height: sh as u32, grid,
+            }))
+        })
+        .collect();
+
+    let (parsed, w, h) = match pixl_core::resolve::resolve_tile_grid(
+        name, &st.file.tile, &st.palettes, &stamps,
+    ) {
+        Ok(r) => r,
+        Err(e) => return json!({"error": format!("{}", e)}),
+    };
+
+    let img = renderer::render_grid_scaled(&parsed, palette, target_w, target_h, filter);
+    let b64 = renderer::png_to_base64(&renderer::encode_png(&img));
+
+    json!({
+        "name": name,
+        "size": format!("{}x{}", w, h),
+        "output_size": format!("{}x{}", img.width(), img.height()),
+        "filter": filter_str,
         "preview_b64": b64,
     })
 }
@@ -396,14 +638,54 @@ fn handle_check_edge_pair(state: &Mutex<McpState>, args: &Value) -> Value {
 fn handle_list_tiles(state: &Mutex<McpState>) -> Value {
     let st = state.lock().unwrap();
 
+    // Resolve StampRaw → Stamp so compose tiles can reference them.
+    let stamps: std::collections::HashMap<String, pixl_core::types::Stamp> = st
+        .file
+        .stamp
+        .iter()
+        .filter_map(|(name, raw)| {
+            let (w, h) = parse_size(&raw.size).ok()?;
+            let grid: Vec<Vec<char>> = raw
+                .grid
+                .lines()
+                .filter(|l| !l.trim().is_empty())
+                .map(|l| l.chars().collect())
+                .collect();
+            Some((
+                name.clone(),
+                pixl_core::types::Stamp {
+                    palette: raw.palette.clone(),
+                    width: w as u32,
+                    height: h as u32,
+                    grid,
+                },
+            ))
+        })
+        .collect();
+
     let tiles: Vec<Value> = st
         .file
         .tile
         .iter()
         .map(|(name, raw)| {
+            // Render a small preview — resolve templates/compose/symmetry first.
+            let preview = (|| -> Option<String> {
+                let palette = st.palettes.get(&raw.palette)?;
+                let (parsed, _w, _h) = pixl_core::resolve::resolve_tile_grid(
+                    name,
+                    &st.file.tile,
+                    &st.palettes,
+                    &stamps,
+                )
+                .ok()?;
+                let img = renderer::render_grid(&parsed, palette, 4);
+                Some(renderer::png_to_base64(&renderer::encode_png(&img)))
+            })();
+
             json!({
                 "name": name,
                 "size": raw.size,
+                "preview": preview,
                 "edge_class": raw.edge_class.as_ref().map(|ec| json!({"n": ec.n, "e": ec.e, "s": ec.s, "w": ec.w})),
                 "tags": raw.tags,
                 "target_layer": raw.target_layer,
@@ -415,11 +697,25 @@ fn handle_list_tiles(state: &Mutex<McpState>) -> Value {
     json!({"tiles": tiles})
 }
 
-fn handle_get_file(state: &Mutex<McpState>, _args: &Value) -> Value {
+fn handle_get_file(state: &Mutex<McpState>, args: &Value) -> Value {
+    let format = args.get("format").and_then(|v| v.as_str()).unwrap_or("pax");
     let st = state.lock().unwrap();
-    match st.to_pax_source() {
-        Ok(source) => json!({"pax_source": source}),
-        Err(e) => json!({"error": e}),
+    match format {
+        "paxl" => {
+            let config = pixl_core::paxl::PaxlConfig::default();
+            match pixl_core::paxl::to_paxl(&st.file, &config) {
+                Ok(paxl) => json!({"paxl_source": paxl, "format": "paxl", "version": "L1"}),
+                Err(e) => {
+                    // Fallback to TOML on PAX-L error
+                    let fallback = st.to_pax_source().ok();
+                    json!({"error": format!("{}", e), "pax_source": fallback})
+                }
+            }
+        }
+        _ => match st.to_pax_source() {
+            Ok(source) => json!({"pax_source": source, "format": "pax"}),
+            Err(e) => json!({"error": e}),
+        },
     }
 }
 
@@ -430,6 +726,7 @@ fn handle_delete_tile(state: &Mutex<McpState>, args: &Value) -> Value {
     json!({
         "ok": deleted,
         "name": name,
+        "removed": [name],
         "message": if deleted { "tile deleted" } else { "tile not found" },
     })
 }
@@ -985,6 +1282,10 @@ fn handle_vary_tile(state: &Mutex<McpState>, args: &Value) -> Value {
                 grid: Some(grid_string),
                 rle: None,
                 layout: None,
+                fill: None,
+                fill_size: None,
+                delta: None,
+                patches: vec![],
             },
         );
 
@@ -1014,6 +1315,13 @@ fn handle_generate_context(state: &Mutex<McpState>, args: &Value) -> Value {
         .get("knowledge_enabled")
         .and_then(|v| v.as_bool())
         .unwrap_or(true); // on by default
+
+    // PAX-L compact mode: if format=paxl, replace verbose context with compact PAX-L
+    let use_paxl = args
+        .get("format")
+        .and_then(|v| v.as_str())
+        .map(|f| f == "paxl")
+        .unwrap_or(false);
 
     // Build palette constraint text
     let mut palette_text = String::new();
@@ -1162,19 +1470,33 @@ fn handle_generate_context(state: &Mutex<McpState>, args: &Value) -> Value {
 
     // Build the system prompt — immutable rules, constraints, and structure only.
     // Retrieved knowledge goes in the user message to keep separation clean.
+    let session_context = if use_paxl {
+        // PAX-L compact: ~40% fewer tokens than verbose palette/theme/edge text
+        let config = pixl_core::paxl::PaxlConfig::default();
+        let paxl = pixl_core::paxl::to_paxl(&st.file, &config).unwrap_or_default();
+        format!(
+            "Current session (PAX-L compact format):\n```\n{}\n```",
+            paxl
+        )
+    } else {
+        format!(
+            "{palette_text}\n\
+             {theme_text}\n\
+             {style_text}\n\
+             {layer_context}\n\
+             Existing tile edge classes:\n\
+             {edge_context}"
+        )
+    };
+
     let system_prompt = format!(
         "You are a pixel art expert generating PAX format tiles.\n\
          \n\
-         {palette_text}\n\
-         {theme_text}\n\
-         {style_text}\n\
+         {session_context}\n\
          {preference_text}\n\
          Canvas size: {size_str}\n\
          Type: {tile_type}\n\
          \n\
-         {layer_context}\n\
-         Existing tile edge classes:\n\
-         {edge_context}\n\
          {examples_text}\
          {avoid_text}\
          \n\
@@ -1194,15 +1516,61 @@ fn handle_generate_context(state: &Mutex<McpState>, args: &Value) -> Value {
 
     let stats = st.feedback.stats();
 
+    // Render few-shot examples as preview images for multimodal context.
+    // The MCP server extracts "references[].preview_b64" as Content::image(),
+    // so the LLM sees both the text grid AND the rendered visual.
+    let mut example_previews: Vec<Value> = Vec::new();
+    let empty_stamps: std::collections::HashMap<String, pixl_core::types::Stamp> =
+        std::collections::HashMap::new();
+    let _ = &empty_stamps; // suppress unused warning when no examples
+    for ex in &constraints.examples {
+        // Parse the example grid string back into a 2D grid
+        let grid: Vec<Vec<char>> = ex
+            .grid
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .map(|l| l.chars().collect())
+            .collect();
+
+        if grid.is_empty() {
+            continue;
+        }
+
+        // Find the palette for this example (look up in session tiles)
+        let palette = st
+            .file
+            .tile
+            .get(&ex.name)
+            .and_then(|t| st.palettes.get(&t.palette));
+
+        if let Some(pal) = palette {
+            let img = renderer::render_grid(&grid, pal, 16);
+            let b64 = renderer::png_to_base64(&renderer::encode_png(&img));
+            example_previews.push(json!({
+                "name": ex.name,
+                "tags": ex.tags,
+                "preview_b64": b64,
+            }));
+        }
+    }
+
+    // Resolve the palette name for tile creation.
+    let palette_name = st
+        .active_theme()
+        .and_then(|t| st.file.theme.get(t))
+        .map(|t| t.palette.as_str());
+
     json!({
         "system_prompt": system_prompt,
         "user_prompt": user_prompt,
+        "palette": palette_name,
         "palette_symbols": palette_text.trim(),
         "theme": st.active_theme(),
         "size": size_str,
         "existing_tiles": st.tile_names(),
         "style_latent": style_text,
         "available_layers": layer_roles,
+        "references": example_previews,
         "feedback": {
             "min_style_score": constraints.min_style_score,
             "acceptance_rate": stats.acceptance_rate,
@@ -1336,6 +1704,26 @@ fn handle_load_source(state: &Mutex<McpState>, args: &Value) -> Value {
             Ok(palettes) => {
                 let tile_count = file.tile.len();
                 let theme_count = file.theme.len();
+                let active_theme = file.pax.theme.clone();
+                let active_palette = active_theme
+                    .as_deref()
+                    .and_then(|t| file.theme.get(t))
+                    .map(|t| t.palette.clone());
+                // Return palette colors so the UI can sync its palette panel.
+                let palette_colors: Option<Vec<String>> = active_palette
+                    .as_deref()
+                    .and_then(|p| palettes.get(p))
+                    .map(|pal| {
+                        pal.symbols
+                            .iter()
+                            .map(|(_, rgba)| {
+                                format!(
+                                    "#{:02x}{:02x}{:02x}{:02x}",
+                                    rgba.r, rgba.g, rgba.b, rgba.a
+                                )
+                            })
+                            .collect()
+                    });
                 st.file = file;
                 st.palettes = palettes;
                 st.refinement_count.clear();
@@ -1344,6 +1732,9 @@ fn handle_load_source(state: &Mutex<McpState>, args: &Value) -> Value {
                     "ok": true,
                     "tiles": tile_count,
                     "themes": theme_count,
+                    "active_theme": active_theme,
+                    "active_palette": active_palette,
+                    "palette_colors": palette_colors,
                 })
             }
             Err(e) => json!({"ok": false, "error": format!("{}", e)}),
@@ -1508,6 +1899,22 @@ fn handle_record_feedback(state: &Mutex<McpState>, args: &Value) -> Value {
 fn handle_feedback_stats(state: &Mutex<McpState>) -> Value {
     let st = state.lock().unwrap();
     let stats = st.feedback.stats();
+    let total = stats.total_accepts + stats.total_rejects;
+
+    // Suggest retraining when rejection rate is high enough to matter
+    let suggest_retrain = total >= 10 && stats.acceptance_rate < 0.6;
+    let retrain_hint = if suggest_retrain {
+        Some(format!(
+            "Rejection rate is {:.0}% ({} rejects / {} total). \
+             Consider retraining: pixl retrain <your.pax> --adapter training/adapters/retrained",
+            (1.0 - stats.acceptance_rate) * 100.0,
+            stats.total_rejects,
+            total,
+        ))
+    } else {
+        None
+    };
+
     json!({
         "total_accepts": stats.total_accepts,
         "total_rejects": stats.total_rejects,
@@ -1516,6 +1923,8 @@ fn handle_feedback_stats(state: &Mutex<McpState>) -> Value {
         "avg_accepted_score": stats.avg_accepted_score,
         "avg_rejected_score": stats.avg_rejected_score,
         "top_reject_reasons": stats.top_reject_reasons,
+        "suggest_retrain": suggest_retrain,
+        "retrain_hint": retrain_hint,
     })
 }
 
@@ -1719,20 +2128,47 @@ pub async fn handle_generate_tile(
         return json!({"ok": false, "error": format!("inference server: {}", e)});
     }
 
-    let raw_response = match server.generate(system_prompt, user_prompt).await {
-        Ok(r) => r,
-        Err(e) => return json!({"ok": false, "error": format!("generation failed: {}", e)}),
-    };
-    drop(inf_guard);
+    // Rejection sampling: retry up to 5 times if the grid has < 3 unique symbols
+    let max_attempts = 5;
+    let mut grid_str = String::new();
+    let mut attempts = 0;
+    let mut last_raw = String::new();
 
-    // Extract the grid from the response — look for a code block or raw grid lines
-    let grid_str = extract_grid(&raw_response, size_str);
+    for attempt in 0..max_attempts {
+        let raw_response = match server.generate(system_prompt, user_prompt).await {
+            Ok(r) => r,
+            Err(e) => return json!({"ok": false, "error": format!("generation failed: {}", e)}),
+        };
+        last_raw = raw_response.clone();
+
+        let candidate = extract_grid(&raw_response, size_str);
+        attempts = attempt + 1;
+
+        if candidate.is_empty() {
+            continue;
+        }
+
+        // Count unique non-void symbols
+        let unique: std::collections::HashSet<char> = candidate
+            .chars()
+            .filter(|c| !c.is_whitespace() && *c != '.')
+            .collect();
+
+        grid_str = candidate;
+
+        if unique.len() >= 3 {
+            break; // good quality
+        }
+        // Otherwise retry
+    }
+    drop(inf_guard);
 
     if grid_str.is_empty() {
         return json!({
             "ok": false,
             "error": "could not parse grid from model response",
-            "raw_response": raw_response,
+            "raw_response": last_raw,
+            "attempts": attempts,
         });
     }
 
@@ -1755,11 +2191,22 @@ pub async fn handle_generate_tile(
     });
     let mut result = handle_create_tile(state, &create_args);
 
-    // Annotate with generation metadata
+    // Annotate with generation metadata (including adapter for versioning)
+    let adapter_name = {
+        let inf = inference.lock().await;
+        inf.as_ref()
+            .and_then(|s| s.config.adapter_path.as_ref())
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().to_string())
+    };
     if let Some(obj) = result.as_object_mut() {
         obj.insert("generated".to_string(), json!(true));
         obj.insert("model".to_string(), json!("local-lora"));
         obj.insert("prompt".to_string(), json!(prompt));
+        obj.insert("attempts".to_string(), json!(attempts));
+        if let Some(ref name) = adapter_name {
+            obj.insert("adapter".to_string(), json!(name));
+        }
     }
 
     result
@@ -1979,10 +2426,51 @@ fn handle_export(state: &Mutex<McpState>, args: &Value) -> Value {
                     if let Err(e) = std::fs::write(&tsj_path, tsj_str) {
                         return json!({"ok": false, "error": format!("cannot write TSJ: {}", e)});
                     }
+                    // Export tilemaps with multi-layer object splitting
+                    let mut exported_files = vec![
+                        atlas_path.display().to_string(),
+                        tsj_path.display().to_string(),
+                    ];
+
+                    let object_defs: std::collections::HashMap<String, &pixl_core::types::ObjectRaw> =
+                        st.file.object.iter().map(|(k, v)| (k.clone(), v)).collect();
+
+                    for (tm_name, tilemap_raw) in &st.file.tilemap {
+                        let terrain_grid = match pixl_export::tiled::resolve_terrain_grid(
+                            tilemap_raw,
+                            &tile_names,
+                        ) {
+                            Some(g) => g,
+                            None => continue,
+                        };
+
+                        let placements: Vec<(String, u32, u32)> = tilemap_raw
+                            .objects
+                            .iter()
+                            .map(|p| (p.object.clone(), p.x, p.y))
+                            .collect();
+
+                        if let Ok(map) = pixl_export::tiled::generate_map_with_objects(
+                            &terrain_grid,
+                            &tile_names,
+                            &placements,
+                            &object_defs,
+                            tile_size.0,
+                            tile_size.1,
+                            "tileset.tsj",
+                        ) {
+                            let tmj_path = out_dir.join(format!("{}.tmj", tm_name));
+                            let tmj_str = serde_json::to_string_pretty(&map).unwrap_or_default();
+                            if std::fs::write(&tmj_path, &tmj_str).is_ok() {
+                                exported_files.push(tmj_path.display().to_string());
+                            }
+                        }
+                    }
+
                     json!({
                         "ok": true,
                         "format": "tiled",
-                        "files": [atlas_path.display().to_string(), tsj_path.display().to_string()],
+                        "files": exported_files,
                         "tile_count": tile_names.len(),
                     })
                 }
@@ -2039,6 +2527,17 @@ fn handle_check_completeness(state: &Mutex<McpState>) -> Value {
         "connected_pairs": report.connected_pairs,
         "disconnected_pairs": report.disconnected_pairs,
         "missing_tiles": report.missing_tiles,
+        "summary": report.summary,
+    })
+}
+
+fn handle_check_subcomplete_tool(state: &Mutex<McpState>) -> Value {
+    let st = state.lock().unwrap();
+    let report = pixl_core::completeness::check_subcomplete(&st.file);
+    json!({
+        "ok": true,
+        "is_subcomplete": report.is_subcomplete,
+        "missing": report.missing,
         "summary": report.summary,
     })
 }
@@ -2385,6 +2884,1119 @@ fn build_palette_ext(
         base: base.symbols,
         extended: std::collections::HashMap::new(),
     }
+}
+
+// ── Composite handlers ──────────────────────────────────────────────
+
+fn handle_list_composites(state: &Mutex<McpState>) -> Value {
+    let st = state.lock().unwrap();
+
+    let composites: Vec<Value> = st
+        .file
+        .composite
+        .iter()
+        .map(|(name, raw)| {
+            let variants: Vec<&String> = raw.variant.keys().collect();
+            let anims: Vec<&String> = raw.anim.keys().collect();
+            json!({
+                "name": name,
+                "size": raw.size,
+                "tile_size": raw.tile_size,
+                "variants": variants,
+                "animations": anims,
+            })
+        })
+        .collect();
+
+    json!({"composites": composites, "count": composites.len()})
+}
+
+fn handle_render_composite(state: &Mutex<McpState>, args: &Value) -> Value {
+    let st = state.lock().unwrap();
+
+    let name = args["name"].as_str().unwrap_or("");
+    let variant = args.get("variant").and_then(|v| v.as_str());
+    let anim = args.get("anim").and_then(|v| v.as_str());
+    let frame = args.get("frame").and_then(|v| v.as_u64()).map(|f| f as u32);
+    let scale = args.get("scale").and_then(|v| v.as_u64()).unwrap_or(8) as u32;
+
+    let raw = match st.file.composite.get(name) {
+        Some(r) => r,
+        None => {
+            let names: Vec<&String> = st.file.composite.keys().collect();
+            return json!({"error": format!("composite '{}' not found. Available: {:?}", name, names)});
+        }
+    };
+
+    let composite = match pixl_core::composite::resolve_composite(raw, name) {
+        Ok(c) => c,
+        Err(e) => return json!({"error": format!("resolve error: {}", e)}),
+    };
+
+    // Find palette from first non-void tile
+    let palette_name = composite
+        .slots
+        .iter()
+        .flat_map(|row| row.iter())
+        .find(|s| s.name != "_")
+        .and_then(|s| st.file.tile.get(&s.name))
+        .map(|t| t.palette.as_str());
+
+    let palette_name = match palette_name {
+        Some(p) => p,
+        None => return json!({"error": "no tiles in composite layout"}),
+    };
+
+    let palette = match st.palettes.get(palette_name) {
+        Some(p) => p,
+        None => return json!({"error": format!("palette '{}' not found", palette_name)}),
+    };
+
+    // Resolve all referenced tiles
+    let empty_stamps = std::collections::HashMap::new();
+    let mut tiles = std::collections::HashMap::new();
+    for (tname, _traw) in &st.file.tile {
+        if let Ok((grid, w, h)) = pixl_core::resolve::resolve_tile_grid(
+            tname,
+            &st.file.tile,
+            &st.palettes,
+            &empty_stamps,
+        ) {
+            tiles.insert(
+                tname.clone(),
+                pixl_core::types::Tile {
+                    name: tname.clone(),
+                    palette: _traw.palette.clone(),
+                    width: w,
+                    height: h,
+                    encoding: pixl_core::types::Encoding::Grid,
+                    symmetry: pixl_core::types::Symmetry::None,
+                    auto_rotate: pixl_core::types::AutoRotate::None,
+                    edge_class: pixl_core::types::EdgeClass {
+                        n: String::new(),
+                        e: String::new(),
+                        s: String::new(),
+                        w: String::new(),
+                    },
+                    tags: vec![],
+                    target_layer: None,
+                    weight: 1.0,
+                    palette_swaps: vec![],
+                    cycles: vec![],
+                    nine_slice: None,
+                    visual_height_extra: None,
+                    semantic: None,
+                    grid,
+                },
+            );
+        }
+    }
+
+    let grid = if let Some(anim_name) = anim {
+        pixl_core::composite::compose_anim_frame(
+            &composite,
+            anim_name,
+            frame.unwrap_or(1),
+            variant,
+            &tiles,
+            '.',
+        )
+    } else {
+        pixl_core::composite::compose_grid(&composite, variant, frame, &tiles, '.')
+    };
+
+    let grid = match grid {
+        Ok(g) => g,
+        Err(e) => return json!({"error": format!("compose error: {}", e)}),
+    };
+
+    let img = renderer::render_grid(&grid, palette, scale);
+    let b64 = renderer::png_to_base64(&renderer::encode_png(&img));
+
+    json!({
+        "ok": true,
+        "name": name,
+        "size": raw.size,
+        "variant": variant,
+        "anim": anim,
+        "frame": frame,
+        "scale": scale,
+        "preview_b64": b64,
+    })
+}
+
+fn handle_check_seams(state: &Mutex<McpState>) -> Value {
+    let st = state.lock().unwrap();
+
+    if st.file.composite.is_empty() {
+        return json!({"ok": true, "message": "no composites defined", "warnings": []});
+    }
+
+    // Resolve tiles for seam checking
+    let empty_stamps = std::collections::HashMap::new();
+    let mut tiles = std::collections::HashMap::new();
+    for (tname, _traw) in &st.file.tile {
+        if let Ok((grid, w, h)) = pixl_core::resolve::resolve_tile_grid(
+            tname,
+            &st.file.tile,
+            &st.palettes,
+            &empty_stamps,
+        ) {
+            tiles.insert(
+                tname.clone(),
+                pixl_core::types::Tile {
+                    name: tname.clone(),
+                    palette: _traw.palette.clone(),
+                    width: w,
+                    height: h,
+                    encoding: pixl_core::types::Encoding::Grid,
+                    symmetry: pixl_core::types::Symmetry::None,
+                    auto_rotate: pixl_core::types::AutoRotate::None,
+                    edge_class: pixl_core::types::EdgeClass {
+                        n: String::new(),
+                        e: String::new(),
+                        s: String::new(),
+                        w: String::new(),
+                    },
+                    tags: vec![],
+                    target_layer: None,
+                    weight: 1.0,
+                    palette_swaps: vec![],
+                    cycles: vec![],
+                    nine_slice: None,
+                    visual_height_extra: None,
+                    semantic: None,
+                    grid,
+                },
+            );
+        }
+    }
+
+    let warnings = validate::check_seams(&st.file, &tiles);
+    let warning_json: Vec<Value> = warnings
+        .iter()
+        .map(|w| {
+            json!({
+                "composite": w.composite,
+                "slot_a": w.slot_a,
+                "slot_b": w.slot_b,
+                "direction": w.direction,
+                "mismatched_count": w.mismatched.len(),
+            })
+        })
+        .collect();
+
+    json!({
+        "ok": true,
+        "warning_count": warnings.len(),
+        "warnings": warning_json,
+    })
+}
+
+// ── SELF-REFINE handlers ────────────────────────────────────────────
+
+fn handle_critique_tile(state: &Mutex<McpState>, args: &Value) -> Value {
+    let st = state.lock().unwrap();
+
+    let name = args["name"].as_str().unwrap_or("");
+    let scale = args.get("scale").and_then(|v| v.as_u64()).unwrap_or(16) as u32;
+
+    let tile_raw = match st.file.tile.get(name) {
+        Some(t) => t,
+        None => return json!({"error": format!("tile '{}' not found", name)}),
+    };
+
+    let palette = match st.palettes.get(&tile_raw.palette) {
+        Some(p) => p,
+        None => return json!({"error": format!("palette '{}' not found", tile_raw.palette)}),
+    };
+
+    let size_str = tile_raw.size.as_deref().unwrap_or("16x16");
+    let (w, h) = match parse_size(size_str) {
+        Ok(s) => s,
+        Err(e) => return json!({"error": e}),
+    };
+
+    // Resolve grid (handles grid, RLE, compose, template, symmetry)
+    let empty_stamps = std::collections::HashMap::new();
+    let parsed = match pixl_core::resolve::resolve_tile_grid(
+        name,
+        &st.file.tile,
+        &st.palettes,
+        &empty_stamps,
+    ) {
+        Ok((g, _, _)) => g,
+        Err(e) => return json!({"error": format!("{}", e)}),
+    };
+
+    // Render preview
+    let img = renderer::render_grid(&parsed, palette, scale);
+    let b64 = renderer::png_to_base64(&renderer::encode_png(&img));
+
+    // Run structural analysis
+    let report = pixl_core::structural::analyze(&parsed, palette, '.');
+    let critique = pixl_core::structural::critique_text(&report, name);
+
+    // Style score (if session has a style latent)
+    let style_score = st
+        .style_latent
+        .as_ref()
+        .map(|latent| latent.score_tile(&parsed, palette, '.'));
+
+    let issues_json: Vec<Value> = report
+        .issues
+        .iter()
+        .map(|i| {
+            json!({
+                "severity": match i.severity {
+                    pixl_core::structural::Severity::Error => "error",
+                    pixl_core::structural::Severity::Warning => "warning",
+                    pixl_core::structural::Severity::Info => "info",
+                },
+                "code": i.code,
+                "message": i.message,
+            })
+        })
+        .collect();
+
+    let refinement_count = st.refinement_count.get(name).copied().unwrap_or(0);
+
+    json!({
+        "ok": true,
+        "name": name,
+        "size": size_str,
+        "scale": scale,
+        "preview_b64": b64,
+        "critique": critique,
+        "issues": issues_json,
+        "metrics": {
+            "outline_coverage": format!("{:.1}%", report.outline_coverage * 100.0),
+            "centering": format!("{:.1}%", report.centering_score * 100.0),
+            "canvas_utilization": format!("{:.1}%", report.canvas_utilization * 100.0),
+            "mean_contrast": format!("{:.4}", report.mean_adjacent_contrast),
+            "connected_components": report.connected_components,
+            "pixel_density": format!("{:.1}%", report.pixel_density * 100.0),
+        },
+        "style_score": style_score,
+        "has_errors": pixl_core::structural::has_errors(&report),
+        "has_warnings": pixl_core::structural::has_warnings(&report),
+        "refinement_count": refinement_count,
+        "max_refinements": 3,
+        "should_refine": pixl_core::structural::has_warnings(&report) && refinement_count < 3,
+        "should_reject": pixl_core::structural::has_errors(&report),
+        "refinement_prompt": if report.issues.is_empty() {
+            Value::Null
+        } else {
+            Value::String(pixl_core::structural::refinement_prompt(&report, &parsed, name))
+        },
+    })
+}
+
+fn handle_generate_wang(state: &Mutex<McpState>, args: &Value) -> Value {
+    let mut st = state.lock().unwrap();
+
+    let terrain_a = args["terrain_a"].as_str().unwrap_or("grass").to_string();
+    let terrain_b = args["terrain_b"].as_str().unwrap_or("water").to_string();
+    let method_str = args
+        .get("method")
+        .and_then(|v| v.as_str())
+        .unwrap_or("dual_grid");
+    let size = args
+        .get("size")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(16) as u32;
+
+    // Get terrain symbols from palette roles or args
+    let sym_a = args
+        .get("sym_a")
+        .and_then(|v| v.as_str())
+        .and_then(|s| s.chars().next())
+        .unwrap_or('+');
+    let sym_b = args
+        .get("sym_b")
+        .and_then(|v| v.as_str())
+        .and_then(|s| s.chars().next())
+        .unwrap_or('~');
+    let sym_border = args
+        .get("sym_border")
+        .and_then(|v| v.as_str())
+        .and_then(|s| s.chars().next())
+        .unwrap_or('#');
+
+    // Determine palette
+    let palette_name = args
+        .get("palette")
+        .and_then(|v| v.as_str())
+        .or_else(|| {
+            st.file
+                .pax
+                .theme
+                .as_deref()
+                .and_then(|t| st.file.theme.get(t))
+                .map(|t| t.palette.as_str())
+        })
+        .unwrap_or("default")
+        .to_string();
+
+    let method = match method_str {
+        "blob_47" | "blob47" => pixl_core::wang::WangMethod::Blob47,
+        _ => pixl_core::wang::WangMethod::DualGrid,
+    };
+
+    let config = pixl_core::wang::WangConfig {
+        terrain_a: terrain_a.clone(),
+        terrain_b: terrain_b.clone(),
+        size,
+        palette: palette_name,
+        sym_a,
+        sym_b,
+        sym_border,
+        method,
+    };
+
+    let result = pixl_core::wang::generate(&config);
+
+    // Insert all generated tiles into the session
+    let mut tile_names = Vec::new();
+    for tile in result.tiles {
+        tile_names.push(tile.name.clone());
+        st.file.tile.insert(tile.name, tile.tile_raw);
+    }
+
+    json!({
+        "ok": true,
+        "method": method_str,
+        "terrain_a": terrain_a,
+        "terrain_b": terrain_b,
+        "tiles_created": tile_names.len(),
+        "tile_names": tile_names,
+        "summary": result.summary,
+    })
+}
+
+fn handle_rate_tile(state: &Mutex<McpState>, args: &Value) -> Value {
+    let st = state.lock().unwrap();
+    let name = args["name"].as_str().unwrap_or("");
+    let criteria = args
+        .get("criteria")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str())
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_else(|| {
+            vec![
+                "readability".to_string(),
+                "appeal".to_string(),
+                "consistency".to_string(),
+            ]
+        });
+
+    let tile = match st.file.tile.get(name) {
+        Some(t) => t,
+        None => return json!({"error": format!("tile '{}' not found", name)}),
+    };
+
+    let empty_stamps = std::collections::HashMap::new();
+    let (grid, w, h) = match pixl_core::resolve::resolve_tile_grid(
+        name,
+        &st.file.tile,
+        &st.palettes,
+        &empty_stamps,
+    ) {
+        Ok(r) => r,
+        Err(e) => return json!({"error": format!("cannot resolve tile: {}", e)}),
+    };
+
+    let palette = match st.palettes.get(&tile.palette) {
+        Some(p) => p,
+        None => return json!({"error": format!("palette '{}' not found", tile.palette)}),
+    };
+
+    // Run structural analysis
+    let void_sym = st
+        .file
+        .pax
+        .theme
+        .as_deref()
+        .and_then(|t| st.file.theme.get(t))
+        .and_then(|t| t.roles.get("void"))
+        .and_then(|s| s.chars().next())
+        .unwrap_or('.');
+
+    let report = pixl_core::structural::analyze(&grid, palette, void_sym);
+
+    // Get style score if latent exists
+    let style_score = st
+        .style_latent
+        .as_ref()
+        .map(|latent| latent.score_tile(&grid, palette, void_sym));
+
+    // Compute aesthetic rating
+    let rating = pixl_core::structural::rate_tile(&report, style_score);
+    let suggested_w = pixl_core::structural::suggested_weight(&rating);
+
+    // Build per-criteria breakdown
+    let mut breakdown = serde_json::Map::new();
+    for c in &criteria {
+        match c.as_str() {
+            "readability" => {
+                breakdown.insert(
+                    "readability".to_string(),
+                    json!({
+                        "score": rating.readability,
+                        "outline_coverage": format!("{:.0}%", report.outline_coverage * 100.0),
+                        "contrast": format!("{:.3}", report.mean_adjacent_contrast),
+                        "centering": format!("{:.0}%", report.centering_score * 100.0),
+                    }),
+                );
+            }
+            "appeal" => {
+                breakdown.insert(
+                    "appeal".to_string(),
+                    json!({
+                        "score": rating.appeal,
+                        "canvas_utilization": format!("{:.0}%", report.canvas_utilization * 100.0),
+                        "pixel_density": format!("{:.0}%", report.pixel_density * 100.0),
+                        "connected_components": report.connected_components,
+                    }),
+                );
+            }
+            "consistency" => {
+                breakdown.insert(
+                    "consistency".to_string(),
+                    json!({
+                        "score": rating.consistency,
+                        "style_score": style_score,
+                        "has_style_latent": st.style_latent.is_some(),
+                    }),
+                );
+            }
+            _ => {}
+        }
+    }
+
+    json!({
+        "name": name,
+        "overall": rating.overall,
+        "score": rating.score,
+        "assessment": rating.assessment,
+        "breakdown": breakdown,
+        "suggested_weight": suggested_w,
+        "current_weight": tile.weight,
+    })
+}
+
+fn handle_refine_tile(state: &Mutex<McpState>, args: &Value) -> Value {
+    let mut st = state.lock().unwrap();
+
+    let name = args["name"].as_str().unwrap_or("").to_string();
+    let start_row = args.get("start_row").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+    let new_rows_str = args["rows"].as_str().unwrap_or("");
+
+    // Validate tile exists and extract info we need before mutating
+    let (palette_name, size_str_owned, current_grid_str) = {
+        let tile_raw = match st.file.tile.get(&name) {
+            Some(t) => t,
+            None => return json!({"error": format!("tile '{}' not found", name)}),
+        };
+        let palette_name = tile_raw.palette.clone();
+        let size_str = tile_raw.size.as_deref().unwrap_or("16x16").to_string();
+        let grid_str = match &tile_raw.grid {
+            Some(g) => g.clone(),
+            None => return json!({"error": "tile has no grid data (RLE/compose tiles cannot be refined this way)"}),
+        };
+        (palette_name, size_str, grid_str)
+    };
+
+    let palette = match st.palettes.get(&palette_name) {
+        Some(p) => p.clone(),
+        None => return json!({"error": format!("palette '{}' not found", palette_name)}),
+    };
+
+    // Parse current grid into lines
+    let mut lines: Vec<String> = current_grid_str
+        .lines()
+        .map(|l| l.to_string())
+        .filter(|l| !l.trim().is_empty())
+        .collect();
+
+    // Parse replacement rows
+    let replacement: Vec<String> = new_rows_str
+        .lines()
+        .map(|l| l.to_string())
+        .filter(|l| !l.trim().is_empty())
+        .collect();
+
+    if replacement.is_empty() {
+        return json!({"error": "no replacement rows provided"});
+    }
+
+    // Validate width consistency
+    let expected_width = lines.first().map(|l| l.len()).unwrap_or(0);
+    for (i, row) in replacement.iter().enumerate() {
+        if row.len() != expected_width {
+            return json!({"error": format!(
+                "replacement row {} has width {}, expected {}",
+                i, row.len(), expected_width
+            )});
+        }
+    }
+
+    // Apply patch
+    let end_row = start_row + replacement.len();
+    if end_row > lines.len() {
+        return json!({"error": format!(
+            "patch extends beyond grid: start_row={} + {} rows = {}, but grid has {} rows",
+            start_row, replacement.len(), end_row, lines.len()
+        )});
+    }
+
+    for (i, row) in replacement.iter().enumerate() {
+        lines[start_row + i] = row.clone();
+    }
+
+    // Rebuild grid string and update tile in state
+    let new_grid_str = lines.join("\n");
+    if let Some(tile) = st.file.tile.get_mut(&name) {
+        tile.grid = Some(new_grid_str);
+    }
+
+    // Track refinement count
+    let count = st.refinement_count.entry(name.clone()).or_insert(0);
+    *count += 1;
+    let refinement_count = *count;
+
+    // Parse the updated grid for rendering + critique
+    let size_str = size_str_owned.as_str();
+    let (w, h) = match parse_size(size_str) {
+        Ok(s) => s,
+        Err(e) => return json!({"ok": true, "name": name, "error": e, "refinement_count": refinement_count}),
+    };
+
+    let parsed = match grid::parse_grid(
+        &st.file.tile[&name].grid.as_ref().unwrap(),
+        w,
+        h,
+        &palette,
+    ) {
+        Ok(g) => g,
+        Err(e) => return json!({"ok": true, "name": name, "parse_error": format!("{}", e), "refinement_count": refinement_count}),
+    };
+
+    // Render preview
+    let img = renderer::render_grid(&parsed, &palette, 16);
+    let b64 = renderer::png_to_base64(&renderer::encode_png(&img));
+
+    // Run structural critique on updated tile
+    let report = pixl_core::structural::analyze(&parsed, &palette, '.');
+    let critique = pixl_core::structural::critique_text(&report, &name);
+
+    json!({
+        "ok": true,
+        "name": name,
+        "patched_rows": format!("{}-{}", start_row, end_row - 1),
+        "refinement_count": refinement_count,
+        "preview_b64": b64,
+        "critique": critique,
+        "has_errors": pixl_core::structural::has_errors(&report),
+        "has_warnings": pixl_core::structural::has_warnings(&report),
+        "should_refine": pixl_core::structural::has_warnings(&report) && refinement_count < 3,
+    })
+}
+
+// ── Diffusion Bridge ────────────────────────────────────────────────
+
+pub async fn handle_generate_sprite(state: &Mutex<McpState>, args: &Value) -> Value {
+    let prompt = args.get("prompt").and_then(|v| v.as_str()).unwrap_or("");
+    let name = args.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let size_str = args.get("size").and_then(|v| v.as_str());
+    let dither = args.get("dither").and_then(|v| v.as_bool()).unwrap_or(false);
+    let max_colors = args.get("max_colors").and_then(|v| v.as_u64()).unwrap_or(32) as u32;
+    let target_palette_name = args.get("target_palette").and_then(|v| v.as_str());
+
+    if prompt.is_empty() || name.is_empty() {
+        return json!({"error": "both 'prompt' and 'name' are required"});
+    }
+
+    let config = match crate::diffusion::DiffusionConfig::from_env() {
+        Some(c) => c,
+        None => {
+            return json!({
+                "error": "OPENAI_API_KEY not set. Set it in your environment to use the diffusion bridge."
+            })
+        }
+    };
+
+    // Parse target size — None means "auto-detect from generated image"
+    let (target_w, target_h) = if let Some(s) = size_str {
+        if s == "auto" {
+            (None, None)
+        } else {
+            match parse_size(s) {
+                Ok((w, h)) => (Some(w), Some(h)),
+                Err(e) => return json!({"error": e}),
+            }
+        }
+    } else {
+        (None, None) // No size specified → auto-detect
+    };
+
+    // Get the active palette from session
+    let palette = {
+        let st = state.lock().unwrap();
+        let palette_name = st
+            .palettes
+            .keys()
+            .next()
+            .cloned()
+            .unwrap_or_default();
+        match st.palettes.get(&palette_name) {
+            Some(p) => (palette_name, p.clone()),
+            None => return json!({"error": "no palette found in session"}),
+        }
+    };
+
+    // Always use auto-palette: extract colors from the generated image for
+    // maximum fidelity. Remap to project palette afterward if target_palette set.
+    let result = match crate::diffusion::generate_with_auto_palette(
+        &config, prompt, target_w, target_h, max_colors, dither,
+    )
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => return json!({"error": format!("diffusion bridge failed: {}", e)}),
+    };
+
+    let render_palette = result.extracted_palette.as_ref().unwrap_or(&palette.1);
+
+    // Render the quantized grid as preview
+    let preview_img = renderer::render_grid(&result.grid, render_palette, 16);
+    let preview_b64 = renderer::png_to_base64(&renderer::encode_png(&preview_img));
+
+    // Encode reference image (the raw DALL-E output) for comparison
+    let reference_b64 = renderer::png_to_base64(&result.reference_png);
+
+    // Run structural analysis
+    let report = pixl_core::structural::analyze(&result.grid, render_palette, '.');
+    let critique = pixl_core::structural::critique_text(&report, &name);
+
+    // Store extracted palette in session
+    let auto_pal_name = format!("{}_palette", name);
+    if let Some(ref extracted) = result.extracted_palette {
+        let mut st = state.lock().unwrap();
+        st.palettes.insert(auto_pal_name.clone(), extracted.clone());
+        drop(st);
+    }
+    let tile_palette_name = auto_pal_name.clone();
+
+    // If target_palette specified, remap immediately to project palette
+    let (final_grid, final_grid_string, final_palette_name) =
+        if let Some(target_pal) = target_palette_name {
+            let st = state.lock().unwrap();
+            if let Some(target) = st.palettes.get(target_pal) {
+                let remapped = pixl_render::pixelize::remap_grid(
+                    &result.grid, render_palette, target, '.',
+                );
+                let remapped_str = remapped
+                    .iter()
+                    .map(|row| row.iter().collect::<String>())
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                (remapped, remapped_str, target_pal.to_string())
+            } else {
+                (result.grid.clone(), result.grid_string.clone(), tile_palette_name.clone())
+            }
+        } else {
+            (result.grid.clone(), result.grid_string.clone(), tile_palette_name.clone())
+        };
+
+    // Store tile in session
+    {
+        let mut st = state.lock().unwrap();
+        let actual_size = format!("{}x{}", result.width, result.height);
+        let tile_raw = pixl_core::types::TileRaw {
+            palette: final_palette_name.clone(),
+            size: Some(actual_size.clone()),
+            encoding: None,
+            symmetry: None,
+            auto_rotate: None,
+            auto_rotate_weight: None,
+            template: None,
+            edge_class: None,
+            corner_class: None,
+            tags: vec!["generated".to_string(), "diffusion".to_string()],
+            target_layer: None,
+            weight: 1.0,
+            palette_swaps: vec![],
+            cycles: vec![],
+            nine_slice: None,
+            visual_height_extra: None,
+            semantic: None,
+            grid: Some(final_grid_string.clone()),
+            rle: None,
+            layout: None,
+            fill: None,
+            fill_size: None,
+            delta: None,
+            patches: vec![],
+        };
+        st.file.tile.insert(name.clone(), tile_raw);
+    }
+
+    json!({
+        "ok": true,
+        "name": name,
+        "size": format!("{}x{}", result.width, result.height),
+        "prompt": prompt,
+        "model": config.model,
+        "generated_size": format!("{}x{}", result.generated_size.0, result.generated_size.1),
+        "detected_pixel_size": result.detected_pixel_size,
+        "native_resolution": format!("{}x{}", result.native_resolution.0, result.native_resolution.1),
+        "color_accuracy": format!("{:.1}%", result.color_accuracy * 100.0),
+        "clipped_colors": result.clipped_colors,
+        "dither": dither,
+        "preview_b64": preview_b64,
+        "reference_b64": reference_b64,
+        "grid": final_grid_string,
+        "critique": critique,
+        "has_errors": pixl_core::structural::has_errors(&report),
+        "has_warnings": pixl_core::structural::has_warnings(&report),
+        "palette_name": final_palette_name,
+        "auto_palette_name": auto_pal_name,
+        "palette_toml": result.palette_toml,
+        "target_palette": target_palette_name,
+        "hint": "The sprite was generated with auto-extracted colors for maximum fidelity. \
+                 The palette_toml can be pasted into your .pax file. \
+                 To convert to your project palette, use pixl_remap_tile or pass \
+                 target_palette to this tool.",
+    })
+}
+
+fn handle_remap_tile(state: &Mutex<McpState>, args: &Value) -> Value {
+    let mut st = state.lock().unwrap();
+
+    let name = args["name"].as_str().unwrap_or("").to_string();
+    let target_palette_name = args["target_palette"].as_str().unwrap_or("").to_string();
+
+    if name.is_empty() || target_palette_name.is_empty() {
+        return json!({"error": "both 'name' and 'target_palette' are required"});
+    }
+
+    // Get source tile info
+    let (source_palette_name, size_str, grid_str) = {
+        let tile = match st.file.tile.get(&name) {
+            Some(t) => t,
+            None => return json!({"error": format!("tile '{}' not found", name)}),
+        };
+        (
+            tile.palette.clone(),
+            tile.size.as_deref().unwrap_or("16x16").to_string(),
+            match &tile.grid {
+                Some(g) => g.clone(),
+                None => return json!({"error": "tile has no grid data"}),
+            },
+        )
+    };
+
+    let source_palette = match st.palettes.get(&source_palette_name) {
+        Some(p) => p.clone(),
+        None => return json!({"error": format!("source palette '{}' not found", source_palette_name)}),
+    };
+
+    let target_palette = match st.palettes.get(&target_palette_name) {
+        Some(p) => p.clone(),
+        None => return json!({"error": format!("target palette '{}' not found", target_palette_name)}),
+    };
+
+    let (w, h) = match parse_size(&size_str) {
+        Ok(s) => s,
+        Err(e) => return json!({"error": e}),
+    };
+
+    // Parse current grid
+    let grid: Vec<Vec<char>> = grid_str
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| l.chars().collect())
+        .collect();
+
+    // Remap
+    let remapped = pixl_render::pixelize::remap_grid(&grid, &source_palette, &target_palette, '.');
+
+    let remapped_str: String = remapped
+        .iter()
+        .map(|row| row.iter().collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    // Update tile in session
+    if let Some(tile) = st.file.tile.get_mut(&name) {
+        tile.grid = Some(remapped_str.clone());
+        tile.palette = target_palette_name.clone();
+    }
+
+    // Render preview
+    let preview_img = renderer::render_grid(&remapped, &target_palette, 16);
+    let preview_b64 = renderer::png_to_base64(&renderer::encode_png(&preview_img));
+
+    // Critique
+    let report = pixl_core::structural::analyze(&remapped, &target_palette, '.');
+    let critique = pixl_core::structural::critique_text(&report, &name);
+
+    json!({
+        "ok": true,
+        "name": name,
+        "source_palette": source_palette_name,
+        "target_palette": target_palette_name,
+        "preview_b64": preview_b64,
+        "grid": remapped_str,
+        "critique": critique,
+    })
+}
+
+fn handle_show_references(state: &Mutex<McpState>, args: &Value) -> Value {
+    let st = state.lock().unwrap();
+
+    let query = args["query"].as_str().unwrap_or("").to_lowercase();
+    let count = args.get("count").and_then(|v| v.as_u64()).unwrap_or(4) as usize;
+    let size_filter = args.get("size").and_then(|v| v.as_str());
+
+    if query.is_empty() {
+        return json!({"error": "query is required — e.g. 'wall', 'character', 'potion'"});
+    }
+
+    // Score each tile in the session by relevance to the query
+    let query_words: Vec<&str> = query.split_whitespace().collect();
+    let empty_stamps = std::collections::HashMap::new();
+
+    let mut scored: Vec<(String, f64)> = st
+        .file
+        .tile
+        .iter()
+        .filter_map(|(name, tile_raw)| {
+            // Skip template tiles
+            if tile_raw.template.is_some() {
+                return None;
+            }
+
+            // Filter by size if specified
+            if let Some(size) = size_filter {
+                if tile_raw.size.as_deref() != Some(size) {
+                    return None;
+                }
+            }
+
+            // Must have grid data
+            if tile_raw.grid.is_none() && tile_raw.rle.is_none() {
+                return None;
+            }
+
+            // Score by name match + tag match
+            let name_lower = name.to_lowercase();
+            let mut score = 0.0f64;
+
+            for word in &query_words {
+                if name_lower.contains(word) {
+                    score += 2.0;
+                }
+                for tag in &tile_raw.tags {
+                    if tag.to_lowercase().contains(word) {
+                        score += 1.5;
+                    }
+                }
+                // Also check target_layer
+                if let Some(ref layer) = tile_raw.target_layer {
+                    if layer.to_lowercase().contains(word) {
+                        score += 1.0;
+                    }
+                }
+            }
+
+            if score > 0.0 {
+                Some((name.clone(), score))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // Sort by score descending
+    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    scored.truncate(count);
+
+    if scored.is_empty() {
+        // If no matches, return a random sample of tiles
+        let all_names: Vec<String> = st
+            .file
+            .tile
+            .iter()
+            .filter(|(_, t)| t.template.is_none() && (t.grid.is_some() || t.rle.is_some()))
+            .filter(|(_, t)| {
+                size_filter.map_or(true, |s| t.size.as_deref() == Some(s))
+            })
+            .map(|(n, _)| n.clone())
+            .take(count)
+            .collect();
+
+        if all_names.is_empty() {
+            return json!({
+                "ok": true,
+                "message": "no tiles found in session",
+                "references": [],
+            });
+        }
+        scored = all_names.into_iter().map(|n| (n, 0.0)).collect();
+    }
+
+    // Render each matched tile as a preview image
+    let mut references = Vec::new();
+    for (tile_name, score) in &scored {
+        let tile_raw = &st.file.tile[tile_name];
+
+        if let Ok((parsed, w, h)) = pixl_core::resolve::resolve_tile_grid(
+            tile_name,
+            &st.file.tile,
+            &st.palettes,
+            &empty_stamps,
+        ) {
+            let palette = match st.palettes.get(&tile_raw.palette) {
+                Some(p) => p,
+                None => continue,
+            };
+
+            // Render at 16x for clear visibility
+            let img = renderer::render_grid(&parsed, palette, 16);
+            let b64 = renderer::png_to_base64(&renderer::encode_png(&img));
+
+            references.push(json!({
+                "name": tile_name,
+                "size": format!("{}x{}", w, h),
+                "tags": tile_raw.tags,
+                "relevance": score,
+                "preview_b64": b64,
+            }));
+        }
+    }
+
+    json!({
+        "ok": true,
+        "query": query,
+        "count": references.len(),
+        "references": references,
+        "hint": "Study these rendered tiles carefully before generating. Note the outline style, \
+                 color distribution, shading direction, and level of detail at this canvas size.",
+    })
+}
+
+fn handle_upscale_tile(state: &Mutex<McpState>, args: &Value) -> Value {
+    let mut st = state.lock().unwrap();
+
+    let name = args["name"].as_str().unwrap_or("").to_string();
+    let factor = args.get("factor").and_then(|v| v.as_u64()).unwrap_or(2) as u32;
+    let new_name = args
+        .get("new_name")
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .unwrap_or_else(|| format!("{}_upscaled", name));
+
+    if factor < 2 || factor > 4 {
+        return json!({"error": "factor must be 2, 3, or 4"});
+    }
+
+    // Extract tile info before mutating state
+    let (palette_name, size_str, grid_str) = {
+        let tile_raw = match st.file.tile.get(&name) {
+            Some(t) => t,
+            None => return json!({"error": format!("tile '{}' not found", name)}),
+        };
+        let palette_name = tile_raw.palette.clone();
+        let size_str = tile_raw.size.as_deref().unwrap_or("8x8").to_string();
+        let grid_str = match &tile_raw.grid {
+            Some(g) => g.clone(),
+            None => return json!({"error": "tile has no grid data"}),
+        };
+        (palette_name, size_str, grid_str)
+    };
+
+    let palette = match st.palettes.get(&palette_name) {
+        Some(p) => p.clone(),
+        None => return json!({"error": format!("palette '{}' not found", palette_name)}),
+    };
+
+    let (w, h) = match parse_size(&size_str) {
+        Ok(s) => s,
+        Err(e) => return json!({"error": e}),
+    };
+
+    // Parse original grid
+    let original = match grid::parse_grid(&grid_str, w, h, &palette) {
+        Ok(g) => g,
+        Err(e) => return json!({"error": format!("{}", e)}),
+    };
+
+    // Upscale
+    let (upscaled, upscaled_str, new_w, new_h) =
+        pixl_core::upscale::upscale_tile_grid(&original, factor);
+
+    // Create new tile in state (reuse all properties except size and grid)
+    // We need to build a TileRaw manually since it doesn't impl Clone
+    let tile_raw = &st.file.tile[&name];
+    let new_tile = pixl_core::types::TileRaw {
+        palette: palette_name.clone(),
+        size: Some(format!("{}x{}", new_w, new_h)),
+        encoding: None,
+        symmetry: None,
+        auto_rotate: None,
+        auto_rotate_weight: None,
+        template: None,
+        edge_class: tile_raw.edge_class.as_ref().map(|ec| pixl_core::types::EdgeClassRaw {
+            n: ec.n.clone(),
+            e: ec.e.clone(),
+            s: ec.s.clone(),
+            w: ec.w.clone(),
+        }),
+        corner_class: None,
+        tags: tile_raw.tags.clone(),
+        target_layer: tile_raw.target_layer.clone(),
+        weight: tile_raw.weight,
+        palette_swaps: tile_raw.palette_swaps.clone(),
+        cycles: tile_raw.cycles.clone(),
+        nine_slice: None,
+        visual_height_extra: None,
+        semantic: None,
+        grid: Some(upscaled_str),
+        rle: None,
+        layout: None,
+        fill: None,
+        fill_size: None,
+        delta: None,
+        patches: vec![],
+    };
+
+    st.file.tile.insert(new_name.clone(), new_tile);
+
+    // Render preview
+    let img = renderer::render_grid(&upscaled, &palette, 8);
+    let b64 = renderer::png_to_base64(&renderer::encode_png(&img));
+
+    // Run structural critique
+    let report = pixl_core::structural::analyze(&upscaled, &palette, '.');
+    let critique = pixl_core::structural::critique_text(&report, &new_name);
+
+    json!({
+        "ok": true,
+        "source": name,
+        "source_size": format!("{}x{}", w, h),
+        "new_name": new_name,
+        "new_size": format!("{}x{}", new_w, new_h),
+        "factor": factor,
+        "preview_b64": b64,
+        "critique": critique,
+        "hint": "The upscaled tile has blocky 2x2 pixel regions. Use pixl_refine_tile to add sub-pixel detail: anti-alias edges, add dithering in flat regions, refine small features like eyes or buttons.",
+    })
 }
 
 fn resolve_backdrop_tile_grids(

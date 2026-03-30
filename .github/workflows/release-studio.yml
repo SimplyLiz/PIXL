@@ -10,20 +10,38 @@ permissions:
 jobs:
   build-macos:
     runs-on: macos-latest
-    defaults:
-      run:
-        working-directory: studio
     steps:
       - uses: actions/checkout@v5
 
+      # Build the Rust engine first
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tool
+
+      - name: Build pixl engine
+        working-directory: tool
+        run: cargo build --release -p pixl
+
+      # Build Flutter Studio
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
-      - run: flutter pub get
-      - run: flutter test
-      - run: flutter build macos --release
+      - name: Flutter build
+        working-directory: studio
+        run: |
+          flutter pub get
+          flutter test
+          flutter build macos --release
+
+      # Bundle the pixl binary inside the .app
+      - name: Bundle engine binary
+        run: |
+          cp tool/target/release/pixl \
+            studio/build/macos/Build/Products/Release/pixl_studio.app/Contents/MacOS/pixl
+          chmod +x studio/build/macos/Build/Products/Release/pixl_studio.app/Contents/MacOS/pixl
 
       - name: Codesign
         if: ${{ secrets.MACOS_CERTIFICATE != '' }}
@@ -31,6 +49,7 @@ jobs:
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
           MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
           MACOS_KEYCHAIN_PWD: ${{ secrets.MACOS_KEYCHAIN_PWD }}
+        working-directory: studio
         run: |
           echo "$MACOS_CERTIFICATE" | base64 --decode > certificate.p12
           security create-keychain -p "$MACOS_KEYCHAIN_PWD" build.keychain
@@ -42,6 +61,7 @@ jobs:
             build/macos/Build/Products/Release/pixl_studio.app
 
       - name: Create DMG
+        working-directory: studio
         run: |
           brew install create-dmg
           create-dmg \
@@ -59,6 +79,7 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_ID_PWD: ${{ secrets.APPLE_ID_PWD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        working-directory: studio
         run: |
           xcrun notarytool submit PIXL-Studio.dmg \
             --apple-id "$APPLE_ID" \

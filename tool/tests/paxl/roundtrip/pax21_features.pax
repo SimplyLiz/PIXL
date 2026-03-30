@@ -1,0 +1,111 @@
+[pax]
+version = "2.1"
+name    = "pax21_test"
+author  = "test"
+theme   = "test"
+
+[theme.test]
+palette          = "test"
+scale            = 1
+canvas           = 8
+max_palette_size = 8
+light_source     = "top-left"
+
+[theme.test.roles]
+void = "."
+bg   = "#"
+fg   = "+"
+hi   = "h"
+shadow = "s"
+
+[palette.test]
+"." = "#00000000"
+"#" = "#2a1f3d"
+"+" = "#5a4878"
+"h" = "#8070a8"
+"s" = "#12091f"
+
+# --- Style latent (PAX 2.1) ---
+
+[style.test]
+light_direction = 0.15
+run_length_mean = 2.5
+shadow_ratio    = 0.3
+palette_breadth = 4.0
+pixel_density   = 0.8
+palette_entropy = 1.8
+hue_bias        = 270.0
+luminance_mean  = 0.4
+sample_count    = 3
+
+# --- Stamps ---
+
+[stamp.brick_2x2]
+palette = "test"
+size    = "2x2"
+grid    = '''
+h+
++s
+'''
+
+# --- Standard grid tile ---
+
+[tile.wall_4x4]
+palette    = "test"
+size       = "4x4"
+edge_class = { n = "solid", e = "solid", s = "solid", w = "solid" }
+grid = '''
+####
+#++#
+#++#
+####
+'''
+
+# --- Grid with row references (PAX 2.1) ---
+
+[tile.wall_8x4]
+palette    = "test"
+size       = "4x4"
+edge_class = { n = "solid", e = "solid", s = "solid", w = "solid" }
+grid = '''
+####
+#++#
+=2
+=1
+'''
+
+# --- Pattern fill tile (PAX 2.1) ---
+
+[tile.water_4x4]
+palette   = "test"
+size      = "4x4"
+encoding  = "fill"
+fill_size = "2x2"
+edge_class = { n = "water", e = "water", s = "water", w = "water" }
+fill = '''
++h
+h+
+'''
+
+# --- Delta tile (PAX 2.1) ---
+
+[tile.wall_cracked]
+palette    = "test"
+delta      = "wall_4x4"
+edge_class = { n = "solid", e = "solid", s = "solid", w = "solid" }
+patches    = [
+  { x = 1, y = 1, sym = "s" },
+  { x = 2, y = 2, sym = "s" },
+]
+
+# --- Compose at small size (PAX 2.1: compose at any size) ---
+
+[tile.composed_4x4]
+palette  = "test"
+size     = "4x4"
+encoding = "compose"
+edge_class = { n = "solid", e = "solid", s = "solid", w = "solid" }
+layout = '''
+@brick_2x2 @brick_2x2
+@brick_2x2 @brick_2x2
+'''

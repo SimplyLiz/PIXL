@@ -1,9 +1,15 @@
+use crate::composite::{self, CompositeError};
 use crate::grid::{GridError, parse_grid};
+use crate::knowledge::KnowledgeBase;
 use crate::parser::{ParseError, resolve_all_palettes};
+use crate::resolve;
 use crate::rle::{RleError, parse_rle};
+use crate::structural::{self, StructuralReport};
+use crate::style::StyleLatent;
 use crate::template::{TemplateError, validate_templates};
 use crate::theme::{ThemeError, resolve_theme};
 use crate::types::{PaxFile, parse_size};
+use std::collections::HashMap;
 use thiserror::Error;
 
 #[derive(Debug)]
@@ -11,6 +17,49 @@ pub struct ValidationResult {
     pub errors: Vec<ValidationError>,
     pub warnings: Vec<String>,
     pub stats: ValidationStats,
+    pub quality: Option<QualityReport>,
+}
+
+// ── Quality report types ────────────────────────────────────────────
+
+/// Aggregate quality analysis across all tiles in a PAX file.
+#[derive(Debug)]
+pub struct QualityReport {
+    pub tile_reports: Vec<TileQualityReport>,
+    pub consistency: Option<StyleConsistencyReport>,
+    pub tiles_analyzed: usize,
+}
+
+/// Per-tile structural analysis with optional knowledge base advice.
+#[derive(Debug)]
+pub struct TileQualityReport {
+    pub tile_name: String,
+    pub structural: StructuralReport,
+    pub kb_advice: Vec<KnowledgeAdvice>,
+}
+
+/// A knowledge base passage relevant to a detected issue.
+#[derive(Debug)]
+pub struct KnowledgeAdvice {
+    pub issue_code: String,
+    pub summary: String,
+    pub source_title: String,
+}
+
+/// Cross-tile style consistency analysis.
+#[derive(Debug)]
+pub struct StyleConsistencyReport {
+    pub mean_light_direction: f64,
+    pub light_direction_stddev: f64,
+    pub outliers: Vec<StyleOutlier>,
+}
+
+/// A tile whose light direction deviates significantly from the file mean.
+#[derive(Debug)]
+pub struct StyleOutlier {
+    pub tile_name: String,
+    pub light_direction: f64,
+    pub deviation: f64,
 }
 
 #[derive(Debug, Default)]
@@ -22,6 +71,7 @@ pub struct ValidationStats {
     pub sprites: usize,
     pub objects: usize,
     pub tile_runs: usize,
+    pub composites: usize,
 }
 
 #[derive(Debug, Error)]
@@ -99,6 +149,25 @@ pub enum ValidationError {
 
     #[error("sprite '{spriteset}/{sprite}': frame indices not contiguous starting at 1")]
     NonContiguousFrames { spriteset: String, sprite: String },
+
+    #[error("composite '{name}': {source}")]
+    Composite {
+        name: String,
+        source: CompositeError,
+    },
+
+    #[error("composite '{composite}': tile '{tile}' not found in [tile] section")]
+    CompositeTileNotFound { composite: String, tile: String },
+
+    #[error("composite '{composite}': tile '{tile}' size {got_w}x{got_h} doesn't match tile_size {exp_w}x{exp_h}")]
+    CompositeTileSizeMismatch {
+        composite: String,
+        tile: String,
+        exp_w: u32,
+        exp_h: u32,
+        got_w: u32,
+        got_h: u32,
+    },
 }
 
 /// Validate an entire PaxFile. Returns all errors and warnings.
@@ -115,6 +184,7 @@ pub fn validate(file: &PaxFile, _check_edges: bool) -> ValidationResult {
                 errors,
                 warnings,
                 stats: ValidationStats::default(),
+                quality: None,
             };
         }
     };
@@ -184,6 +254,24 @@ pub fn validate(file: &PaxFile, _check_edges: bool) -> ValidationResult {
             continue;
         }
 
+        // Skip delta tiles — they inherit grid from base and apply patches
+        if let Some(ref delta_base) = tile_raw.delta {
+            // Validate base exists
+            if !file.tile.contains_key(delta_base.as_str()) {
+                errors.push(ValidationError::NoPixelData { tile: name.clone() });
+            }
+            // Validate no delta chains
+            if let Some(base_tile) = file.tile.get(delta_base.as_str()) {
+                if base_tile.delta.is_some() {
+                    warnings.push(format!(
+                        "tile '{}': delta chain — base '{}' is also a delta tile",
+                        name, delta_base
+                    ));
+                }
+            }
+            continue;
+        }
+
         // Must have size
         let Some(ref size_str) = tile_raw.size else {
             errors.push(ValidationError::NoSize { tile: name.clone() });
@@ -201,8 +289,12 @@ pub fn validate(file: &PaxFile, _check_edges: bool) -> ValidationResult {
             }
         };
 
-        // Must have pixel data
-        if tile_raw.grid.is_none() && tile_raw.rle.is_none() && tile_raw.layout.is_none() {
+        // Must have pixel data (grid, rle, layout, or fill)
+        if tile_raw.grid.is_none()
+            && tile_raw.rle.is_none()
+            && tile_raw.layout.is_none()
+            && tile_raw.fill.is_none()
+        {
             errors.push(ValidationError::NoPixelData { tile: name.clone() });
             continue;
         }
@@ -373,6 +465,72 @@ pub fn validate(file: &PaxFile, _check_edges: bool) -> ValidationResult {
         }
     }
 
+    // 9. Validate composites
+    for (name, raw) in &file.composite {
+        match composite::resolve_composite(raw, name) {
+            Ok(comp) => {
+                // Validate all referenced tiles exist and have correct size
+                let (tw, th) = (comp.tile_width, comp.tile_height);
+
+                let mut check_tile_ref = |tile_name: &str| {
+                    if tile_name == "_" {
+                        return;
+                    }
+                    if let Some(tile_raw) = file.tile.get(tile_name) {
+                        if let Some(ref size_str) = tile_raw.size {
+                            if let Ok((w, h)) = parse_size(size_str) {
+                                if w != tw || h != th {
+                                    errors.push(ValidationError::CompositeTileSizeMismatch {
+                                        composite: name.clone(),
+                                        tile: tile_name.to_string(),
+                                        exp_w: tw,
+                                        exp_h: th,
+                                        got_w: w,
+                                        got_h: h,
+                                    });
+                                }
+                            }
+                        }
+                    } else {
+                        errors.push(ValidationError::CompositeTileNotFound {
+                            composite: name.clone(),
+                            tile: tile_name.to_string(),
+                        });
+                    }
+                };
+
+                // Check base layout tiles
+                for row in &comp.slots {
+                    for slot in row {
+                        check_tile_ref(&slot.name);
+                    }
+                }
+
+                // Check variant tiles
+                for (_vname, overrides) in &comp.variants {
+                    for (_, tile_ref) in overrides {
+                        check_tile_ref(&tile_ref.name);
+                    }
+                }
+
+                // Check animation frame tiles
+                for (_aname, anim) in &comp.animations {
+                    for frame in &anim.frames {
+                        for (_, tile_ref) in &frame.swaps {
+                            check_tile_ref(&tile_ref.name);
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                errors.push(ValidationError::Composite {
+                    name: name.clone(),
+                    source: e,
+                });
+            }
+        }
+    }
+
     let stats = ValidationStats {
         palettes: file.palette.len(),
         themes: file.theme.len(),
@@ -381,13 +539,382 @@ pub fn validate(file: &PaxFile, _check_edges: bool) -> ValidationResult {
         sprites: file.spriteset.values().map(|ss| ss.sprite.len()).sum(),
         objects: file.object.len(),
         tile_runs: file.tile_run.len(),
+        composites: file.composite.len(),
     };
 
     ValidationResult {
         errors,
         warnings,
         stats,
+        quality: None,
     }
+}
+
+// ── Quality validation ───────────────────────────────────────────────
+
+/// Map a structural issue code to a knowledge base search query.
+fn issue_query(code: &str) -> &str {
+    match code {
+        "no_outline" => "outline technique selective dark border silhouette readable contour",
+        "weak_outline" => "outline gap incomplete border coverage silhouette rim light",
+        "low_contrast" => "value contrast color ramp brightness luminance pillow shading banding",
+        "too_small" | "undersize" => "canvas utilization bounding box composition proportion fill tile size",
+        "off_center" => "centering composition balance position alignment",
+        "fragmented" => "orphan floating isolated pixel connected stray cleanup",
+        "empty_tile" => "empty tile void transparent",
+        _ => "pixel art tile quality technique",
+    }
+}
+
+/// Extract the most relevant sentence from a KB passage for a given issue code.
+/// Scores each sentence by how many issue-relevant keywords it contains.
+fn extract_best_sentence(content: &str, issue_code: &str) -> String {
+    let keywords: &[&str] = match issue_code {
+        "no_outline" | "weak_outline" => &[
+            "outline", "border", "silhouette", "sel-out", "edge", "dark",
+            "contour", "boundary", "readable",
+        ],
+        "low_contrast" => &[
+            "contrast", "value", "brightness", "luminance", "ramp", "distinct",
+            "muddy", "similar", "difference", "readability",
+        ],
+        "too_small" | "undersize" => &[
+            "size", "canvas", "fill", "bounding", "proportion", "scale",
+            "larger", "space", "utilization",
+        ],
+        "off_center" => &[
+            "center", "position", "balance", "composition", "offset", "align",
+        ],
+        "fragmented" => &[
+            "fragment", "floating", "orphan", "isolated", "stray", "connected",
+            "disconnect", "cluster",
+        ],
+        _ => &["pixel", "art", "quality", "technique"],
+    };
+
+    // Split into chunks: prefer line-based splitting (for markdown bullet points),
+    // fall back to sentence splitting. KB passages are often bullet lists.
+    let mut chunks: Vec<&str> = content
+        .split('\n')
+        .map(|s| s.trim())
+        .filter(|s| s.len() >= 15 && s.len() <= 300)
+        .collect();
+
+    // If no good line-based chunks, try sentence splitting
+    if chunks.is_empty() {
+        chunks = content
+            .split(|c: char| c == '.' || c == '!' || c == '?')
+            .map(|s| s.trim())
+            .filter(|s| s.len() >= 15 && s.len() <= 300)
+            .collect();
+    }
+
+    if chunks.is_empty() {
+        return content.chars().take(150).collect::<String>() + "…";
+    }
+
+    // Score each chunk by keyword hits, with a small bonus for chunks that
+    // start with actionable patterns (bullet points, bold terms)
+    let best = chunks
+        .iter()
+        .max_by_key(|chunk| {
+            let c_lower = chunk.to_lowercase();
+            let keyword_score = keywords.iter().filter(|kw| c_lower.contains(*kw)).count();
+            // Bonus for actionable content (bold terms, bullet lists)
+            let action_bonus = if chunk.starts_with("- **") || chunk.starts_with("**") {
+                1
+            } else {
+                0
+            };
+            keyword_score * 2 + action_bonus
+        })
+        .unwrap_or(&chunks[0]);
+
+    let result = best.to_string();
+    if result.len() > 200 {
+        result.chars().take(200).collect::<String>() + "…"
+    } else {
+        result
+    }
+}
+
+/// Run full format validation plus per-tile quality analysis and cross-tile
+/// style consistency checks. Returns the same result as `validate()` but with
+/// `quality` populated.
+pub fn validate_quality(
+    file: &PaxFile,
+    check_edges: bool,
+    kb: Option<&KnowledgeBase>,
+) -> ValidationResult {
+    let mut result = validate(file, check_edges);
+
+    // Resolve palettes (validate already did this internally, but we need the map)
+    let palettes = match resolve_all_palettes(file) {
+        Ok(p) => p,
+        Err(_) => {
+            // Palette resolution failed — format errors already captured, skip quality
+            return result;
+        }
+    };
+
+    let empty_stamps = HashMap::new();
+    let mut tile_reports = Vec::new();
+    let mut per_tile_latents: Vec<(String, StyleLatent)> = Vec::new();
+    let mut all_grids: Vec<Vec<Vec<char>>> = Vec::new();
+
+    for (name, tile_raw) in &file.tile {
+        // Skip templates — they have no pixel data of their own
+        if tile_raw.template.is_some() {
+            continue;
+        }
+
+        // Skip rotation variants (they're derived from the base tile)
+        if name.ends_with("_90") || name.ends_with("_180") || name.ends_with("_270") {
+            continue;
+        }
+
+        // Skip tiles without pixel data
+        if tile_raw.grid.is_none() && tile_raw.rle.is_none() && tile_raw.layout.is_none() {
+            continue;
+        }
+
+        // Resolve the tile grid
+        let (grid, _w, _h) = match resolve::resolve_tile_grid(
+            name,
+            &file.tile,
+            &palettes,
+            &empty_stamps,
+        ) {
+            Ok(r) => r,
+            Err(_) => continue, // Resolution errors already caught by format validation
+        };
+
+        let Some(palette) = palettes.get(&tile_raw.palette) else {
+            continue;
+        };
+
+        // Structural analysis
+        let mut report = structural::analyze(&grid, palette, '.');
+
+        // Full-bleed tiles (tileable surfaces) have no void boundary, so outline
+        // checks are irrelevant — filter them out to avoid false positives.
+        if report.pixel_density >= 0.95 {
+            report.issues.retain(|i| i.code != "no_outline" && i.code != "weak_outline");
+        }
+
+        // Knowledge base advice for each issue
+        let kb_advice = if let Some(kb) = kb {
+            report
+                .issues
+                .iter()
+                .filter_map(|issue| {
+                    let query = issue_query(issue.code);
+                    let results = kb.search(query, 3);
+                    // Prefer technique docs over hardware reference docs —
+                    // "Retro Hardware Comprehensive" dominates BM25 due to
+                    // sheer term frequency but gives hardware specs not advice.
+                    let best = results
+                        .iter()
+                        .find(|r| !r.source_title.contains("Retro Hardware"))
+                        .or(results.first())?;
+                    let snippet = extract_best_sentence(&best.content, issue.code);
+                    Some(KnowledgeAdvice {
+                        issue_code: issue.code.to_string(),
+                        summary: snippet,
+                        source_title: best.source_title.clone(),
+                    })
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        // Per-tile style latent
+        let latent = StyleLatent::extract(&[&grid], palette, '.');
+        per_tile_latents.push((name.clone(), latent));
+        all_grids.push(grid);
+
+        tile_reports.push(TileQualityReport {
+            tile_name: name.clone(),
+            structural: report,
+            kb_advice,
+        });
+    }
+
+    // Cross-tile style consistency
+    let consistency = if per_tile_latents.len() >= 2 {
+        let directions: Vec<f64> = per_tile_latents.iter().map(|(_, l)| l.light_direction).collect();
+        let mean = directions.iter().sum::<f64>() / directions.len() as f64;
+        let variance = directions.iter().map(|d| (d - mean).powi(2)).sum::<f64>()
+            / directions.len() as f64;
+        let stddev = variance.sqrt();
+
+        let outliers: Vec<StyleOutlier> = per_tile_latents
+            .iter()
+            .filter_map(|(name, latent)| {
+                let dev = (latent.light_direction - mean).abs();
+                if dev > 0.2 {
+                    Some(StyleOutlier {
+                        tile_name: name.clone(),
+                        light_direction: latent.light_direction,
+                        deviation: dev,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        Some(StyleConsistencyReport {
+            mean_light_direction: mean,
+            light_direction_stddev: stddev,
+            outliers,
+        })
+    } else {
+        None
+    };
+
+    let tiles_analyzed = tile_reports.len();
+    result.quality = Some(QualityReport {
+        tile_reports,
+        consistency,
+        tiles_analyzed,
+    });
+
+    result
+}
+
+/// Seam discontinuity found between two adjacent slots.
+#[derive(Debug)]
+pub struct SeamWarning {
+    pub composite: String,
+    pub slot_a: String,
+    pub slot_b: String,
+    pub direction: String,
+    pub mismatched: Vec<(u32, char, char)>,
+}
+
+impl std::fmt::Display for SeamWarning {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "composite '{}': {} seam between {} and {} — {} mismatched pixel(s)",
+            self.composite,
+            self.direction,
+            self.slot_a,
+            self.slot_b,
+            self.mismatched.len(),
+        )
+    }
+}
+
+/// Check seam continuity across adjacent tiles in all composites.
+/// Returns warnings (not errors) for pixel discontinuities at tile boundaries.
+/// Requires resolved tiles (grids already materialized).
+pub fn check_seams(
+    file: &PaxFile,
+    tiles: &std::collections::HashMap<String, crate::types::Tile>,
+) -> Vec<SeamWarning> {
+    let mut warnings = Vec::new();
+
+    for (name, raw) in &file.composite {
+        let comp = match composite::resolve_composite(raw, name) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+
+        // Check horizontal seams (right edge of (r,c) vs left edge of (r,c+1))
+        for r in 0..comp.rows {
+            for c in 0..comp.cols.saturating_sub(1) {
+                let left_ref = &comp.slots[r as usize][c as usize];
+                let right_ref = &comp.slots[r as usize][(c + 1) as usize];
+
+                if left_ref.name == "_" || right_ref.name == "_" {
+                    continue;
+                }
+
+                let (Some(left_tile), Some(right_tile)) =
+                    (tiles.get(&left_ref.name), tiles.get(&right_ref.name))
+                else {
+                    continue;
+                };
+
+                let left_grid = crate::composite::apply_flips_pub(&left_tile.grid, left_ref);
+                let right_grid = crate::composite::apply_flips_pub(&right_tile.grid, right_ref);
+
+                let mut mismatched = Vec::new();
+                let right_col = (comp.tile_width - 1) as usize;
+                for y in 0..comp.tile_height {
+                    let l = left_grid[y as usize][right_col];
+                    let r_sym = right_grid[y as usize][0];
+                    // Both transparent = no seam issue
+                    if l == '.' && r_sym == '.' {
+                        continue;
+                    }
+                    if l != r_sym {
+                        mismatched.push((y, l, r_sym));
+                    }
+                }
+
+                if !mismatched.is_empty() {
+                    warnings.push(SeamWarning {
+                        composite: name.clone(),
+                        slot_a: format!("{}_{}", r, c),
+                        slot_b: format!("{}_{}", r, c + 1),
+                        direction: "vertical".to_string(),
+                        mismatched,
+                    });
+                }
+            }
+        }
+
+        // Check vertical seams (bottom edge of (r,c) vs top edge of (r+1,c))
+        for r in 0..comp.rows.saturating_sub(1) {
+            for c in 0..comp.cols {
+                let top_ref = &comp.slots[r as usize][c as usize];
+                let bottom_ref = &comp.slots[(r + 1) as usize][c as usize];
+
+                if top_ref.name == "_" || bottom_ref.name == "_" {
+                    continue;
+                }
+
+                let (Some(top_tile), Some(bottom_tile)) =
+                    (tiles.get(&top_ref.name), tiles.get(&bottom_ref.name))
+                else {
+                    continue;
+                };
+
+                let top_grid = crate::composite::apply_flips_pub(&top_tile.grid, top_ref);
+                let bottom_grid =
+                    crate::composite::apply_flips_pub(&bottom_tile.grid, bottom_ref);
+
+                let mut mismatched = Vec::new();
+                let bottom_row = (comp.tile_height - 1) as usize;
+                for x in 0..comp.tile_width {
+                    let t = top_grid[bottom_row][x as usize];
+                    let b = bottom_grid[0][x as usize];
+                    if t == '.' && b == '.' {
+                        continue;
+                    }
+                    if t != b {
+                        mismatched.push((x, t, b));
+                    }
+                }
+
+                if !mismatched.is_empty() {
+                    warnings.push(SeamWarning {
+                        composite: name.clone(),
+                        slot_a: format!("{}_{}", r, c),
+                        slot_b: format!("{}_{}", r + 1, c),
+                        direction: "horizontal".to_string(),
+                        mismatched,
+                    });
+                }
+            }
+        }
+    }
+
+    warnings
 }
 
 #[cfg(test)]

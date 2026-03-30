@@ -15,9 +15,13 @@ class CanvasNotifier extends StateNotifier<CanvasState> {
   // -- Snapshot / Undo / Redo --
 
   void _pushSnapshot() {
-    _undoStack.add(CanvasSnapshot(
-      layerPixels: state.layers.map((l) => List<Color?>.from(l.pixels)).toList(),
-    ));
+    _undoStack.add(
+      CanvasSnapshot(
+        layerPixels: state.layers
+            .map((l) => List<Color?>.from(l.pixels))
+            .toList(),
+      ),
+    );
     if (_undoStack.length > maxUndoSteps) {
       _undoStack.removeAt(0);
     }
@@ -27,18 +31,26 @@ class CanvasNotifier extends StateNotifier<CanvasState> {
   void undo() {
     if (_undoStack.isEmpty) return;
     // Save current for redo
-    _redoStack.add(CanvasSnapshot(
-      layerPixels: state.layers.map((l) => List<Color?>.from(l.pixels)).toList(),
-    ));
+    _redoStack.add(
+      CanvasSnapshot(
+        layerPixels: state.layers
+            .map((l) => List<Color?>.from(l.pixels))
+            .toList(),
+      ),
+    );
     final snapshot = _undoStack.removeLast();
     _restoreSnapshot(snapshot);
   }
 
   void redo() {
     if (_redoStack.isEmpty) return;
-    _undoStack.add(CanvasSnapshot(
-      layerPixels: state.layers.map((l) => List<Color?>.from(l.pixels)).toList(),
-    ));
+    _undoStack.add(
+      CanvasSnapshot(
+        layerPixels: state.layers
+            .map((l) => List<Color?>.from(l.pixels))
+            .toList(),
+      ),
+    );
     final snapshot = _redoStack.removeLast();
     _restoreSnapshot(snapshot);
   }
@@ -60,6 +72,39 @@ class CanvasNotifier extends StateNotifier<CanvasState> {
 
   bool get canUndo => _undoStack.isNotEmpty;
   bool get canRedo => _redoStack.isNotEmpty;
+
+  /// Expose undo/redo stacks for tab save/restore.
+  List<CanvasSnapshot> get undoStack => List.unmodifiable(_undoStack);
+  List<CanvasSnapshot> get redoStack => List.unmodifiable(_redoStack);
+
+  /// Load animation frame pixels onto the canvas layers.
+  ///
+  /// Replaces all layer pixel data without changing layer structure.
+  /// Clears undo/redo (undo is per-frame).
+  void loadFramePixels(List<List<Color?>> layerPixels) {
+    if (layerPixels.length != state.layers.length) return;
+    final newLayers = <PixelLayer>[];
+    for (var i = 0; i < state.layers.length; i++) {
+      final layer = state.layers[i].deepCopy();
+      layer.pixels.clear();
+      layer.pixels.addAll(layerPixels[i]);
+      newLayers.add(layer);
+    }
+    _undoStack.clear();
+    _redoStack.clear();
+    state = state.copyWith(layers: newLayers);
+  }
+
+  /// Restore full document state (used by tab manager on tab switch).
+  void restoreDocument(CanvasState newState, List<CanvasSnapshot> undo, List<CanvasSnapshot> redo) {
+    _undoStack
+      ..clear()
+      ..addAll(undo);
+    _redoStack
+      ..clear()
+      ..addAll(redo);
+    state = newState;
+  }
 
   // -- Drawing --
 
@@ -104,7 +149,9 @@ class CanvasNotifier extends StateNotifier<CanvasState> {
     if (!_inStroke) return;
     if (x < 0 || x >= state.width || y < 0 || y >= state.height) return;
     _setPixelWithSymmetry(x, y, color);
-    state = state.copyWith(layers: List.from(state.layers));
+    // Reuse the same list reference — the pixel data was mutated in-place.
+    // Force state notification by creating a new CanvasState wrapper only.
+    state = state.copyWith();
   }
 
   void endStroke() {
@@ -193,6 +240,10 @@ class CanvasNotifier extends StateNotifier<CanvasState> {
   }
 
   static const _zoomLevels = [2.0, 4.0, 8.0, 14.0, 20.0, 32.0];
+
+  void resetZoom() {
+    state = state.copyWith(zoomLevel: 8.0); // default mid-range
+  }
 
   void setZoom(double zoom) {
     // Snap to nearest discrete zoom level
@@ -399,15 +450,28 @@ class CanvasNotifier extends StateNotifier<CanvasState> {
       _setPixelWithSymmetry(x0, y0, color);
       if (x0 == x1 && y0 == y1) break;
       final e2 = 2 * err;
-      if (e2 >= dy) { err += dy; x0 += sx; }
-      if (e2 <= dx) { err += dx; y0 += sy; }
+      if (e2 >= dy) {
+        err += dy;
+        x0 += sx;
+      }
+      if (e2 <= dx) {
+        err += dx;
+        y0 += sy;
+      }
     }
   }
 
   // ── Rectangle Tool ───────────────────────────────
 
   /// Draw a rectangle outline (or filled if [filled] is true).
-  void drawRect(int x0, int y0, int x1, int y1, Color? color, {bool filled = false}) {
+  void drawRect(
+    int x0,
+    int y0,
+    int x1,
+    int y1,
+    Color? color, {
+    bool filled = false,
+  }) {
     _pushSnapshot();
     final minX = x0 < x1 ? x0 : x1;
     final maxX = x0 > x1 ? x0 : x1;
@@ -472,6 +536,35 @@ class CanvasNotifier extends StateNotifier<CanvasState> {
     state = state.copyWith(layers: List.from(state.layers));
   }
 
+  /// Load tile pixel data onto the active layer.
+  ///
+  /// Auto-resizes the canvas if the tile dimensions match a known [CanvasSize].
+  /// Pushes a single undo snapshot.
+  void loadTilePixels(List<Color?> pixels, int tileW, int tileH) {
+    // Auto-resize canvas if tile matches a known size.
+    final matchedSize = CanvasSize.fromDimensions(tileW, tileH);
+    if (matchedSize != null && matchedSize != state.canvasSize) {
+      setCanvasSize(matchedSize);
+    }
+
+    _pushSnapshot();
+    final w = state.width;
+    final h = state.height;
+    final layer = state.activeLayer;
+
+    // Clear active layer, then write tile pixels.
+    layer.pixels.fillRange(0, layer.pixels.length, null);
+    for (var y = 0; y < tileH && y < h; y++) {
+      for (var x = 0; x < tileW && x < w; x++) {
+        final color = pixels[y * tileW + x];
+        if (color != null) {
+          layer.pixels[y * w + x] = color;
+        }
+      }
+    }
+    state = state.copyWith(layers: List.from(state.layers));
+  }
+
   /// Clear pixels in a region.
   void clearRegion(int sx, int sy, int sw, int sh) {
     _pushSnapshot();
@@ -494,10 +587,14 @@ final canvasProvider = StateNotifierProvider<CanvasNotifier, CanvasState>(
 );
 
 /// Blueprint landmarks overlay toggle + data.
-final blueprintProvider = StateProvider<List<Map<String, dynamic>>?>((ref) => null);
+final blueprintProvider = StateProvider<List<Map<String, dynamic>>?>(
+  (ref) => null,
+);
 
 /// Selection state for copy/paste.
-final selectionProvider = StateProvider<SelectionState>((ref) => const SelectionState());
+final selectionProvider = StateProvider<SelectionState>(
+  (ref) => const SelectionState(),
+);
 
 /// Reference image overlay (dart:ui.Image stored externally, path tracked here).
 final referenceImagePathProvider = StateProvider<String?>((ref) => null);

@@ -51,8 +51,10 @@ pub fn tool_definitions() -> Vec<Tool> {
         // ── Validation ──
         tool(
             "pixl_validate",
-            "Validate the entire session. Args: {check_edges?: bool}. \
-             Returns errors, warnings, and stats.",
+            "Validate the entire session. Args: {check_edges?: bool, quality?: bool}. \
+             Returns errors, warnings, and stats. When quality=true, also runs per-tile \
+             structural analysis (outline, contrast, centering) and cross-tile style \
+             consistency checks, with knowledge base advice for each issue.",
         ),
         tool(
             "pixl_check_edge_pair",
@@ -81,6 +83,21 @@ pub fn tool_definitions() -> Vec<Tool> {
         tool(
             "pixl_check_style",
             "Score a tile against the style latent. Args: {name}. Returns 0-1 score + assessment.",
+        ),
+        tool(
+            "pixl_generate_wang",
+            "Generate a complete Wang tileset for terrain transitions. \
+             Args: {terrain_a, terrain_b, method?: 'dual_grid'|'blob_47', size?: 16, \
+             palette?, sym_a?: '+', sym_b?: '~', sym_border?: '#'}. \
+             Creates all transition tiles with correct edge classes for WFC. \
+             dual_grid = 15 tiles (simpler, top-down). blob_47 = 47 tiles (complex, walls/caves).",
+        ),
+        tool(
+            "pixl_rate_tile",
+            "Rate a tile aesthetically (1-5) on readability, appeal, and consistency. \
+             Args: {name, criteria?: ['readability','appeal','consistency']}. \
+             Returns per-axis scores, overall rating, and a suggested WFC weight. \
+             Use after generating multiple variants to rank them.",
         ),
         // ── Blueprint ──
         tool(
@@ -177,6 +194,82 @@ pub fn tool_definitions() -> Vec<Tool> {
             "pixl_generate_transition_context",
             "Build enriched AI prompts for creating a missing transition tile between two tiles. \
              Args: {tile_a, tile_b}. Returns system_prompt + user_prompt with edge context.",
+        ),
+        // ── Composites ──
+        tool(
+            "pixl_list_composites",
+            "List all composites in the session with their layout dimensions, variants, \
+             and animation names.",
+        ),
+        tool(
+            "pixl_render_composite",
+            "Render a composite sprite to PNG. Args: {name, variant? (string), anim? (string), \
+             frame? (1-based integer), scale? (default 8)}. Returns base64 PNG preview. \
+             Without anim/frame, renders the base layout (or variant if specified).",
+        ),
+        tool(
+            "pixl_check_seams",
+            "Check seam continuity across tile boundaries in composites. Returns warnings for \
+             pixel discontinuities at adjacent tile edges. No args — checks all composites.",
+        ),
+        // ── SELF-REFINE Loop ──
+        tool(
+            "pixl_critique_tile",
+            "Structural quality critique of a tile. Args: {name, scale? (default 16)}. \
+             Renders the tile to PNG, then runs structural validators: outline coverage, \
+             centering, canvas utilization, contrast, fragmentation. Returns the rendered \
+             preview PNG + a text critique with specific issues and fix instructions. \
+             ALWAYS examine the preview image alongside the critique text. \
+             This is the 'look at what you drew' step in the SELF-REFINE loop.",
+        ),
+        tool(
+            "pixl_refine_tile",
+            "Patch a sub-region of a tile grid. Args: {name, start_row (0-based), \
+             rows (multi-line string — replacement rows)}. Replaces rows starting at \
+             start_row with the provided rows. The replacement rows must be the same width \
+             as the tile. Returns updated preview PNG + new structural critique. \
+             Use this after pixl_critique_tile identifies specific row/region issues.",
+        ),
+        tool(
+            "pixl_show_references",
+            "Show rendered reference tiles as visual examples. Args: {query (search term like \
+             'wall', 'character', 'potion'), count? (default 4), size? (filter by size e.g. '16x16')}. \
+             Searches all tiles in the session by name and tags, renders the best matches as \
+             preview images at 16x zoom. CALL THIS BEFORE generating a new tile — seeing real \
+             rendered pixel art at the target size dramatically improves generation quality. \
+             The returned images are your visual reference for style, proportions, and technique.",
+        ),
+        tool(
+            "pixl_upscale_tile",
+            "Upscale a tile's character grid by an integer factor (nearest-neighbor). \
+             Args: {name, factor? (default 2), new_name? (default: name_upscaled)}. \
+             Creates a new tile in the session with the upscaled grid. \
+             A factor of 2 turns 8x8 → 16x16 (each pixel becomes a 2x2 block). \
+             Use this as step 2 of the progressive resolution workflow: \
+             (1) generate at 8x8, (2) upscale to 16x16, (3) refine detail with pixl_refine_tile. \
+             Returns preview PNG of the upscaled result for visual inspection.",
+        ),
+        // ── Diffusion Bridge ──
+        tool(
+            "pixl_generate_sprite",
+            "Generate a pixel art sprite via image AI (DALL-E) + palette quantization. \
+             Args: {prompt (description of the sprite), name (tile name to create), \
+             size? (default 'auto' — detects native resolution), max_colors? (default 32), \
+             target_palette? (remap to this project palette after generation), dither? (default false)}. \
+             Pipeline: DALL-E generates reference → detect native pixel grid → center-sample → \
+             auto-extract palette from image → quantize → background removal → AA cleanup → \
+             outline enforcement → optional remap to target_palette. \
+             Always extracts colors from the generated image for maximum fidelity. \
+             The palette_toml in the response can be pasted into your .pax file. \
+             To integrate with an existing project palette, pass target_palette. \
+             Requires OPENAI_API_KEY environment variable.",
+        ),
+        tool(
+            "pixl_remap_tile",
+            "Remap a tile from one palette to another using OKLab nearest-color matching. \
+             Args: {name, target_palette (name of palette in session)}. Maps each symbol \
+             to the perceptually closest symbol in the target palette. Use this after \
+             pixl_generate_sprite with auto_palette to convert the tile to your project palette.",
         ),
         // ── Local AI Generation ──
         tool(

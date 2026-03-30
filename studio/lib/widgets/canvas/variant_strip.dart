@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/pixel_canvas.dart';
+import '../../providers/animation_provider.dart';
 import '../../providers/backend_provider.dart';
+import '../../providers/canvas_provider.dart';
 import '../../providers/tilemap_provider.dart';
 import '../../theme/studio_theme.dart';
 
@@ -34,13 +36,14 @@ class _VariantStripState extends ConsumerState<VariantStrip> {
   }
 
   Future<void> _loadMissingPreviews(List<TileInfo> tiles) async {
+    var didChange = false;
     for (final tile in tiles) {
       if (_previewCache.containsKey(tile.name)) continue;
       if (_loadingTiles.contains(tile.name)) continue;
 
       if (tile.previewBytes != null) {
         _previewCache[tile.name] = tile.previewBytes!;
-        if (mounted) setState(() {});
+        didChange = true;
         continue;
       }
 
@@ -51,10 +54,64 @@ class _VariantStripState extends ConsumerState<VariantStrip> {
       );
       _loadingTiles.remove(tile.name);
       if (b64 != null && mounted) {
-        setState(() {
-          _previewCache[tile.name] = base64Decode(b64);
-        });
+        _previewCache[tile.name] = base64Decode(b64);
+        didChange = true;
       }
+    }
+    if (didChange && mounted) setState(() {});
+  }
+
+  Future<void> _loadTileToCanvas(String tileName) async {
+    final result = await ref.read(backendProvider.notifier).getTilePixels(tileName);
+    if (result == null || !mounted) return;
+    ref.read(canvasProvider.notifier).loadTilePixels(
+      result.pixels,
+      result.width,
+      result.height,
+    );
+    // Check if this tile is part of a spriteset and load animation preview.
+    _checkSpriteAnimation(tileName);
+  }
+
+  Future<void> _checkSpriteAnimation(String tileName) async {
+    final tiles = ref.read(backendProvider).tiles;
+    final tile = tiles.where((t) => t.name == tileName).firstOrNull;
+    if (tile == null) return;
+
+    final isAnimated = tile.tags.any(
+      (t) => t.contains('sprite') || t.contains('anim'),
+    );
+    if (!isAnimated) {
+      ref.read(spriteAnimationProvider.notifier).clear();
+      return;
+    }
+
+    // Fetch the sprite GIF and metadata from the backend.
+    try {
+      final resp = await ref.read(backendProvider.notifier).backend.renderSpriteGif(
+        spriteset: tileName,
+        sprite: 'default',
+        scale: 4,
+      );
+      if (!mounted) return;
+      if (resp.containsKey('error')) {
+        ref.read(spriteAnimationProvider.notifier).clear();
+        return;
+      }
+      final gifB64 = resp['gif_b64'] as String?;
+      if (gifB64 == null) {
+        ref.read(spriteAnimationProvider.notifier).clear();
+        return;
+      }
+      final gifBytes = base64Decode(gifB64);
+      ref.read(spriteAnimationProvider.notifier).loadFromResponse(
+        tileName,
+        'default',
+        resp,
+        gifBytes,
+      );
+    } catch (_) {
+      ref.read(spriteAnimationProvider.notifier).clear();
     }
   }
 
@@ -113,6 +170,7 @@ class _VariantStripState extends ConsumerState<VariantStrip> {
                           ref.read(tilemapProvider.notifier).setSelectedTile(tile.name);
                         } else {
                           setState(() => _selectedTile = tile.name);
+                          _loadTileToCanvas(tile.name);
                         }
                       },
                       borderRadius: BorderRadius.circular(4),

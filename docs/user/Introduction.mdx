@@ -1,0 +1,76 @@
+# Introduction
+
+PIXL is a complete pixel art toolchain — from blank canvas to game-ready assets. Draw tiles by hand, generate them with AI, build maps, and export to your game engine. Everything lives in plain text `.pax` files that you own.
+
+## Who is PIXL for?
+
+<FeatureGrid>
+  <Feature title="Pixel artists">
+    Let AI handle the tedious parts — generating variations, filling maps, checking consistency — while you focus on the creative work.
+  </Feature>
+  <Feature title="Game developers">
+    Fast path from concept to tileset, with exports for Godot, Unity, Tiled, and TexturePacker.
+  </Feature>
+  <Feature title="Solo creators">
+    Professional-quality pixel art without years of practice. Describe what you want, PIXL draws it.
+  </Feature>
+  <Feature title="Studios & teams">
+    Train PIXL on your art style with LoRA. Keep every tile consistent. Review quality automatically.
+  </Feature>
+</FeatureGrid>
+
+## What's included
+
+<FeatureGrid>
+  <Feature title="PIXL Studio">
+    Visual editor — draw, paint, animate, compose. Runs on Mac, Windows, and Linux.
+  </Feature>
+  <Feature title="CLI toolchain">
+    Render, validate, convert, generate, and export from the terminal. Automate your art pipeline.
+  </Feature>
+  <Feature title="AI integration">
+    Generate sprites from text, critique your art, learn your style. Works with Claude, GPT, or local models.
+  </Feature>
+  <Feature title="Game engine export">
+    Sprite atlases, Tiled tilemaps, Godot resources, Unity palettes — one command.
+  </Feature>
+  <Feature title="Aseprite plugin">
+    Import/export PAX tiles, critique art, pack atlases, and convert images — all from inside Aseprite.
+  </Feature>
+</FeatureGrid>
+
+## Quick example
+
+A `.pax` file is just text — your palette and tiles in one readable file:
+
+```toml
+[palette.dungeon]
+"." = "#00000000"
+"#" = "#2a1f3d"
+"+" = "#4a3a6d"
+
+[tile.wall]
+palette = "dungeon"
+size = "8x8"
+grid = '''
+########
+#++++++#
+#+#++#+#
+#++++++#
+########
+'''
+```
+
+That's a complete tile. Render it, validate it, export it — all from this one file.
+
+<Callout type="tip">
+  New here? Start with [Getting Started](./Getting-Started) — you'll have a working tileset in under five minutes.
+</Callout>
+
+## Next steps
+
+- [Getting Started](./Getting-Started) — install and create your first tileset
+- [Sprite Generation](./Sprite-Generation) — generate art from text descriptions
+- [PAX Format](./PAX-Format) — learn the file format
+- [Studio Overview](./Studio) — the visual editor
+- [Aseprite Plugin](./Aseprite-Plugin) — use PIXL inside Aseprite

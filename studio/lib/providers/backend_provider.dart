@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:ui' as ui show Color, Image, ImageByteFormat, decodeImageFromList;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -264,6 +266,54 @@ class BackendNotifier extends StateNotifier<BackendState> {
     return resp['png'] as String? ?? resp['preview'] as String?;
   }
 
+  /// Fetch a tile's pixel data at 1:1 scale for canvas editing.
+  ///
+  /// Returns decoded RGBA pixels + dimensions, or null on failure.
+  Future<({List<ui.Color?> pixels, int width, int height})?> getTilePixels(
+    String name,
+  ) async {
+    final resp = await _backend.renderTile(name, scale: 1);
+    if (resp.containsKey('error')) return null;
+
+    final b64 = resp['preview_b64'] as String?;
+    final sizeStr = resp['size'] as String? ?? '16x16';
+    if (b64 == null) return null;
+
+    final parts = sizeStr.split('x');
+    final tileW = int.tryParse(parts[0]) ?? 16;
+    final tileH = int.tryParse(parts.length > 1 ? parts[1] : '16') ?? 16;
+
+    // Decode PNG to raw RGBA bytes via dart:ui.
+    final pngBytes = base64Decode(b64);
+    final image = await _decodePng(pngBytes);
+    if (image == null) return null;
+
+    final byteData = await image.toByteData(
+      format: ui.ImageByteFormat.rawRgba,
+    );
+    image.dispose();
+    if (byteData == null) return null;
+
+    final rgba = byteData.buffer.asUint8List();
+    final pixels = <ui.Color?>[];
+    for (var i = 0; i < rgba.length; i += 4) {
+      final a = rgba[i + 3];
+      if (a == 0) {
+        pixels.add(null);
+      } else {
+        pixels.add(ui.Color.fromARGB(a, rgba[i], rgba[i + 1], rgba[i + 2]));
+      }
+    }
+
+    return (pixels: pixels, width: tileW, height: tileH);
+  }
+
+  static Future<ui.Image?> _decodePng(Uint8List bytes) async {
+    final completer = Completer<ui.Image?>();
+    ui.decodeImageFromList(bytes, (image) => completer.complete(image));
+    return completer.future;
+  }
+
   /// Validate the session.
   Future<ValidationReport> validate({bool checkEdges = false}) async {
     final resp = await _backend.validate(checkEdges: checkEdges);
@@ -329,9 +379,16 @@ class BackendNotifier extends StateNotifier<BackendState> {
   }
 
   /// Load PAX source into session.
+  ///
+  /// On success, updates [sessionTheme] / [sessionPalette] from the engine
+  /// response so the UI can sync its palette panel.
   Future<Map<String, dynamic>> loadSource(String source) async {
     final resp = await _backend.loadSource(source);
     if (!resp.containsKey('error')) {
+      state = state.copyWith(
+        sessionTheme: resp['active_theme'] as String?,
+        sessionPalette: resp['active_palette'] as String?,
+      );
       await refreshTiles();
     }
     return resp;
@@ -355,6 +412,45 @@ class BackendNotifier extends StateNotifier<BackendState> {
     final resp = await _backend.getFile();
     if (resp.containsKey('error')) return null;
     return resp['source'] as String?;
+  }
+
+  /// Get .pax source in compact PAX-L format (~40% fewer tokens).
+  Future<String?> getPaxlSource() async {
+    final resp = await _backend.getFilePaxl();
+    if (resp.containsKey('error')) return null;
+    return resp['paxl_source'] as String?;
+  }
+
+  /// Rate a tile aesthetically (1-5 on readability, appeal, consistency).
+  Future<Map<String, dynamic>?> rateTile(String name) async {
+    final resp = await _backend.rateTile(name);
+    if (resp.containsKey('error')) return null;
+    return resp;
+  }
+
+  /// Check if the tileset is sub-complete (WFC contradiction-free).
+  Future<Map<String, dynamic>?> checkSubcomplete() async {
+    final resp = await _backend.checkSubcomplete();
+    if (resp.containsKey('error')) return null;
+    return resp;
+  }
+
+  /// Generate a complete Wang tileset for terrain transitions.
+  Future<Map<String, dynamic>?> generateWang({
+    required String terrainA,
+    required String terrainB,
+    String method = 'dual_grid',
+    int size = 16,
+  }) async {
+    final resp = await _backend.generateWang(
+      terrainA: terrainA,
+      terrainB: terrainB,
+      method: method,
+      size: size,
+    );
+    if (resp.containsKey('error')) return null;
+    await refreshTiles();
+    return resp;
   }
 }
 

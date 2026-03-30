@@ -19,6 +19,7 @@ import '../../theme/studio_theme.dart';
 import '../../utils/grid_parser.dart';
 import '../color_picker_dialog.dart';
 import '../sprite_preview_dialog.dart';
+import '../wang_dialog.dart';
 import 'backdrop_panel.dart';
 
 enum _PanelTab { palette, style, generate, tiles }
@@ -1072,14 +1073,17 @@ class _ValidationSection extends ConsumerStatefulWidget {
 
 class _ValidationSectionState extends ConsumerState<_ValidationSection> {
   ValidationReport? _report;
+  Map<String, dynamic>? _subcomplete;
   bool _loading = false;
 
   Future<void> _runValidation() async {
     if (!ref.read(backendProvider).isConnected) return;
     setState(() => _loading = true);
     final report = await ref.read(backendProvider.notifier).validate(checkEdges: true);
+    final sub = await ref.read(backendProvider.notifier).checkSubcomplete();
     setState(() {
       _report = report;
+      _subcomplete = sub;
       _loading = false;
     });
   }
@@ -1128,6 +1132,13 @@ class _ValidationSectionState extends ConsumerState<_ValidationSection> {
             _CheckRow(label: 'Palette compliance', passed: _report!.paletteCompliant!),
           if (_report!.sizeCorrect != null)
             _CheckRow(label: 'Size correct', passed: _report!.sizeCorrect!),
+          if (_subcomplete != null)
+            _CheckRow(
+              label: _subcomplete!['is_subcomplete'] == true
+                  ? 'Sub-complete (WFC safe)'
+                  : 'Not sub-complete',
+              passed: _subcomplete!['is_subcomplete'] == true,
+            ),
           for (final err in _report!.errors)
             Padding(
               padding: const EdgeInsets.only(top: 2),
@@ -1216,7 +1227,18 @@ class _TileListSectionState extends ConsumerState<_TileListSection> {
           children: [
             Text('TILES', style: theme.textTheme.titleSmall),
             const Spacer(),
-            if (backend.isConnected)
+            if (backend.isConnected) ...[
+              InkWell(
+                onTap: () => WangDialog.show(context),
+                borderRadius: BorderRadius.circular(4),
+                child: Tooltip(
+                  message: 'Generate Wang tileset',
+                  child: const Padding(
+                    padding: EdgeInsets.all(4),
+                    child: Icon(Icons.grid_on, size: 14),
+                  ),
+                ),
+              ),
               InkWell(
                 onTap: () => ref.read(backendProvider.notifier).refreshTiles(),
                 borderRadius: BorderRadius.circular(4),
@@ -1225,6 +1247,7 @@ class _TileListSectionState extends ConsumerState<_TileListSection> {
                   child: Icon(Icons.refresh, size: 14),
                 ),
               ),
+            ],
           ],
         ),
         const SizedBox(height: 6),
@@ -1443,10 +1466,111 @@ class _TileListSectionState extends ConsumerState<_TileListSection> {
                     ],
                   );
                 }),
+                // Aesthetic rating section
+                const SizedBox(height: 8),
+                _TileRatingSection(tileName: _selectedTile!),
               ],
             ),
           ),
         ],
+      ],
+    );
+  }
+}
+
+class _TileRatingSection extends ConsumerStatefulWidget {
+  const _TileRatingSection({required this.tileName});
+  final String tileName;
+
+  @override
+  ConsumerState<_TileRatingSection> createState() => _TileRatingSectionState();
+}
+
+class _TileRatingSectionState extends ConsumerState<_TileRatingSection> {
+  Map<String, dynamic>? _rating;
+  bool _loading = false;
+  String? _lastTile;
+
+  @override
+  void didUpdateWidget(covariant _TileRatingSection old) {
+    super.didUpdateWidget(old);
+    if (old.tileName != widget.tileName) {
+      _rating = null;
+      _loadRating();
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRating();
+  }
+
+  Future<void> _loadRating() async {
+    if (_loading || widget.tileName == _lastTile) return;
+    _lastTile = widget.tileName;
+    setState(() => _loading = true);
+    final result = await ref.read(backendProvider.notifier).rateTile(widget.tileName);
+    if (mounted) {
+      setState(() {
+        _rating = result;
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (_loading) {
+      return Padding(
+        padding: const EdgeInsets.all(4),
+        child: Text('Rating...', style: theme.textTheme.bodySmall),
+      );
+    }
+    if (_rating == null) return const SizedBox.shrink();
+
+    final overall = _rating!['overall'] as int? ?? 0;
+    final assessment = _rating!['assessment'] as String? ?? '';
+    final breakdown = _rating!['breakdown'] as Map<String, dynamic>? ?? {};
+    final suggestedWeight = (_rating!['suggested_weight'] as num?)?.toDouble();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Divider(height: 1, color: theme.dividerColor),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            Text('Rating ', style: theme.textTheme.bodySmall!.copyWith(fontSize: 9)),
+            ...List.generate(5, (i) => Icon(
+              i < overall ? Icons.star : Icons.star_border,
+              size: 12,
+              color: i < overall ? Colors.amber : theme.disabledColor,
+            )),
+            const SizedBox(width: 4),
+            Text('$overall/5', style: theme.textTheme.bodySmall!.copyWith(fontSize: 9, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        Text(assessment, style: theme.textTheme.bodySmall!.copyWith(fontSize: 8, color: theme.hintColor)),
+        const SizedBox(height: 2),
+        for (final axis in ['readability', 'appeal', 'consistency'])
+          if (breakdown[axis] != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: Text(
+                '$axis: ${(breakdown[axis] as Map)['score'] ?? '?'}/5',
+                style: theme.textTheme.bodySmall!.copyWith(fontSize: 8),
+              ),
+            ),
+        if (suggestedWeight != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              'Suggested WFC weight: ${suggestedWeight.toStringAsFixed(1)}',
+              style: theme.textTheme.bodySmall!.copyWith(fontSize: 8, color: theme.hintColor),
+            ),
+          ),
       ],
     );
   }

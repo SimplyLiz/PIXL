@@ -263,6 +263,50 @@ impl StyleLatent {
             self.luminance_mean,
         )
     }
+
+    /// Blend two style latents. `t` = 0.0 returns self, `t` = 1.0 returns other.
+    /// Hue is interpolated on the circular axis to handle wrap-around correctly.
+    pub fn blend(&self, other: &StyleLatent, t: f64) -> StyleLatent {
+        let t = t.clamp(0.0, 1.0);
+        let inv = 1.0 - t;
+
+        // Circular interpolation for hue
+        let mut hue_diff = other.hue_bias - self.hue_bias;
+        if hue_diff > 180.0 {
+            hue_diff -= 360.0;
+        } else if hue_diff < -180.0 {
+            hue_diff += 360.0;
+        }
+        let blended_hue = (self.hue_bias + hue_diff * t + 360.0) % 360.0;
+
+        StyleLatent {
+            light_direction: self.light_direction * inv + other.light_direction * t,
+            run_length_mean: self.run_length_mean * inv + other.run_length_mean * t,
+            shadow_ratio: self.shadow_ratio * inv + other.shadow_ratio * t,
+            palette_breadth: self.palette_breadth * inv + other.palette_breadth * t,
+            pixel_density: self.pixel_density * inv + other.pixel_density * t,
+            palette_entropy: self.palette_entropy * inv + other.palette_entropy * t,
+            hue_bias: blended_hue,
+            luminance_mean: self.luminance_mean * inv + other.luminance_mean * t,
+            sample_count: self.sample_count + other.sample_count,
+        }
+    }
+
+    /// Euclidean distance between two style latents (normalized to 0.0-1.0).
+    pub fn distance(&self, other: &StyleLatent) -> f64 {
+        let diffs = [
+            self.light_direction - other.light_direction,
+            (self.run_length_mean - other.run_length_mean) / self.run_length_mean.max(1.0),
+            self.shadow_ratio - other.shadow_ratio,
+            (self.palette_breadth - other.palette_breadth) / self.palette_breadth.max(1.0),
+            self.pixel_density - other.pixel_density,
+            (self.palette_entropy - other.palette_entropy) / self.palette_entropy.max(0.1),
+            hue_distance_normalized(self.hue_bias, other.hue_bias),
+            self.luminance_mean - other.luminance_mean,
+        ];
+        let sum_sq: f64 = diffs.iter().map(|d| d * d).sum();
+        (sum_sq / diffs.len() as f64).sqrt()
+    }
 }
 
 impl Default for StyleLatent {

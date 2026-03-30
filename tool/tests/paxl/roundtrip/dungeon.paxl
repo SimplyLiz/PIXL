@@ -1,0 +1,171 @@
+@pax dungeon_tileset 2.0 L1
+@theme dark_fantasy dungeon s2 c16 p16 tl
+@roles wbone hhi #bg .void rdanger sshadow glife oaccent +fg
+@constraints accent!=bg max_colors=16 fg>bg shadow<bg
+@pal dungeon
+  G #4a8a3a  w #d8d0e8  # #2a1f3d  . #00000000
+  o #c8a035  ~ #1a3a5c  r #8b1a1a  h #8070a8
+  g #2d5a27  + #5a4878  s #12091f
+@swap frozen dungeon partial h=#90b0d8 ~=#e8f0ff +=#5a7aad #=#2a3f6d
+@cycle water_shimmer dungeon ~,h ping-pong 6fps
+@stamp brick_ne_4x4 4x4
+  +++h|++++|h##s|####
+@stamp shadow_base_4x4 4x4
+  ssss|s##s|s##s|ssss
+@stamp brick_nw_4x4 4x4
+  h+++|++++|s##h|####
+@stamp stone_flat_4x4 4x4
+  h+++|++++|+++s|++++
+@tile wall_floor_n 16x16[16] e=solid/solid/floor/solid w2 obstacle rot=4way tags:transition,wall_base
+  sem: biome=dungeon
+  #h++++s#h++++s##
+  #++++++#++++++##
+  #++++++#+++++s##
+  #s++++s#s++++###
+  ################
+  ##h++++s#h+++++s
+  ##++++++#++++++#
+  =7
+  ##s++++s#s++++s#
+  ###hsshss#######
+  h++++++s#h+++++s
+  ++++++++#++++++#
+  +++++++s#+++++++
+  s++++++s#s++++++
+  h+++s#h++++++++s
+  ++++##+++++++++#
+@tile wall_solid 16x16[16] e=solid w0.4 obstacle tags:wall,interior
+  sem: light_blocks biome=dungeon
+  #h++++s#h++++s##
+  #++++++#++++++##
+  #++++++#+++++s##
+  #s++++s#s++++###
+  ################
+  ##h++++s#h+++++s
+  ##++++++#++++++#
+  =7
+  ##s++++s#s++++s#
+  =5
+  =1
+  =2
+  =3
+  =4
+  =5
+  =6
+@tile wall_ice :wall_solid swaps:frozen
+@tile wall_corner_ne 16x16[16] e=solid/solid/floor/floor w1.5 obstacle rot=4way tags:wall,corner
+  sem: biome=dungeon
+  ################
+  =1
+  =1
+  =1
+  =1
+  =1
+  #############shs
+  ###########sh+++
+  #########sh+++++
+  ########h++++++s
+  ######h+++++++s#
+  ####h+++++++s###
+  ##h+++++++s#####
+  h+++++++s#h++++s
+  +++++++s#++++++#
+  ++++++s##+++++++
+@tile door_ns 16x16[16] e=floor/solid/floor/solid w0.8 walkable rot=4way tags:door,passage
+  sem: biome=dungeon
+  h++++++s########
+  +++++++s########
+  =2
+  s++++++s########
+  ########h++++++s
+  ########++++++++
+  =6
+  ########s++++++s
+  =5
+  =6
+  =6
+  =8
+  =1
+  =2
+  =2
+  =4
+@tile water_surface 16x16[16] e=water w0.05 hazard col=full tags:water cycles:water_shimmer
+  sem: biome=dungeon depth=shallow
+  ~~h~~h~~~~h~~h~~
+  ~~~~~~~~~~~~~~~~
+  ~~~~h~~h~~~~h~~h
+  =2
+  h~~h~~~~h~~h~~~~
+  =2
+  =1
+  =2
+  =3
+  =2
+  =5
+  =2
+  =1
+  =2
+  =3
+  =2
+@tile floor_stone 16x16[16] e=floor w3 walkable tags:floor,interior
+  sem: biome=dungeon
+  h++++++s#h+++++s
+  ++++++++#++++++#
+  +++++++s#+++++++
+  ################
+  h++s#h+++++++++s
+  +++##+++++++++++
+  =6
+  ++s##s+++++++++s
+  =4
+  h+++++++s#h++++s
+  ++++++++++++++++
+  =11
+  s++++++s#s++++++
+  =4
+  h+++s#h++++++++s
+  ++++##+++++++++#
+@tile floor_cracked 16x16[16] e=floor w1.2 walkable tags:floor,interior,damaged
+  sem: biome=dungeon condition=damaged
+  h++++++s#h+++++s
+  ++++s+++#++++++#
+  +++ss++s#+++++++
+  ##s#s###########
+  h++s#h+s+++++++s
+  +++##++s++++++++
+  +++##+++s+++++++
+  ++s##s++++s++++s
+  ################
+  h+++s++++s#h+++s
+  ++s++++s++++++s+
+  ++++s+++++++s+++
+  s+++++ss#ss+++++
+  =9
+  h+++s#h+s++++++s
+  ++++##++s++++++#
+@tile floor_moss 16x16[16] e=floor walkable tags:floor,interior,organic
+  sem: biome=dungeon moisture=high
+  h++++++s#h+g+++s
+  +++gG+++#++gG++#
+  ++gGG++s#++G++++
+  ################
+  h++s#h++++gG+++s
+  +++##+++++gGG+++
+  +++##++++++Gg+++
+  ++s##s+++++++g+s
+  =4
+  h++gG+++s#h++++s
+  ++gGGg++++++++++
+  +++Gg+++++++gG++
+  s++++++s#s++gGGs
+  =4
+  h+++s#h+++++gG+s
+  ++++##+++++++G+#
+@wfc
+  forbid obstacle~hazard adjacent
+  require walkable~obstacle adjacent_any
+  require hazard~walkable adjacent_any
+  group stone_floor: floor_stone floor_moss floor_cracked
+@atlas texturepacker s2
+  include wall_* floor_* water_* door_*
+  out dungeon_atlas.png map dungeon_atlas.json

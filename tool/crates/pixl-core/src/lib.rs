@@ -10,8 +10,8 @@
 //!
 //! ```rust,no_run
 //! let source = std::fs::read_to_string("tileset.pax").unwrap();
-//! let pax = pixl_core::parser::parse(&source).unwrap();
-//! let errors = pixl_core::validate::validate(&pax);
+//! let pax = pixl_core::parser::parse_pax(&source).unwrap();
+//! let result = pixl_core::validate::validate(&pax, false);
 //! ```
 //!
 //! ## Modules
@@ -32,6 +32,7 @@ pub mod animate;
 pub mod blueprint;
 pub mod completeness;
 pub mod compose;
+pub mod composite;
 pub mod corpus;
 pub mod cycle;
 pub mod edges;
@@ -40,17 +41,22 @@ pub mod grid;
 pub mod knowledge;
 pub mod oklab;
 pub mod parser;
+pub mod paxl;
+pub mod prepare;
 pub mod project;
 pub mod resolve;
 pub mod rle;
 pub mod rotate;
 pub mod skeleton;
 pub mod stampgen;
+pub mod structural;
 pub mod style;
 pub mod symmetry;
 pub mod template;
 pub mod theme;
 pub mod tilemap;
 pub mod types;
+pub mod upscale;
 pub mod validate;
+pub mod wang;
 pub mod vary;

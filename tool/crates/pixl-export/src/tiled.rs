@@ -1,3 +1,4 @@
+use pixl_core::types::ObjectRaw;
 use serde::Serialize;
 use std::collections::HashMap;
 
@@ -262,6 +263,233 @@ pub fn generate_map(
     }
 }
 
+/// Pick the best terrain layer from a tilemap and convert its grid to tile indices.
+///
+/// Prefers `layer_role = "platform"`, then `"background"`, then lowest z_order.
+/// Returns `None` if no layer has a grid. Uses `usize::MAX` for empty cells.
+pub fn resolve_terrain_grid(
+    tilemap_raw: &pixl_core::tilemap::TilemapRaw,
+    tile_names: &[String],
+) -> Option<Vec<Vec<usize>>> {
+    let terrain_layer = tilemap_raw
+        .layer
+        .values()
+        .filter(|l| l.grid.is_some())
+        .min_by_key(|l| {
+            let role_priority = match l.layer_role.as_deref() {
+                Some("platform") => 0,
+                Some("background") => 1,
+                _ => 2,
+            };
+            (role_priority, l.z_order)
+        })?;
+
+    Some(
+        terrain_layer
+            .grid
+            .as_deref()
+            .unwrap()
+            .lines()
+            .map(|l| l.trim())
+            .filter(|l| !l.is_empty())
+            .map(|line| {
+                line.split_whitespace()
+                    .map(|name| {
+                        if name == "." {
+                            return usize::MAX;
+                        }
+                        // Strip flip/variant suffixes for index lookup
+                        let base = name.split('!').next().unwrap_or(name);
+                        let base = base.split(':').next().unwrap_or(base);
+                        tile_names
+                            .binary_search(&base.to_string())
+                            .unwrap_or(usize::MAX)
+                    })
+                    .collect()
+            })
+            .collect(),
+    )
+}
+
+/// Parse an object's `tiles` string into a row-major grid of tile names.
+fn parse_object_tile_grid(tiles: &str) -> Vec<Vec<&str>> {
+    tiles
+        .lines()
+        .map(|l| l.trim())
+        .filter(|l| !l.is_empty())
+        .map(|line| line.split_whitespace().collect())
+        .collect()
+}
+
+/// Look up a tile name in the sorted tile_names list, returning its Tiled GID (1-based).
+fn tile_name_to_gid(name: &str, tile_names: &[String]) -> Option<u32> {
+    tile_names
+        .binary_search_by(|n| n.as_str().cmp(name))
+        .ok()
+        .map(|idx| idx as u32 + 1)
+}
+
+/// Generate a Tiled map with 3 depth layers: below_player, terrain, above_player.
+///
+/// Objects are split across the below/above layers based on their
+/// `above_player_rows` / `below_player_rows` fields. Rows not listed in
+/// either default to above_player.
+pub fn generate_map_with_objects(
+    tile_grid: &[Vec<usize>],
+    tile_names: &[String],
+    placements: &[(String, u32, u32)],
+    object_defs: &HashMap<String, &ObjectRaw>,
+    tile_width: u32,
+    tile_height: u32,
+    tileset_source: &str,
+) -> Result<TiledMap, String> {
+    let h = tile_grid.len() as u32;
+    let w = if h > 0 { tile_grid[0].len() as u32 } else { 0 };
+    let size = (w * h) as usize;
+
+    // Three layer buffers (0 = empty in Tiled)
+    let mut below_data = vec![0u32; size];
+    let mut terrain_data = vec![0u32; size];
+    let mut above_data = vec![0u32; size];
+
+    // Fill terrain from tile_grid (usize::MAX = empty cell → GID 0)
+    for (row_idx, row) in tile_grid.iter().enumerate() {
+        for (col_idx, &idx) in row.iter().enumerate() {
+            terrain_data[row_idx * w as usize + col_idx] = if idx == usize::MAX {
+                0
+            } else {
+                idx as u32 + 1
+            };
+        }
+    }
+
+    // Stamp objects into the appropriate layers
+    for (obj_name, obj_x, obj_y) in placements {
+        let obj_def = object_defs
+            .get(obj_name.as_str())
+            .ok_or_else(|| format!("unknown object '{}'", obj_name))?;
+
+        let (obj_cols, obj_rows) =
+            pixl_core::types::parse_size(&obj_def.size_tiles)?;
+        let obj_grid = parse_object_tile_grid(&obj_def.tiles);
+
+        if obj_grid.len() != obj_rows as usize {
+            return Err(format!(
+                "object '{}': size_tiles says {} rows but tiles grid has {}",
+                obj_name, obj_rows, obj_grid.len()
+            ));
+        }
+        for (i, row) in obj_grid.iter().enumerate() {
+            if row.len() != obj_cols as usize {
+                return Err(format!(
+                    "object '{}': size_tiles says {} columns but row {} has {}",
+                    obj_name, obj_cols, i, row.len()
+                ));
+            }
+        }
+
+        // Stamp base_tile into terrain under the object footprint
+        if let Some(ref base) = obj_def.base_tile {
+            let base_gid = tile_name_to_gid(base, tile_names).ok_or_else(|| {
+                format!("object '{}' base_tile '{}' not found in tileset", obj_name, base)
+            })?;
+            for row in 0..obj_rows {
+                for col in 0..obj_cols {
+                    let mx = *obj_x + col;
+                    let my = *obj_y + row;
+                    if mx < w && my < h {
+                        terrain_data[(my * w + mx) as usize] = base_gid;
+                    }
+                }
+            }
+        }
+
+        // Stamp object tiles into above/below layers
+        for (row_idx, row) in obj_grid.iter().enumerate() {
+            let row_num = row_idx as u32;
+            for (col_idx, tile_name) in row.iter().enumerate() {
+                if *tile_name == "." || tile_name.is_empty() {
+                    continue;
+                }
+                let mx = *obj_x + col_idx as u32;
+                let my = *obj_y + row_num;
+                if mx >= w || my >= h {
+                    continue;
+                }
+                let gid = tile_name_to_gid(tile_name, tile_names).ok_or_else(|| {
+                    format!(
+                        "object '{}' references unknown tile '{}'",
+                        obj_name, tile_name
+                    )
+                })?;
+                let pos = (my * w + mx) as usize;
+                if obj_def.below_player_rows.contains(&row_num) {
+                    below_data[pos] = gid;
+                } else {
+                    // above_player_rows, or default when neither list claims this row
+                    above_data[pos] = gid;
+                }
+            }
+        }
+    }
+
+    Ok(TiledMap {
+        compression_level: -1,
+        height: h,
+        width: w,
+        infinite: false,
+        orientation: "orthogonal".to_string(),
+        render_order: "right-down".to_string(),
+        tile_height,
+        tile_width,
+        tiled_version: "1.11.0".to_string(),
+        map_type: "map".to_string(),
+        version: "1.10".to_string(),
+        layers: vec![
+            TiledLayer {
+                id: 1,
+                name: "below_player".to_string(),
+                layer_type: "tilelayer".to_string(),
+                visible: true,
+                opacity: 1.0,
+                x: 0,
+                y: 0,
+                width: w,
+                height: h,
+                data: below_data,
+            },
+            TiledLayer {
+                id: 2,
+                name: "terrain".to_string(),
+                layer_type: "tilelayer".to_string(),
+                visible: true,
+                opacity: 1.0,
+                x: 0,
+                y: 0,
+                width: w,
+                height: h,
+                data: terrain_data,
+            },
+            TiledLayer {
+                id: 3,
+                name: "above_player".to_string(),
+                layer_type: "tilelayer".to_string(),
+                visible: true,
+                opacity: 1.0,
+                x: 0,
+                y: 0,
+                width: w,
+                height: h,
+                data: above_data,
+            },
+        ],
+        tilesets: vec![TiledTilesetRef {
+            first_gid: 1,
+            source: tileset_source.to_string(),
+        }],
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -325,5 +553,240 @@ mod tests {
         assert!(json.contains("\"tiledversion\""));
         assert!(json.contains("\"spacing\""));
         assert!(json.contains("\"margin\""));
+    }
+
+    #[test]
+    fn parse_object_grid_cottage() {
+        let tiles = "roof_l      roof_c      roof_r\nwall_win_l  wall_door   wall_win_r\nwall_base_l wall_base_c wall_base_r\nshadow_l    shadow_c    shadow_r";
+        let grid = parse_object_tile_grid(tiles);
+        assert_eq!(grid.len(), 4);
+        assert_eq!(grid[0].len(), 3);
+        assert_eq!(grid[0][0], "roof_l");
+        assert_eq!(grid[1][1], "wall_door");
+        assert_eq!(grid[3][2], "shadow_r");
+    }
+
+    #[test]
+    fn tile_name_gid_lookup() {
+        let names = vec![
+            "floor".to_string(),
+            "grass".to_string(),
+            "wall".to_string(),
+        ];
+        assert_eq!(tile_name_to_gid("floor", &names), Some(1));
+        assert_eq!(tile_name_to_gid("grass", &names), Some(2));
+        assert_eq!(tile_name_to_gid("wall", &names), Some(3));
+        assert_eq!(tile_name_to_gid("missing", &names), None);
+    }
+
+    #[test]
+    fn map_with_objects_simple() {
+        // 4x4 terrain of tile index 0 ("floor" = GID 1)
+        // tile_names sorted: floor(0), roof(1), trunk(2)
+        let tile_names = vec![
+            "floor".to_string(),
+            "roof".to_string(),
+            "trunk".to_string(),
+        ];
+        let grid = vec![vec![0; 4]; 4]; // all floor
+
+        let obj = ObjectRaw {
+            size_tiles: "2x2".to_string(),
+            base_tile: None,
+            above_player_rows: vec![0],
+            below_player_rows: vec![1],
+            tiles: "roof roof\ntrunk trunk".to_string(),
+            collision: None,
+        };
+        let mut defs = HashMap::new();
+        defs.insert("tree".to_string(), &obj);
+
+        let placements = vec![("tree".to_string(), 1, 1)];
+        let map = generate_map_with_objects(
+            &grid,
+            &tile_names,
+            &placements,
+            &defs,
+            16,
+            16,
+            "tileset.tsj",
+        )
+        .unwrap();
+
+        assert_eq!(map.layers.len(), 3);
+        assert_eq!(map.layers[0].name, "below_player");
+        assert_eq!(map.layers[1].name, "terrain");
+        assert_eq!(map.layers[2].name, "above_player");
+
+        // above_player: row 0 of object at (1,1) and (2,1) = "roof" = GID 2
+        assert_eq!(map.layers[2].data[1 * 4 + 1], 2); // (1,1)
+        assert_eq!(map.layers[2].data[1 * 4 + 2], 2); // (2,1)
+
+        // below_player: row 1 of object at (1,2) and (2,2) = "trunk" = GID 3
+        assert_eq!(map.layers[0].data[2 * 4 + 1], 3); // (1,2)
+        assert_eq!(map.layers[0].data[2 * 4 + 2], 3); // (2,2)
+
+        // terrain still has floor everywhere
+        assert_eq!(map.layers[1].data[0], 1);
+    }
+
+    #[test]
+    fn map_with_objects_default_above() {
+        let tile_names = vec!["floor".to_string(), "leaf".to_string()];
+        let grid = vec![vec![0; 2]; 2];
+
+        let obj = ObjectRaw {
+            size_tiles: "1x1".to_string(),
+            base_tile: None,
+            above_player_rows: vec![],
+            below_player_rows: vec![],
+            tiles: "leaf".to_string(),
+            collision: None,
+        };
+        let mut defs = HashMap::new();
+        defs.insert("bush".to_string(), &obj);
+
+        let placements = vec![("bush".to_string(), 0, 0)];
+        let map = generate_map_with_objects(
+            &grid,
+            &tile_names,
+            &placements,
+            &defs,
+            16,
+            16,
+            "t.tsj",
+        )
+        .unwrap();
+
+        // With neither list populated, defaults to above_player
+        assert_eq!(map.layers[2].data[0], 2); // leaf GID
+        assert_eq!(map.layers[0].data[0], 0); // below_player empty
+    }
+
+    #[test]
+    fn map_with_objects_clipping() {
+        let tile_names = vec!["floor".to_string(), "top".to_string()];
+        let grid = vec![vec![0; 2]; 2]; // 2x2 map
+
+        let obj = ObjectRaw {
+            size_tiles: "2x2".to_string(),
+            base_tile: None,
+            above_player_rows: vec![0, 1],
+            below_player_rows: vec![],
+            tiles: "top top\ntop top".to_string(),
+            collision: None,
+        };
+        let mut defs = HashMap::new();
+        defs.insert("big".to_string(), &obj);
+
+        // Place at (1,1) — only (1,1) is in bounds, (2,1), (1,2), (2,2) clip
+        let placements = vec![("big".to_string(), 1, 1)];
+        let map = generate_map_with_objects(
+            &grid,
+            &tile_names,
+            &placements,
+            &defs,
+            16,
+            16,
+            "t.tsj",
+        )
+        .unwrap();
+
+        assert_eq!(map.layers[2].data[1 * 2 + 1], 2); // (1,1) in bounds
+        // no panic from out-of-bounds cells
+    }
+
+    #[test]
+    fn map_with_objects_unknown_tile() {
+        let tile_names = vec!["floor".to_string()];
+        let grid = vec![vec![0; 2]; 2];
+
+        let obj = ObjectRaw {
+            size_tiles: "1x1".to_string(),
+            base_tile: None,
+            above_player_rows: vec![],
+            below_player_rows: vec![],
+            tiles: "nonexistent".to_string(),
+            collision: None,
+        };
+        let mut defs = HashMap::new();
+        defs.insert("bad".to_string(), &obj);
+
+        let placements = vec![("bad".to_string(), 0, 0)];
+        let result = generate_map_with_objects(
+            &grid,
+            &tile_names,
+            &placements,
+            &defs,
+            16,
+            16,
+            "t.tsj",
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("nonexistent"));
+    }
+
+    #[test]
+    fn map_with_objects_base_tile() {
+        let tile_names = vec![
+            "floor".to_string(),
+            "grass".to_string(),
+            "roof".to_string(),
+        ];
+        let grid = vec![vec![0; 3]; 3]; // all floor
+
+        let obj = ObjectRaw {
+            size_tiles: "2x1".to_string(),
+            base_tile: Some("grass".to_string()),
+            above_player_rows: vec![0],
+            below_player_rows: vec![],
+            tiles: "roof roof".to_string(),
+            collision: None,
+        };
+        let mut defs = HashMap::new();
+        defs.insert("awning".to_string(), &obj);
+
+        let placements = vec![("awning".to_string(), 0, 0)];
+        let map = generate_map_with_objects(
+            &grid,
+            &tile_names,
+            &placements,
+            &defs,
+            16,
+            16,
+            "t.tsj",
+        )
+        .unwrap();
+
+        // base_tile "grass" (GID 2) stamped into terrain under the object
+        assert_eq!(map.layers[1].data[0], 2); // (0,0)
+        assert_eq!(map.layers[1].data[1], 2); // (1,0)
+        // rest of terrain is still floor
+        assert_eq!(map.layers[1].data[2], 1); // (2,0)
+    }
+
+    #[test]
+    fn map_with_empty_cells_in_terrain() {
+        // usize::MAX signals an empty cell ("." in tilemap grids)
+        let grid = vec![
+            vec![0, usize::MAX],
+            vec![usize::MAX, 0],
+        ];
+        let tile_names = vec!["floor".to_string()];
+        let map = generate_map_with_objects(
+            &grid,
+            &tile_names,
+            &[],
+            &HashMap::new(),
+            16,
+            16,
+            "t.tsj",
+        )
+        .unwrap();
+
+        assert_eq!(map.layers[1].data[0], 1); // floor
+        assert_eq!(map.layers[1].data[1], 0); // empty
+        assert_eq!(map.layers[1].data[2], 0); // empty
+        assert_eq!(map.layers[1].data[3], 1); // floor
     }
 }

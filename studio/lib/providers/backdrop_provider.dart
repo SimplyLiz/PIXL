@@ -218,6 +218,8 @@ class BackdropNotifier extends StateNotifier<BackdropEditorState> {
   void clear() {
     state = const BackdropEditorState();
   }
+
+  void restore(BackdropEditorState s) => state = s;
 }
 
 final backdropEditorProvider =

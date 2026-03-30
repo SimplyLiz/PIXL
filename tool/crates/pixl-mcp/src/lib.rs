@@ -1,3 +1,5 @@
+pub mod adapters;
+pub mod diffusion;
 pub mod handlers;
 pub mod http;
 pub mod inference;

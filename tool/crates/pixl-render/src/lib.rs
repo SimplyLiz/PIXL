@@ -8,4 +8,5 @@ pub mod palette_lut;
 pub mod pixelize;
 pub mod preview;
 pub mod renderer;
+pub mod scan;
 pub mod spritesheet;

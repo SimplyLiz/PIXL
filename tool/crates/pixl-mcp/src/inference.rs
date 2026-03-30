@@ -7,7 +7,7 @@ use std::time::Duration;
 
 /// Find a Python interpreter that has mlx-lm installed.
 /// Checks: training/.venv, .venv, common paths, then falls back to system python3.
-fn find_python_with_mlx() -> String {
+pub fn find_python_with_mlx() -> String {
     // Walk up from current exe to find project root
     let exe_dir = std::env::current_exe()
         .ok()
@@ -246,6 +246,11 @@ impl InferenceServer {
             let _ = child.wait();
         }
         self.child = None;
+    }
+
+    /// Change the adapter path for the next `ensure_running()` call.
+    pub fn set_adapter(&mut self, adapter_path: PathBuf) {
+        self.config.adapter_path = Some(adapter_path);
     }
 }
 

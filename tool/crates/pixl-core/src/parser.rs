@@ -362,4 +362,84 @@ mod tests {
         assert!(dungeon.symbols.contains_key(&'+'));
         assert!(dungeon.symbols.contains_key(&'~'));
     }
+
+    #[test]
+    fn parse_pax21_features() {
+        let source = std::fs::read_to_string("../../examples/pax21_features.pax")
+            .expect("pax21_features.pax should exist");
+        let file = parse_pax(&source).unwrap();
+        assert_eq!(file.pax.version, "2.1");
+
+        // Style latent parsed
+        assert!(file.style.contains_key("test"));
+        let style = &file.style["test"];
+        assert!((style.light_direction - 0.15).abs() < 0.001);
+        assert_eq!(style.sample_count, 3);
+
+        // Delta tile parsed
+        let cracked = &file.tile["wall_cracked"];
+        assert_eq!(cracked.delta.as_deref(), Some("wall_4x4"));
+        assert_eq!(cracked.patches.len(), 2);
+        assert_eq!(cracked.patches[0].x, 1);
+        assert_eq!(cracked.patches[0].y, 1);
+        assert_eq!(cracked.patches[0].sym, "s");
+
+        // Fill tile parsed
+        let water = &file.tile["water_4x4"];
+        assert!(water.fill.is_some());
+        assert_eq!(water.fill_size.as_deref(), Some("2x2"));
+
+        // Resolve palettes and stamps
+        let palettes = resolve_all_palettes(&file).unwrap();
+        let mut stamps = std::collections::HashMap::new();
+        for (name, raw) in &file.stamp {
+            let (sw, sh) = crate::types::parse_size(&raw.size).unwrap();
+            let pal = &palettes[&raw.palette];
+            let grid = crate::grid::parse_grid(&raw.grid, sw, sh, pal).unwrap();
+            stamps.insert(
+                name.clone(),
+                crate::types::Stamp {
+                    palette: raw.palette.clone(),
+                    width: sw,
+                    height: sh,
+                    grid,
+                },
+            );
+        }
+
+        // Grid with row refs
+        let (grid, _, _) =
+            crate::resolve::resolve_tile_grid("wall_8x4", &file.tile, &palettes, &stamps)
+                .unwrap();
+        assert_eq!(grid[0], vec!['#', '#', '#', '#']); // row 1
+        assert_eq!(grid[1], vec!['#', '+', '+', '#']); // row 2
+        assert_eq!(grid[2], vec!['#', '+', '+', '#']); // =2
+        assert_eq!(grid[3], vec!['#', '#', '#', '#']); // =1
+
+        // Fill tile expands pattern
+        let (grid, w, h) =
+            crate::resolve::resolve_tile_grid("water_4x4", &file.tile, &palettes, &stamps)
+                .unwrap();
+        assert_eq!((w, h), (4, 4));
+        assert_eq!(grid[0], vec!['+', 'h', '+', 'h']);
+        assert_eq!(grid[1], vec!['h', '+', 'h', '+']);
+        assert_eq!(grid[2], vec!['+', 'h', '+', 'h']);
+        assert_eq!(grid[3], vec!['h', '+', 'h', '+']);
+
+        // Delta tile resolves
+        let (grid, _, _) =
+            crate::resolve::resolve_tile_grid("wall_cracked", &file.tile, &palettes, &stamps)
+                .unwrap();
+        assert_eq!(grid[0], vec!['#', '#', '#', '#']);
+        assert_eq!(grid[1], vec!['#', 's', '+', '#']); // patch at (1,1)
+        assert_eq!(grid[2], vec!['#', '+', 's', '#']); // patch at (2,2)
+        assert_eq!(grid[3], vec!['#', '#', '#', '#']);
+
+        // Compose at small size
+        let (grid, w, h) =
+            crate::resolve::resolve_tile_grid("composed_4x4", &file.tile, &palettes, &stamps)
+                .unwrap();
+        assert_eq!((w, h), (4, 4));
+        assert_eq!(grid[0], vec!['h', '+', 'h', '+']);
+    }
 }

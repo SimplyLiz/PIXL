@@ -52,7 +52,7 @@ impl ServerHandler for PixlServer {
     fn get_info(&self) -> ServerInfo {
         let mut info = ServerInfo::default();
         info.server_info.name = "pixl".to_string();
-        info.server_info.version = "0.1.0".to_string();
+        info.server_info.version = env!("CARGO_PKG_VERSION").to_string();
         info.capabilities.tools = Some(ToolsCapability {
             list_changed: Some(false),
         });
@@ -84,6 +84,8 @@ impl ServerHandler for PixlServer {
         async move {
             let result = if name == "pixl_generate_tile" {
                 handlers::handle_generate_tile(&self.state, &self.inference, &args).await
+            } else if name == "pixl_generate_sprite" {
+                handlers::handle_generate_sprite(&self.state, &args).await
             } else {
                 handlers::handle_tool(&self.state, &name, &args)
             };
@@ -92,6 +94,20 @@ impl ServerHandler for PixlServer {
 
             let mut content = vec![Content::text(text)];
             if let Some(b64) = result.get("preview_b64").and_then(|v| v.as_str()) {
+                content.push(Content::image(b64.to_string(), "image/png".to_string()));
+            }
+
+            // Extract images from array fields (e.g., references[].preview_b64)
+            if let Some(refs) = result.get("references").and_then(|v| v.as_array()) {
+                for r in refs {
+                    if let Some(b64) = r.get("preview_b64").and_then(|v| v.as_str()) {
+                        content.push(Content::image(b64.to_string(), "image/png".to_string()));
+                    }
+                }
+            }
+
+            // Reference image from diffusion bridge
+            if let Some(b64) = result.get("reference_b64").and_then(|v| v.as_str()) {
                 content.push(Content::image(b64.to_string(), "image/png".to_string()));
             }
 

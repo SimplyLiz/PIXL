@@ -17,6 +17,21 @@ class TilemapNotifier extends StateNotifier<TilemapState> {
   bool get canUndo => _undoStack.isNotEmpty;
   bool get canRedo => _redoStack.isNotEmpty;
 
+  /// Expose undo/redo stacks for tab save/restore.
+  List<TilemapSnapshot> get undoStack => List.unmodifiable(_undoStack);
+  List<TilemapSnapshot> get redoStack => List.unmodifiable(_redoStack);
+
+  /// Restore full document state (used by tab manager on tab switch).
+  void restoreDocument(TilemapState newState, List<TilemapSnapshot> undo, List<TilemapSnapshot> redo) {
+    _undoStack
+      ..clear()
+      ..addAll(undo);
+    _redoStack
+      ..clear()
+      ..addAll(redo);
+    state = newState;
+  }
+
   // ── Undo / Redo ──────────────────────────────────
 
   void _pushSnapshot() {
@@ -31,9 +46,11 @@ class TilemapNotifier extends StateNotifier<TilemapState> {
   void undo() {
     if (_undoStack.isEmpty) return;
     // Save current state to redo
-    _redoStack.add(TilemapSnapshot(
-      cells: state.cells.map((row) => List<String?>.from(row)).toList(),
-    ));
+    _redoStack.add(
+      TilemapSnapshot(
+        cells: state.cells.map((row) => List<String?>.from(row)).toList(),
+      ),
+    );
     final snap = _undoStack.removeLast();
     state = state.copyWith(
       cells: snap.cells,
@@ -44,9 +61,11 @@ class TilemapNotifier extends StateNotifier<TilemapState> {
 
   void redo() {
     if (_redoStack.isEmpty) return;
-    _undoStack.add(TilemapSnapshot(
-      cells: state.cells.map((row) => List<String?>.from(row)).toList(),
-    ));
+    _undoStack.add(
+      TilemapSnapshot(
+        cells: state.cells.map((row) => List<String?>.from(row)).toList(),
+      ),
+    );
     final snap = _redoStack.removeLast();
     state = state.copyWith(
       cells: snap.cells,
@@ -72,7 +91,8 @@ class TilemapNotifier extends StateNotifier<TilemapState> {
   // ── Stamp / Erase (stroke-based) ────────────────
 
   void beginStamp(int col, int row) {
-    if (col < 0 || col >= state.gridWidth || row < 0 || row >= state.gridHeight) return;
+    if (col < 0 || col >= state.gridWidth || row < 0 || row >= state.gridHeight)
+      return;
     _pushSnapshot();
     _inStroke = true;
     _setCell(col, row);
@@ -81,7 +101,8 @@ class TilemapNotifier extends StateNotifier<TilemapState> {
 
   void continueStamp(int col, int row) {
     if (!_inStroke) return;
-    if (col < 0 || col >= state.gridWidth || row < 0 || row >= state.gridHeight) return;
+    if (col < 0 || col >= state.gridWidth || row < 0 || row >= state.gridHeight)
+      return;
     _setCell(col, row);
     _notifyChange();
   }
@@ -104,15 +125,14 @@ class TilemapNotifier extends StateNotifier<TilemapState> {
   }
 
   void _notifyChange() {
-    state = state.copyWith(
-      cells: List.from(state.cells),
-    );
+    state = state.copyWith(cells: List.from(state.cells));
   }
 
   // ── Bucket Fill ──────────────────────────────────
 
   void bucketFill(int col, int row) {
-    if (col < 0 || col >= state.gridWidth || row < 0 || row >= state.gridHeight) return;
+    if (col < 0 || col >= state.gridWidth || row < 0 || row >= state.gridHeight)
+      return;
     _pushSnapshot();
 
     final fillWith = state.activeTool == TilemapTool.eraser
@@ -129,7 +149,8 @@ class TilemapNotifier extends StateNotifier<TilemapState> {
       final (cx, cy) = stack.removeLast();
       final idx = cy * w + cx;
       if (visited.contains(idx)) continue;
-      if (cx < 0 || cx >= state.gridWidth || cy < 0 || cy >= state.gridHeight) continue;
+      if (cx < 0 || cx >= state.gridWidth || cy < 0 || cy >= state.gridHeight)
+        continue;
       if (state.cells[cy][cx] != target) continue;
 
       visited.add(idx);
@@ -165,7 +186,11 @@ class TilemapNotifier extends StateNotifier<TilemapState> {
         return null;
       });
     });
-    state = state.copyWith(gridWidth: width, gridHeight: height, cells: newCells);
+    state = state.copyWith(
+      gridWidth: width,
+      gridHeight: height,
+      cells: newCells,
+    );
   }
 
   void clear() {
@@ -200,8 +225,88 @@ class TilemapNotifier extends StateNotifier<TilemapState> {
     if (idx >= 0) state = state.copyWith(zoomLevel: _zoomLevels[idx]);
   }
 
+  void resetZoom() {
+    state = state.copyWith(zoomLevel: _zoomLevels[1]); // default 2.0
+  }
+
   void toggleGrid() {
     state = state.copyWith(showGrid: !state.showGrid);
+  }
+
+  // ── Play Mode (Zelda-style screen scroll) ───────
+
+  void togglePlayMode() {
+    final entering = !state.playMode;
+    if (entering) {
+      // Place player at center of first screen
+      final startCol = (state.screenTilesX ~/ 2).clamp(0, state.gridWidth - 1);
+      final startRow = (state.screenTilesY ~/ 2).clamp(0, state.gridHeight - 1);
+      state = state.copyWith(
+        playMode: true,
+        playerCol: startCol,
+        playerRow: startRow,
+        screenX: 0,
+        screenY: 0,
+        transitioning: false,
+        transitionProgress: 0.0,
+      );
+    } else {
+      state = state.copyWith(
+        playMode: false,
+        transitioning: false,
+      );
+    }
+  }
+
+  /// Move player by (dx, dy) in tile units. Returns true if a screen
+  /// transition was triggered.
+  bool movePlayer(int dx, int dy) {
+    if (!state.playMode || state.transitioning) return false;
+
+    final newCol = state.playerCol + dx;
+    final newRow = state.playerRow + dy;
+
+    // Clamp to map bounds
+    if (newCol < 0 || newCol >= state.gridWidth ||
+        newRow < 0 || newRow >= state.gridHeight) {
+      return false;
+    }
+
+    // Check which screen the new position falls on
+    final newScreenX = newCol ~/ state.screenTilesX;
+    final newScreenY = newRow ~/ state.screenTilesY;
+
+    if (newScreenX != state.screenX || newScreenY != state.screenY) {
+      // Screen transition — start animated scroll
+      state = state.copyWith(
+        playerCol: newCol,
+        playerRow: newRow,
+        prevScreenX: state.screenX,
+        prevScreenY: state.screenY,
+        screenX: newScreenX,
+        screenY: newScreenY,
+        transitioning: true,
+        transitionProgress: 0.0,
+      );
+      return true;
+    }
+
+    // Same screen — just move
+    state = state.copyWith(playerCol: newCol, playerRow: newRow);
+    return false;
+  }
+
+  /// Advance the screen transition animation. Called by the viewport's ticker.
+  void updateTransition(double progress) {
+    if (!state.transitioning) return;
+    if (progress >= 1.0) {
+      state = state.copyWith(
+        transitioning: false,
+        transitionProgress: 1.0,
+      );
+    } else {
+      state = state.copyWith(transitionProgress: progress);
+    }
   }
 }
 
